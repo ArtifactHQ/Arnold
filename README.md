@@ -229,6 +229,169 @@ config.context_propagation_enabled = true
 config.max_tier_retries = 0
 ```
 
+## Setting Up a Coding Agent
+
+Arnold creates GitHub Issues but doesn't write code itself — it expects a coding agent on your repo to pick up those issues, do the work on a branch, and open a PR. Without this, Arnold will create issues and then time out waiting for results.
+
+### What Arnold Creates
+
+Each issue body contains:
+
+1. **Task description** — what to build or change
+2. **Prior implementation context** (if `context_propagation_enabled`) — a summary of what earlier tiers already built, so the agent knows what exists in the repo
+3. **Agent mention** (if `github_issue_mention` is set) — e.g. `@claude` or `@copilot`
+4. **Dependency references** — e.g. `**Depends on:** #1, #2` linking to prerequisite issues
+5. **Pipeline run footer** — e.g. `_Pipeline Run #42_`
+
+### What Arnold Expects Back
+
+A **pull request** whose title or body contains `#<issue_number>`. Arnold finds PRs by scanning all repo PRs for this substring reference — no special labels or webhook integration required.
+
+- **Open PR with a diff** = task resolved (Arnold will merge it after the tier completes)
+- **No PR + closed issue** = task failed
+- **Only WIP comments** (e.g. "working on this", "starting work") = still in progress, keep polling
+- **Substantive comments** (e.g. "unable to complete", "created PR") = task resolved
+
+Arnold merges open PRs after each tier completes, then creates the next tier's issues. The final merge happens after the analysis agent approves.
+
+### Option A: GitHub Actions + Claude Code
+
+Create `.github/workflows/arnold-agent.yml`:
+
+```yaml
+name: Arnold Agent (Claude Code)
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  solve:
+    if: contains(github.event.issue.body, 'Pipeline Run')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Create branch
+        run: |
+          BRANCH="arnold/issue-${{ github.event.issue.number }}"
+          git checkout -b "$BRANCH"
+
+      - name: Run Claude Code
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          claude -p "You are working on issue #${{ github.event.issue.number }}.
+
+          ${{ github.event.issue.body }}
+
+          Make the changes described above. Commit your work when done."
+
+      - name: Push and open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="arnold/issue-${{ github.event.issue.number }}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "Resolve #${{ github.event.issue.number }}: ${{ github.event.issue.title }}" \
+            --body "Resolves #${{ github.event.issue.number }}" \
+            --head "$BRANCH"
+```
+
+Add `ANTHROPIC_API_KEY` to your repo's **Settings > Secrets and variables > Actions**.
+
+### Option B: GitHub Actions + OpenAI Codex
+
+Create `.github/workflows/arnold-agent.yml`:
+
+```yaml
+name: Arnold Agent (Codex)
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  solve:
+    if: contains(github.event.issue.body, 'Pipeline Run')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Codex
+        run: npm install -g @openai/codex
+
+      - name: Create branch
+        run: |
+          BRANCH="arnold/issue-${{ github.event.issue.number }}"
+          git checkout -b "$BRANCH"
+
+      - name: Run Codex
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          codex --approval-mode full-auto \
+            -q "You are working on issue #${{ github.event.issue.number }}.
+
+          ${{ github.event.issue.body }}
+
+          Make the changes described above."
+
+      - name: Push and open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="arnold/issue-${{ github.event.issue.number }}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "Resolve #${{ github.event.issue.number }}: ${{ github.event.issue.title }}" \
+            --body "Resolves #${{ github.event.issue.number }}" \
+            --head "$BRANCH"
+```
+
+Add `OPENAI_API_KEY` to your repo's **Settings > Secrets and variables > Actions**.
+
+### Option C: GitHub Copilot Coding Agent
+
+The shortest path — no workflow file needed. [GitHub Copilot Coding Agent](https://docs.github.com/en/copilot/using-github-copilot/using-copilot-coding-agent) can be assigned to issues directly.
+
+1. Enable Copilot Coding Agent on your repo (requires GitHub Copilot Enterprise or Copilot Business with agent support)
+2. Configure Arnold to mention Copilot:
+   ```ruby
+   config.github_issue_mention = "@copilot"
+   ```
+3. Copilot will automatically pick up issues mentioning `@copilot`, work on a branch, and open a PR referencing the issue
+
+No workflow file, no API keys beyond your existing Copilot subscription.
+
+### Tips
+
+- **PR must reference the issue number** — Arnold matches `#<issue_number>` as a substring in the PR title or body. Use formats like `Resolves #42` or `Fix #42` in your PR template.
+- **Set `polling_timeout` long enough** — Complex tasks may take 5-10 minutes. The default 30 minutes works for most cases, but adjust if your agent is slower.
+- **Dependency ordering is automatic** — Later-tier issues won't appear until earlier tiers merge, so your agent only sees issues it can work on.
+- **Use the pipeline run footer as a filter** — The `if: contains(github.event.issue.body, 'Pipeline Run')` check prevents your workflow from triggering on non-Arnold issues. You can also filter by labels if your tasks include them.
+- **Context propagation helps your agent** — When enabled, each issue body includes a summary of what prior tiers built, so the coding agent doesn't have to guess what already exists.
+
 ## Partial Execution & Resume
 
 The pipeline can be paused at any stage and resumed later. This is useful for reviewing intermediate results before committing to the next step, or for recovering from failures.
