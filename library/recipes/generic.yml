@@ -1,0 +1,25 @@
+name: Generic
+type: generic
+keywords:
+  - generic
+  - general
+  - application
+  - app
+  - build
+  - create
+  - make
+description: >
+  A general-purpose recipe for applications that don't fit neatly into
+  other categories. Provides a balanced structure covering common concerns.
+  Used as fallback when no specialized recipe matches.
+sections:
+  - name: Core Features
+    description: Primary functionality and user-facing features
+  - name: Data Model
+    description: Data structures, storage, and relationships
+  - name: Integration
+    description: External services, APIs, and third-party dependencies
+  - name: Testing
+    description: Test strategy, coverage targets, and test data
+  - name: Configuration
+    description: Settings, environment variables, and customization options

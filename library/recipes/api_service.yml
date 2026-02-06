@@ -1,0 +1,25 @@
+name: API Service
+type: api_service
+keywords:
+  - api
+  - rest
+  - graphql
+  - endpoint
+  - microservice
+  - service
+  - json
+  - backend
+description: >
+  Backend API service exposing RESTful or GraphQL endpoints. Focuses on
+  request/response contracts, authentication, rate limiting, and documentation.
+sections:
+  - name: Endpoints
+    description: API routes, request/response schemas, and versioning
+  - name: Authentication
+    description: API keys, OAuth, JWT tokens, and authorization
+  - name: Data Layer
+    description: Models, database schema, and data access patterns
+  - name: Middleware
+    description: Rate limiting, logging, CORS, and error handling
+  - name: Documentation
+    description: OpenAPI/Swagger specs and usage examples

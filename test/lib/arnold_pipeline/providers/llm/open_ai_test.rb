@@ -1,0 +1,62 @@
+require "test_helper"
+require "webmock/minitest"
+require "arnold_pipeline/providers/llm/open_ai"
+
+module ArnoldPipeline
+  module Providers
+    module Llm
+      class OpenAiTest < ActiveSupport::TestCase
+        setup do
+          @provider = OpenAi.new(api_key: "sk-test-key", model: "gpt-4")
+        end
+
+        test "sends chat request and returns text" do
+          stub_request(:post, "https://api.openai.com/v1/chat/completions")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: {
+                choices: [{ message: { role: "assistant", content: "Hello from GPT" } }]
+              }.to_json
+            )
+
+          result = @provider.chat(messages: [{ role: :user, content: "Hello" }])
+          assert_equal "Hello from GPT", result
+        end
+
+        test "includes system message when system prompt provided" do
+          stub_request(:post, "https://api.openai.com/v1/chat/completions")
+            .with { |req|
+              messages = JSON.parse(req.body)["messages"]
+              messages.first["role"] == "system" && messages.first["content"] == "You are helpful"
+            }
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: {
+                choices: [{ message: { role: "assistant", content: "OK" } }]
+              }.to_json
+            )
+
+          result = @provider.chat(
+            messages: [{ role: :user, content: "Hi" }],
+            system: "You are helpful"
+          )
+          assert_equal "OK", result
+        end
+
+        test "returns empty string when no content" do
+          stub_request(:post, "https://api.openai.com/v1/chat/completions")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { choices: [{ message: { role: "assistant", content: nil } }] }.to_json
+            )
+
+          result = @provider.chat(messages: [{ role: :user, content: "Hi" }])
+          assert_equal "", result
+        end
+      end
+    end
+  end
+end

@@ -1,0 +1,28 @@
+name: Web App
+type: web_app
+keywords:
+  - web
+  - website
+  - frontend
+  - ui
+  - dashboard
+  - responsive
+  - mobile
+  - browser
+  - spa
+  - page
+description: >
+  Full-stack web application with frontend UI, backend API, database,
+  and optional authentication. Covers responsive design, routing,
+  state management, and deployment.
+sections:
+  - name: Frontend
+    description: UI components, pages, layouts, and client-side interactions
+  - name: Backend
+    description: API endpoints, business logic, middleware, and server configuration
+  - name: Database
+    description: Data models, relationships, migrations, and seed data
+  - name: Authentication
+    description: User registration, login, sessions, and access control
+  - name: Deployment
+    description: Hosting, CI/CD, environment configuration

@@ -1,0 +1,25 @@
+name: CLI Tool
+type: cli_tool
+keywords:
+  - cli
+  - command
+  - terminal
+  - console
+  - script
+  - tool
+  - utility
+description: >
+  Command-line interface tool with argument parsing, subcommands,
+  configuration files, and formatted output. May include interactive
+  prompts and progress indicators.
+sections:
+  - name: Commands
+    description: Subcommands, arguments, flags, and help text
+  - name: Configuration
+    description: Config file format, defaults, and environment variables
+  - name: Core Logic
+    description: Business logic and data processing
+  - name: Output
+    description: Formatting, colors, progress bars, and logging
+  - name: Distribution
+    description: Packaging, installation, and platform support

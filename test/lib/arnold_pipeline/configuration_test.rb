@@ -1,0 +1,109 @@
+require "test_helper"
+
+module ArnoldPipeline
+  class ConfigurationTest < ActiveSupport::TestCase
+    setup do
+      @config = Configuration.new
+    end
+
+    test "has sensible defaults" do
+      assert_equal :anthropic, @config.llm_provider
+      assert_equal "claude-sonnet-4-20250514", @config.llm_model
+      assert_equal :github, @config.execution_provider
+      assert_equal 3, @config.max_iterations
+      assert_nil @config.library_path
+    end
+
+    test "validate! passes with valid config" do
+      @config.llm_api_key = "sk-test-key"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+
+      assert @config.validate!
+    end
+
+    test "validate! raises on invalid llm_provider" do
+      @config.llm_provider = :invalid
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/Invalid LLM provider/, error.message)
+    end
+
+    test "validate! raises on missing llm_api_key" do
+      @config.llm_api_key = nil
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/LLM API key is required/, error.message)
+    end
+
+    test "validate! raises on empty llm_api_key" do
+      @config.llm_api_key = ""
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/LLM API key is required/, error.message)
+    end
+
+    test "validate! raises on missing github_token" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = nil
+      @config.github_repo = "owner/repo"
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/GitHub token is required/, error.message)
+    end
+
+    test "validate! raises on missing github_repo" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = nil
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/GitHub repo is required/, error.message)
+    end
+
+    test "validate! raises on invalid max_iterations" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.max_iterations = 0
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/max_iterations must be an integer/, error.message)
+    end
+
+    test "validate! accepts openai provider" do
+      @config.llm_provider = :openai
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+
+      assert @config.validate!
+    end
+
+    test "configure block works on module" do
+      ArnoldPipeline.configure do |config|
+        config.llm_provider = :openai
+        config.llm_model = "gpt-4"
+      end
+
+      assert_equal :openai, ArnoldPipeline.configuration.llm_provider
+      assert_equal "gpt-4", ArnoldPipeline.configuration.llm_model
+    ensure
+      ArnoldPipeline.reset_configuration!
+    end
+
+    test "reset_configuration! restores defaults" do
+      ArnoldPipeline.configure { |c| c.llm_provider = :openai }
+      ArnoldPipeline.reset_configuration!
+
+      assert_equal :anthropic, ArnoldPipeline.configuration.llm_provider
+    end
+  end
+end
