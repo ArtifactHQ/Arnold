@@ -135,13 +135,16 @@ module ArnoldPipeline
       logger.info { "Analyzing iteration #{iteration_number}..." }
 
       persona = library_manager.find_persona("testing quality review")
-      diffs = pipeline_run.tasks.reload.map { |t| t.result_diff }.compact.join("\n\n")
+      tasks = pipeline_run.tasks.reload
+      diffs = tasks.map { |t| t.result_diff }.compact.join("\n\n")
+      comments = format_task_comments(tasks)
 
       result = analyzer.call(
         spec_content: pipeline_run.specification.content,
         diffs:,
         iteration_number:,
-        persona:
+        persona:,
+        comments:
       )
 
       iteration = pipeline_run.iterations.create!(
@@ -192,6 +195,18 @@ module ArnoldPipeline
       spec = pipeline_run.specification
       updated_content = "#{spec.content}\n\n## Clarifications (Iteration)\n#{spec_changes}"
       spec.update!(content: updated_content, version: spec.version + 1)
+    end
+
+    def format_task_comments(tasks)
+      sections = tasks.filter_map do |task|
+        comments = task.result_comments
+        next if comments.blank?
+
+        lines = comments.map { |c| "[#{c['source']}] #{c['author']}: #{c['body']}" }
+        "### Task: #{task.title} (#{task.status})\n#{lines.join("\n")}"
+      end
+
+      sections.join("\n\n")
     end
 
     def merge_results!(pipeline_run)

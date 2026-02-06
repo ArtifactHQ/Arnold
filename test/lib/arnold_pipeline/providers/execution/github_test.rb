@@ -107,6 +107,149 @@ module ArnoldPipeline
           }
         end
 
+        test "fetch_results returns comments from issues and PRs" do
+          task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { number: 42, state: "open" }.to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: [{ user: { login: "copilot" }, body: "I can't do this without a Gemfile", created_at: "2025-02-06T00:00:00Z" }].to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
+            .with(query: { state: "all" })
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: [].to_json
+            )
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run)
+
+          assert_equal 1, results.size
+          result = results.first
+          assert_equal 1, result[:comments].size
+          assert_equal "issue", result[:comments].first[:source]
+          assert_equal "copilot", result[:comments].first[:author]
+          assert_includes result[:comments].first[:body], "Gemfile"
+          assert_equal "open", result[:issue_state]
+        end
+
+        test "fetch_results returns failed status for closed issue with no PRs" do
+          task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { number: 42, state: "closed" }.to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: [].to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
+            .with(query: { state: "all" })
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: [].to_json
+            )
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run)
+
+          assert_equal :failed, results.first[:status]
+        end
+
+        test "fetch_results returns pending status for open issue with no PRs" do
+          task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { number: 42, state: "open" }.to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: [].to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
+            .with(query: { state: "all" })
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: [].to_json
+            )
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run)
+
+          assert_equal :pending, results.first[:status]
+        end
+
+        test "fetch_results includes PR review comments" do
+          task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { number: 42, state: "open" }.to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: [].to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
+            .with(query: { state: "all" })
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: [{ number: 10, title: "Fix #42", body: "Closes #42", state: "open", merged_at: nil }].to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/files")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: [{ filename: "app.rb", patch: "+code", status: "added" }].to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/comments")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: [{ user: { login: "reviewer" }, body: "Looks good", created_at: "2025-02-06T01:00:00Z" }].to_json
+            )
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run)
+
+          result = results.first
+          assert_equal 1, result[:comments].size
+          assert_equal "pr_review", result[:comments].first[:source]
+          assert_equal "reviewer", result[:comments].first[:author]
+        end
+
         test "build factory creates Github provider" do
           ArnoldPipeline.configure do |c|
             c.execution_provider = :github

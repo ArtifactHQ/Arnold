@@ -36,7 +36,10 @@ module ArnoldPipeline
 
         results.each do |result|
           task = pipeline_run.tasks.find(result[:task_id])
-          task.update!(result_diff: result[:diffs].to_json)
+          updates = { result_diff: result[:diffs].to_json }
+          updates[:result_comments] = result[:comments] if result[:comments]
+          updates[:status] = :failed if result[:status] == :failed
+          task.update!(updates)
         end
 
         results
@@ -54,23 +57,23 @@ module ArnoldPipeline
 
           tasks = pipeline_run.tasks.reload
           trackable = tasks.select { |t| t.external_id.present? }
-          completed = trackable.count { |t| t.result_diff.present? && t.result_diff != "[]" }
+          resolved = trackable.count { |t| task_resolved?(t) }
           total = trackable.size
 
-          if completed >= total
-            logger.info { "All #{total} tasks have results." }
+          if resolved >= total
+            logger.info { "All #{total} tasks resolved." }
             break
           end
 
           if elapsed >= timeout
-            logger.warn { "Polling timed out after #{elapsed}s. #{completed}/#{total} tasks have results." }
+            logger.warn { "Polling timed out after #{elapsed}s. #{resolved}/#{total} tasks resolved." }
             break
           end
 
           remaining = timeout - elapsed
           sleep_time = [interval, remaining].min
 
-          logger.info { "Waiting for PRs... #{completed}/#{total} tasks have results. Next check in #{sleep_time}s" }
+          logger.info { "Waiting for results... #{resolved}/#{total} tasks resolved. Next check in #{sleep_time}s" }
 
           sleep_func.call(sleep_time)
           elapsed += sleep_time
@@ -81,6 +84,12 @@ module ArnoldPipeline
       def merge_results(pipeline_run:)
         logger.info { "Merging results for pipeline run ##{pipeline_run.id}" }
         provider.merge_results(pipeline_run:)
+      end
+
+      private
+
+      def task_resolved?(task)
+        (task.result_diff.present? && task.result_diff != "[]") || task.failed?
       end
     end
   end

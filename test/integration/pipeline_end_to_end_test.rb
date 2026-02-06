@@ -141,6 +141,22 @@ module ArnoldPipeline
           }
         end
 
+      # Issue fetching (for fetch_results)
+      stub_request(:get, %r{https://api.github.com/repos/testowner/testrepo/issues/\d+\z})
+        .to_return(
+          status: 200,
+          headers: { "Content-Type" => "application/json" },
+          body: { number: 1, state: "open" }.to_json
+        )
+
+      # Issue comments — registered after issue stub so it takes priority (WebMock matches last-registered first)
+      stub_request(:get, %r{https://api.github.com/repos/testowner/testrepo/issues/\d+/comments})
+        .to_return(
+          status: 200,
+          headers: { "Content-Type" => "application/json" },
+          body: [].to_json
+        )
+
       # PR listing (empty — no PRs to fetch)
       stub_request(:get, %r{https://api.github.com/repos/testowner/testrepo/pulls})
         .to_return(

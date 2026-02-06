@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_02_05_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_02_06_165310) do
   create_table "arnold_pipeline_iterations", force: :cascade do |t|
     t.integer "confidence"
     t.json "corrective_data"
@@ -53,6 +53,7 @@ ActiveRecord::Schema[8.1].define(version: 2025_02_05_000001) do
     t.integer "pipeline_run_id", null: false
     t.integer "position", null: false
     t.integer "priority", default: 0
+    t.json "result_comments", default: []
     t.text "result_diff"
     t.integer "status", default: 0, null: false
     t.string "title", null: false

@@ -123,6 +123,31 @@ module ArnoldPipeline
       assert_equal "LLM is down", run_record.metadata["error"]
     end
 
+    test "analyze passes task comments to analyzer" do
+      stub_spec_generation!
+      stub_task_breakdown!(times: 1)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      # After task creation, add comments to the first task
+      @executor.stubs(:call).with { |kwargs|
+        pipeline_run = kwargs[:pipeline_run]
+        task = pipeline_run.tasks.first
+        task.update!(result_comments: [{ "source" => "issue", "author" => "copilot", "body" => "Missing Gemfile" }])
+        true
+      }.returns([])
+
+      @analyzer.expects(:call).with { |kwargs|
+        kwargs[:comments].include?("Missing Gemfile") &&
+          kwargs[:comments].include?("copilot")
+      }.returns(analysis_result("done", 95))
+
+      result = @orchestrator.call(nl_input: "Build a todo app")
+
+      assert_equal "completed", result.status
+    end
+
     test "flags low confidence iterations for human review" do
       stub_spec_generation!
       stub_task_breakdown!(times: 1)

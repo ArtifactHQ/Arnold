@@ -39,6 +39,34 @@ module ArnoldPipeline
         assert_includes task.result_diff, "db/schema.rb"
       end
 
+      test "fetch_results stores comments on task records" do
+        task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
+
+        comments = [{ source: "issue", author: "copilot", body: "Can't scaffold without Gemfile", created_at: "2025-02-06T00:00:00Z" }]
+        @provider.expects(:fetch_results).returns([
+          { task_id: task.id, external_id: "42", diffs: [], comments: comments, status: :pending }
+        ])
+
+        @executor.fetch_results(pipeline_run: @pipeline_run)
+
+        task.reload
+        assert_equal 1, task.result_comments.size
+        assert_equal "issue", task.result_comments.first["source"]
+      end
+
+      test "fetch_results marks task as failed when provider returns failed" do
+        task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
+
+        @provider.expects(:fetch_results).returns([
+          { task_id: task.id, external_id: "42", diffs: [], comments: [], status: :failed }
+        ])
+
+        @executor.fetch_results(pipeline_run: @pipeline_run)
+
+        task.reload
+        assert task.failed?, "Task should be marked as failed"
+      end
+
       test "merge_results delegates to provider" do
         @provider.expects(:merge_results).returns([{ pr_number: 1, task_id: 1 }])
 
@@ -155,6 +183,31 @@ module ArnoldPipeline
 
         # Backoff: 2, 4, 6, 6, 2 (remaining) = 20s total
         assert_equal [2, 4, 6, 6, 2], sleep_calls
+      ensure
+        ArnoldPipeline.reset_configuration!
+      end
+
+      test "await_results considers failed tasks as resolved" do
+        sleep_calls = []
+        executor = Executor.new(
+          provider: @provider,
+          logger: Logger.new(File::NULL),
+          sleep_func: ->(s) { sleep_calls << s }
+        )
+
+        task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42", status: :failed)
+
+        @provider.stubs(:fetch_results).returns([])
+
+        ArnoldPipeline.configure do |c|
+          c.polling_interval = 2
+          c.polling_timeout = 20
+          c.polling_max_interval = 6
+        end
+
+        executor.await_results(pipeline_run: @pipeline_run)
+
+        assert_empty sleep_calls, "Should not sleep when failed tasks are considered resolved"
       ensure
         ArnoldPipeline.reset_configuration!
       end

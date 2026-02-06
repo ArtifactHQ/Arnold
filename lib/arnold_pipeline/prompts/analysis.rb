@@ -15,6 +15,18 @@ module ArnoldPipeline
           - "iterate_spec" — The specification is ambiguous or incomplete.
             Provide clarifications to add to the spec.
 
+          Task Results:
+          Some tasks may not produce code diffs. Instead, the coding agent may post comments
+          on the issue explaining why it could not produce a PR — missing dependencies,
+          ambiguous requirements, no scaffolded app code, etc. When tasks have comments
+          instead of diffs, factor this feedback into your decision:
+          - If the agent's comments indicate blocked dependencies, use "iterate_tasks" to
+            reorder or add prerequisite tasks.
+          - If the agent's comments indicate ambiguous requirements, use "iterate_spec" to
+            clarify the specification.
+          - Failed tasks with explanatory comments are not necessarily a sign of spec problems;
+            evaluate whether the issue is in task ordering, missing context, or spec gaps.
+
           # Completeness Tests
 
           Apply these three tests to the specification and implementation:
@@ -81,8 +93,8 @@ module ArnoldPipeline
         PROMPT
       end
 
-      def self.user_prompt(spec_content:, diffs:, iteration_number:)
-        <<~PROMPT
+      def self.user_prompt(spec_content:, diffs:, iteration_number:, comments: "")
+        prompt = <<~PROMPT
           Iteration #{iteration_number}: Analyze the following implementation against the spec.
 
           ## Specification
@@ -90,9 +102,18 @@ module ArnoldPipeline
 
           ## Code Diffs / Results
           #{diffs}
-
-          Provide your analysis with decision, confidence score, and reasoning.
         PROMPT
+
+        if comments.present?
+          prompt += <<~COMMENTS
+
+            ## Task Comments / Agent Feedback
+            #{comments}
+          COMMENTS
+        end
+
+        prompt += "\nProvide your analysis with decision, confidence score, and reasoning.\n"
+        prompt
       end
     end
   end

@@ -52,6 +52,42 @@ module ArnoldPipeline
         prompt = Analysis.system_prompt(persona: @persona)
         assert_includes prompt, @persona.system_prompt
       end
+
+      test "system_prompt includes task results guidance" do
+        prompt = Analysis.system_prompt(persona: @persona)
+        assert_includes prompt, "Task Results"
+        assert_includes prompt, "blocked dependencies"
+      end
+
+      test "user_prompt includes comments section when provided" do
+        prompt = Analysis.user_prompt(
+          spec_content: "# Spec",
+          diffs: "diff content",
+          iteration_number: 1,
+          comments: "### Task: Setup DB (failed)\n[issue] copilot: Missing Gemfile"
+        )
+        assert_includes prompt, "## Task Comments / Agent Feedback"
+        assert_includes prompt, "Missing Gemfile"
+      end
+
+      test "user_prompt omits comments section when empty" do
+        prompt = Analysis.user_prompt(
+          spec_content: "# Spec",
+          diffs: "diff content",
+          iteration_number: 1,
+          comments: ""
+        )
+        refute_includes prompt, "## Task Comments / Agent Feedback"
+      end
+
+      test "user_prompt omits comments section when not provided" do
+        prompt = Analysis.user_prompt(
+          spec_content: "# Spec",
+          diffs: "diff content",
+          iteration_number: 1
+        )
+        refute_includes prompt, "## Task Comments / Agent Feedback"
+      end
     end
   end
 end

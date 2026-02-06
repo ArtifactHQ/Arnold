@@ -45,6 +45,10 @@ module ArnoldPipeline
           pipeline_run.tasks.map do |task|
             next unless task.external_id
 
+            issue_number = task.external_id.to_i
+            issue = @client.issue(@repo, issue_number)
+            issue_state = issue.state
+
             pulls = @client.pull_requests(@repo, state: "all").select do |pr|
               pr.body&.include?("##{task.external_id}") ||
                 pr.title&.include?("##{task.external_id}")
@@ -55,11 +59,15 @@ module ArnoldPipeline
               files.map { |f| { filename: f.filename, patch: f.patch, status: f.status } }
             end.flatten
 
+            comments = fetch_comments(issue_number, pulls)
+
             {
               task_id: task.id,
               external_id: task.external_id,
               diffs: diffs,
-              status: determine_status(pulls)
+              comments: comments,
+              issue_state: issue_state,
+              status: determine_status(pulls, issue_state:)
             }
           end.compact
         end
@@ -97,8 +105,28 @@ module ArnoldPipeline
           body
         end
 
-        def determine_status(pulls)
-          return :pending if pulls.empty?
+        def fetch_comments(issue_number, pulls)
+          comments = []
+
+          @client.issue_comments(@repo, issue_number).each do |c|
+            comments << { source: "issue", author: c.user.login, body: c.body, created_at: c.created_at.to_s }
+          end
+
+          pulls.each do |pr|
+            @client.pull_request_comments(@repo, pr.number).each do |c|
+              comments << { source: "pr_review", author: c.user.login, body: c.body, created_at: c.created_at.to_s }
+            end
+          end
+
+          comments
+        end
+
+        def determine_status(pulls, issue_state: "open")
+          if pulls.empty?
+            return :failed if issue_state == "closed"
+            return :pending
+          end
+
           return :completed if pulls.all? { |pr| pr.merged_at || pr.state == "closed" }
 
           :in_progress

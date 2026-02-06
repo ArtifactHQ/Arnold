@@ -6,14 +6,15 @@ module ArnoldPipeline
     class Analyzer < BaseAgent
       VALID_DECISIONS = %w[done iterate_tasks iterate_spec].freeze
 
-      def call(spec_content:, diffs:, iteration_number:, persona:)
+      def call(spec_content:, diffs:, iteration_number:, persona:, comments: "")
         logger.info { "Analyzing iteration #{iteration_number}" }
 
         system = Prompts::Analysis.system_prompt(persona:)
         user = Prompts::Analysis.user_prompt(
           spec_content:,
           diffs:,
-          iteration_number:
+          iteration_number:,
+          comments:
         )
 
         response = chat(

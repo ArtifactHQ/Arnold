@@ -103,6 +103,28 @@ module ArnoldPipeline
         assert_equal "done", result["decision"]
       end
 
+      test "passes comments through to prompt" do
+        analysis = {
+          "decision" => "done",
+          "confidence" => 90,
+          "reasoning" => "Analysis complete",
+          "corrective_data" => {}
+        }
+        @llm.expects(:chat).with { |params|
+          user_msg = params[:messages].first[:content]
+          user_msg.include?("## Task Comments / Agent Feedback") &&
+            user_msg.include?("Missing Gemfile")
+        }.returns("```json\n#{JSON.generate(analysis)}\n```")
+
+        @agent.call(
+          spec_content: "# Spec",
+          diffs: "diff content",
+          iteration_number: 1,
+          persona: @persona,
+          comments: "### Task: Setup DB (failed)\n[issue] copilot: Missing Gemfile"
+        )
+      end
+
       test "result without completeness_scores is still valid" do
         analysis = {
           "decision" => "done",
