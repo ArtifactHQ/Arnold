@@ -29,6 +29,10 @@ module ArnoldPipeline
           - Use per-feature acceptance criteria from the spec directly in task descriptions
           - Assign appropriate labels (e.g., "backend", "frontend", "database", "testing")
           - Set priority: 0 = highest priority, higher numbers = lower priority
+          - The FIRST task (position 0) MUST be a project bootstrap task that sets up the
+            foundational structure (project skeleton, dependencies, database configuration).
+            ALL other tasks MUST depend on position 0, either directly or transitively
+            through other dependencies. This ensures a single foundation task runs first.
 
           # Output Format
 

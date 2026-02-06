@@ -6,11 +6,11 @@ module ArnoldPipeline
           raise NotImplementedError, "#{self.class}#create_tasks must be implemented"
         end
 
-        def fetch_results(pipeline_run:)
+        def fetch_results(pipeline_run:, tasks: nil)
           raise NotImplementedError, "#{self.class}#fetch_results must be implemented"
         end
 
-        def merge_results(pipeline_run:)
+        def merge_results(pipeline_run:, tasks: nil)
           raise NotImplementedError, "#{self.class}#merge_results must be implemented"
         end
       end

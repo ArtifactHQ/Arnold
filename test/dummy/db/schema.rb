@@ -56,6 +56,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_06_165310) do
     t.json "result_comments", default: []
     t.text "result_diff"
     t.integer "status", default: 0, null: false
+    t.integer "tier"
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.index ["pipeline_run_id"], name: "index_arnold_pipeline_tasks_on_pipeline_run_id"

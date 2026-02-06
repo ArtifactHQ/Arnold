@@ -46,7 +46,7 @@ module ArnoldPipeline
       assert result.tasks.empty?
     end
 
-    test "stop_after :tasks generates spec and tasks" do
+    test "stop_after :tasks generates spec and tasks with tiers" do
       stub_spec_generation!
       stub_task_breakdown!
       @executor.expects(:call).never
@@ -58,26 +58,16 @@ module ArnoldPipeline
       assert result.specification.present?
       assert_equal 5, result.tasks.count
       assert result.tasks.none? { |t| t.external_id.present? }
+      # Verify tiers were computed
+      assert result.tasks.all? { |t| t.tier.present? }
     end
 
-    test "stop_after :published creates issues but does not await results" do
+    test "stop_after :executed runs tiered execution but does not analyze" do
       stub_spec_generation!
       stub_task_breakdown!
-      stub_executor_publish!
-      @executor.expects(:await_results).never
-
-      result = @orchestrator.call(nl_input: "Build a todo app", stop_after: :published)
-
-      assert_equal "paused", result.status
-      assert_equal "published", result.metadata["paused_at"]
-      assert result.tasks.any? { |t| t.external_id.present? }
-    end
-
-    test "stop_after :executed awaits results but does not analyze" do
-      stub_spec_generation!
-      stub_task_breakdown!
-      stub_executor_publish!
+      @executor.stubs(:call).returns([])
       @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
       @analyzer.expects(:call).never
 
       result = @orchestrator.call(nl_input: "Build a todo app", stop_after: :executed)
@@ -109,26 +99,8 @@ module ArnoldPipeline
       run = @orchestrator.call(nl_input: "Build a todo app", stop_after: :tasks)
       assert_equal "paused", run.status
 
-      # Now resume — needs to pick up from publish_tasks
-      stub_executor_publish!
-      @executor.stubs(:await_results).returns(nil)
-      @executor.stubs(:merge_results).returns([])
-      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
-
-      result = @orchestrator.resume(pipeline_run: run)
-      assert_equal "completed", result.status
-    end
-
-    test "resume from paused :published continues from await_results" do
-      stub_spec_generation!
-      stub_task_breakdown!
-      stub_executor_publish!
-      @executor.expects(:await_results).never
-
-      run = @orchestrator.call(nl_input: "Build a todo app", stop_after: :published)
-      assert_equal "paused", run.status
-
-      # Resume — picks up from await_results
+      # Now resume — needs to pick up from execute
+      @executor.stubs(:call).returns([])
       @executor.stubs(:await_results).returns(nil)
       @executor.stubs(:merge_results).returns([])
       @analyzer.expects(:call).once.returns(analysis_result("done", 95))
@@ -140,16 +112,16 @@ module ArnoldPipeline
     test "resume from paused :executed continues from analyze" do
       stub_spec_generation!
       stub_task_breakdown!
-      stub_executor_publish!
+      @executor.stubs(:call).returns([])
       @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
 
       run = @orchestrator.call(nl_input: "Build a todo app", stop_after: :executed)
       assert_equal "paused", run.status
 
       # Add result_diffs so infer_resume_stage sees resolved tasks
-      run.tasks.each { |t| t.update!(result_diff: '[{"filename":"app.rb","patch":"..."}]') }
+      run.tasks.each { |t| t.update!(external_id: t.position.to_s, result_diff: '[{"filename":"a.rb"}]') }
 
-      @executor.stubs(:merge_results).returns([])
       @analyzer.expects(:call).once.returns(analysis_result("done", 95))
 
       result = @orchestrator.resume(pipeline_run: run)
@@ -228,58 +200,105 @@ module ArnoldPipeline
       assert_equal :break_tasks, stage
     end
 
-    test "infer_resume_stage returns publish_tasks when tasks exist without external_ids" do
+    test "infer_resume_stage returns execute when tasks have no tiers" do
       run = PipelineRun.create!(nl_input: "test", status: :paused)
       run.create_specification!(content: "spec", structured_data: {}, version: 1)
       run.tasks.create!(title: "Task 1", position: 0)
 
       stage = @orchestrator.send(:infer_resume_stage, run)
-      assert_equal :publish_tasks, stage
+      assert_equal :execute, stage
     end
 
-    test "infer_resume_stage returns await_results when tasks have external_ids but no results" do
+    test "infer_resume_stage returns execute when tasks exist without external_ids" do
       run = PipelineRun.create!(nl_input: "test", status: :paused)
       run.create_specification!(content: "spec", structured_data: {}, version: 1)
-      run.tasks.create!(title: "Task 1", position: 0, external_id: "1")
+      run.tasks.create!(title: "Task 1", position: 0, tier: 0)
 
       stage = @orchestrator.send(:infer_resume_stage, run)
-      assert_equal :await_results, stage
+      assert_equal :execute, stage
+    end
+
+    test "infer_resume_stage returns execute when tasks have external_ids but no results" do
+      run = PipelineRun.create!(nl_input: "test", status: :paused)
+      run.create_specification!(content: "spec", structured_data: {}, version: 1)
+      run.tasks.create!(title: "Task 1", position: 0, tier: 0, external_id: "1")
+
+      stage = @orchestrator.send(:infer_resume_stage, run)
+      assert_equal :execute, stage
     end
 
     test "infer_resume_stage returns analyze when all tasks have results" do
       run = PipelineRun.create!(nl_input: "test", status: :paused)
       run.create_specification!(content: "spec", structured_data: {}, version: 1)
-      run.tasks.create!(title: "Task 1", position: 0, external_id: "1", result_diff: '[{"filename":"a.rb"}]')
+      run.tasks.create!(title: "Task 1", position: 0, tier: 0, external_id: "1", result_diff: '[{"filename":"a.rb"}]')
 
       stage = @orchestrator.send(:infer_resume_stage, run)
       assert_equal :analyze, stage
     end
 
-    # --- Executor Partial Publication Tests ---
+    # --- Tiered Execution Tests ---
 
-    test "executor skips already-published tasks on resume" do
+    test "tiered execution calls executor per-tier with correct task subsets" do
       stub_spec_generation!
       stub_task_breakdown!
 
-      # Simulate: first two tasks already published, rest not
+      tiers_published = []
+      tiers_awaited = []
+      tiers_merged = []
+
       @executor.stubs(:call).with { |kwargs|
-        tasks = kwargs[:tasks]
-        # Only first 2 tasks get external_ids
-        pipeline_run = kwargs[:pipeline_run]
-        pipeline_run.tasks.order(:position).limit(2).each_with_index do |t, i|
-          t.update!(external_id: (i + 1).to_s, external_url: "https://github.com/issue/#{i + 1}", status: :in_progress)
-        end
+        tiers_published << kwargs[:tasks].map(&:tier).uniq
         true
       }.returns([])
-      @executor.expects(:await_results).never
 
-      run = @orchestrator.call(nl_input: "Build a todo app", stop_after: :published)
+      @executor.stubs(:await_results).with { |kwargs|
+        tiers_awaited << kwargs[:tasks].map(&:tier).uniq if kwargs[:tasks]
+        true
+      }.returns(nil)
 
-      # Two tasks have external_ids, three don't
-      published = run.tasks.select { |t| t.external_id.present? }
-      unpublished = run.tasks.select { |t| t.external_id.blank? }
-      assert_equal 2, published.count
-      assert_equal 3, unpublished.count
+      @executor.stubs(:merge_results).with { |kwargs|
+        tiers_merged << kwargs[:tasks].map(&:tier).uniq if kwargs[:tasks]
+        true
+      }.returns([])
+
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      result = @orchestrator.call(nl_input: "Build a todo app")
+
+      assert_equal "completed", result.status
+      # sample_tasks has 4 tiers (0,1,2,3)
+      assert_equal [[0], [1], [2], [3]], tiers_published
+      assert_equal [[0], [1], [2], [3]], tiers_awaited
+      assert_equal [[0], [1], [2], [3]], tiers_merged
+    end
+
+    test "resume skips completed tiers" do
+      stub_spec_generation!
+      stub_task_breakdown!
+
+      # Stop after tasks so we can manipulate tier state
+      @executor.expects(:call).never
+      run = @orchestrator.call(nl_input: "Build a todo app", stop_after: :tasks)
+
+      # Mark tier 0 task as fully resolved
+      tier0_task = run.tasks.find_by(position: 0)
+      tier0_task.update!(external_id: "1", result_diff: '[{"filename":"setup.rb"}]')
+
+      tiers_published = []
+      @executor.stubs(:call).with { |kwargs|
+        tiers_published << kwargs[:tasks].map(&:tier).uniq
+        true
+      }.returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      result = @orchestrator.resume(pipeline_run: run)
+
+      assert_equal "completed", result.status
+      # Tier 0 should be skipped since it's resolved
+      assert_not_includes tiers_published, [0]
+      assert_includes tiers_published, [1]
     end
 
     # --- Analysis Loop Continues From Prior Iterations ---
@@ -304,7 +323,7 @@ module ArnoldPipeline
       )
 
       # Add results so infer_resume_stage goes to :analyze
-      run.tasks.each { |t| t.update!(result_diff: '[{"filename":"a.rb"}]') }
+      run.tasks.each { |t| t.update!(external_id: t.position.to_s, result_diff: '[{"filename":"a.rb"}]') }
 
       # Resume — analyzer should receive iteration_number 2
       @analyzer.expects(:call).with { |kwargs|
@@ -327,17 +346,6 @@ module ArnoldPipeline
 
     def stub_task_breakdown!
       @task_breaker.stubs(:call).returns(sample_tasks)
-    end
-
-    def stub_executor_publish!
-      @executor.stubs(:call).with { |kwargs|
-        pipeline_run = kwargs[:pipeline_run]
-        pipeline_run.tasks.reload.each_with_index do |t, i|
-          next if t.external_id.present?
-          t.update!(external_id: (i + 1).to_s, external_url: "https://github.com/issue/#{i + 1}", status: :in_progress)
-        end
-        true
-      }.returns([])
     end
 
     def sample_tasks

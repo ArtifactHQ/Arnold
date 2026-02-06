@@ -240,6 +240,43 @@ module ArnoldPipeline
         ArnoldPipeline.reset_configuration!
       end
 
+      test "await_results with tasks: parameter polls only given tasks" do
+        sleep_calls = []
+        executor = Executor.new(
+          provider: @provider,
+          logger: Logger.new(File::NULL),
+          sleep_func: ->(s) { sleep_calls << s }
+        )
+
+        task1 = @pipeline_run.tasks.create!(title: "Task 1", position: 0, external_id: "1", result_diff: '[{"filename":"a.rb"}]')
+        task2 = @pipeline_run.tasks.create!(title: "Task 2", position: 1, external_id: "2")
+
+        # Only pass task1 (already resolved) — task2 should not block
+        @provider.stubs(:fetch_results).returns([])
+
+        ArnoldPipeline.configure do |c|
+          c.polling_interval = 2
+          c.polling_timeout = 10
+          c.polling_max_interval = 6
+        end
+
+        executor.await_results(pipeline_run: @pipeline_run, tasks: [task1])
+
+        assert_empty sleep_calls, "Should not sleep when scoped tasks are all resolved"
+      ensure
+        ArnoldPipeline.reset_configuration!
+      end
+
+      test "merge_results with tasks: parameter delegates subset to provider" do
+        task1 = @pipeline_run.tasks.create!(title: "Task 1", position: 0, external_id: "1")
+        task2 = @pipeline_run.tasks.create!(title: "Task 2", position: 1, external_id: "2")
+
+        @provider.expects(:merge_results).with(pipeline_run: @pipeline_run, tasks: [task1]).returns([{ pr_number: 1, task_id: task1.id }])
+
+        results = @executor.merge_results(pipeline_run: @pipeline_run, tasks: [task1])
+        assert_equal 1, results.size
+      end
+
       test "await_results tasks without external_id do not block completion" do
         sleep_calls = []
         executor = Executor.new(

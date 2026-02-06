@@ -41,8 +41,8 @@ module ArnoldPipeline
           end
         end
 
-        def fetch_results(pipeline_run:)
-          pipeline_run.tasks.map do |task|
+        def fetch_results(pipeline_run:, tasks: nil)
+          (tasks || pipeline_run.tasks).map do |task|
             next unless task.external_id
 
             issue_number = task.external_id.to_i
@@ -72,9 +72,9 @@ module ArnoldPipeline
           end.compact
         end
 
-        def merge_results(pipeline_run:)
+        def merge_results(pipeline_run:, tasks: nil)
           merged = []
-          pipeline_run.tasks.each do |task|
+          (tasks || pipeline_run.tasks).each do |task|
             next unless task.external_id
 
             pulls = @client.pull_requests(@repo, state: "open").select do |pr|

@@ -250,6 +250,65 @@ module ArnoldPipeline
           assert_equal "reviewer", result[:comments].first[:author]
         end
 
+        test "fetch_results with tasks: parameter scopes to given tasks" do
+          task1 = @pipeline_run.tasks.create!(title: "Task 1", position: 0, external_id: "42")
+          task2 = @pipeline_run.tasks.create!(title: "Task 2", position: 1, external_id: "43")
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { number: 42, state: "open" }.to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: [].to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
+            .with(query: { state: "all" })
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: [].to_json
+            )
+
+          # Only fetch results for task1
+          results = @provider.fetch_results(pipeline_run: @pipeline_run, tasks: [task1])
+
+          assert_equal 1, results.size
+          assert_equal task1.id, results.first[:task_id]
+        end
+
+        test "merge_results with tasks: parameter scopes to given tasks" do
+          task1 = @pipeline_run.tasks.create!(title: "Task 1", position: 0, external_id: "42")
+          task2 = @pipeline_run.tasks.create!(title: "Task 2", position: 1, external_id: "43")
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
+            .with(query: { state: "open" })
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: [{ number: 10, title: "Fix #42", body: "Closes #42", state: "open", merged_at: nil }].to_json
+            )
+
+          stub_request(:put, "https://api.github.com/repos/owner/repo/pulls/10/merge")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { merged: true }.to_json
+            )
+
+          # Only merge for task1
+          results = @provider.merge_results(pipeline_run: @pipeline_run, tasks: [task1])
+
+          assert_equal 1, results.size
+          assert_equal task1.id, results.first[:task_id]
+        end
+
         test "build factory creates Github provider" do
           ArnoldPipeline.configure do |c|
             c.execution_provider = :github
@@ -288,8 +347,8 @@ module ArnoldPipeline
         test "base class raises NotImplementedError" do
           base = Base.new
           assert_raises(NotImplementedError) { base.create_tasks(tasks: [], pipeline_run: nil) }
-          assert_raises(NotImplementedError) { base.fetch_results(pipeline_run: nil) }
-          assert_raises(NotImplementedError) { base.merge_results(pipeline_run: nil) }
+          assert_raises(NotImplementedError) { base.fetch_results(pipeline_run: nil, tasks: nil) }
+          assert_raises(NotImplementedError) { base.merge_results(pipeline_run: nil, tasks: nil) }
         end
       end
     end

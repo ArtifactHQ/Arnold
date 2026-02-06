@@ -3,11 +3,12 @@ require "arnold_pipeline/agents/spec_generator"
 require "arnold_pipeline/agents/task_breaker"
 require "arnold_pipeline/agents/executor"
 require "arnold_pipeline/agents/analyzer"
+require "arnold_pipeline/tier_calculator"
 
 module ArnoldPipeline
   class Orchestrator
-    STAGES = %i[generate_spec break_tasks publish_tasks await_results analyze].freeze
-    STAGE_CHECKPOINTS = { generate_spec: :spec, break_tasks: :tasks, publish_tasks: :published, await_results: :executed }.freeze
+    STAGES = %i[generate_spec break_tasks execute analyze].freeze
+    STAGE_CHECKPOINTS = { generate_spec: :spec, break_tasks: :tasks, execute: :executed }.freeze
 
     attr_reader :library_manager, :spec_generator, :task_breaker, :executor, :analyzer, :logger
 
@@ -117,20 +118,34 @@ module ArnoldPipeline
           depends_on: td["depends_on"] || []
         )
       end
+
+      TierCalculator.call(pipeline_run.tasks.reload)
     end
 
-    def publish_tasks!(pipeline_run)
+    def execute!(pipeline_run)
       pipeline_run.update!(status: :executing)
-      logger.info { "Publishing tasks..." }
+      logger.info { "Executing tasks..." }
 
-      executor.call(tasks: pipeline_run.tasks.reload, pipeline_run:)
-    end
+      max_tier = pipeline_run.tasks.maximum(:tier) || 0
 
-    def await_results!(pipeline_run)
-      pipeline_run.update!(status: :awaiting_results)
-      logger.info { "Awaiting results..." }
+      (0..max_tier).each do |tier_num|
+        tier_tasks = pipeline_run.tasks.in_tier(tier_num).to_a
 
-      executor.await_results(pipeline_run:)
+        # Resume: skip fully resolved tiers
+        next if tier_tasks.all? { |t| tier_task_resolved?(t) }
+
+        logger.info { "Tier #{tier_num}: executing #{tier_tasks.size} tasks" }
+
+        # Publish (executor skips tasks with existing external_id)
+        executor.call(tasks: tier_tasks, pipeline_run:)
+
+        # Await results for this tier only
+        pipeline_run.update!(status: :awaiting_results)
+        executor.await_results(pipeline_run:, tasks: tier_tasks)
+
+        # Merge this tier before next tier starts
+        merge_tier_results!(pipeline_run, tier_tasks)
+      end
     end
 
     def analysis_loop!(pipeline_run)
@@ -149,13 +164,11 @@ module ArnoldPipeline
           break
         when "iterate_tasks"
           handle_iterate_tasks!(pipeline_run, analysis)
-          publish_tasks!(pipeline_run)
-          await_results!(pipeline_run)
+          execute!(pipeline_run)
         when "iterate_spec"
           handle_iterate_spec!(pipeline_run, analysis)
           break_tasks!(pipeline_run)
-          publish_tasks!(pipeline_run)
-          await_results!(pipeline_run)
+          execute!(pipeline_run)
         end
 
         if iteration_number >= max_iterations
@@ -219,6 +232,8 @@ module ArnoldPipeline
           depends_on: td["depends_on"] || []
         )
       end
+
+      TierCalculator.call(pipeline_run.tasks.reload)
     end
 
     def handle_iterate_spec!(pipeline_run, analysis)
@@ -249,6 +264,21 @@ module ArnoldPipeline
       logger.warn { "Merge failed (non-fatal): #{e.message}" }
     end
 
+    def merge_tier_results!(pipeline_run, tier_tasks)
+      logger.info { "Merging tier results..." }
+      executor.merge_results(pipeline_run:, tasks: tier_tasks)
+    rescue => e
+      logger.warn { "Tier merge failed (non-fatal): #{e.message}" }
+    end
+
+    def tier_task_resolved?(task)
+      task.external_id.present? && (
+        (task.result_diff.present? && task.result_diff != "[]") ||
+        task.failed? ||
+        task.result_comments.present?
+      )
+    end
+
     def pause!(pipeline_run, checkpoint)
       pipeline_run.update!(
         status: :paused,
@@ -264,14 +294,15 @@ module ArnoldPipeline
 
       return :break_tasks if tasks.empty?
 
-      return :publish_tasks if tasks.none? { |t| t.external_id.present? }
+      return :execute if tasks.any? { |t| t.tier.nil? }
 
-      has_results = tasks.any? { |t| t.result_diff.present? || t.result_comments.present? }
+      return :execute if tasks.any? { |t| t.external_id.blank? }
+
       all_resolved = tasks.select { |t| t.external_id.present? }.all? { |t|
         (t.result_diff.present? && t.result_diff != "[]") || t.failed? || t.result_comments.present?
       }
 
-      return :await_results unless all_resolved
+      return :execute unless all_resolved
 
       :analyze
     end

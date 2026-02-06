@@ -35,9 +35,9 @@ module ArnoldPipeline
         results
       end
 
-      def fetch_results(pipeline_run:)
+      def fetch_results(pipeline_run:, tasks: nil)
         logger.info { "Fetching results for pipeline run ##{pipeline_run.id}" }
-        results = provider.fetch_results(pipeline_run:)
+        results = provider.fetch_results(pipeline_run:, tasks:)
 
         results.each do |result|
           task = pipeline_run.tasks.find(result[:task_id])
@@ -50,7 +50,7 @@ module ArnoldPipeline
         results
       end
 
-      def await_results(pipeline_run:)
+      def await_results(pipeline_run:, tasks: nil)
         config = ArnoldPipeline.configuration
         interval = config.polling_interval
         timeout = config.polling_timeout
@@ -58,10 +58,14 @@ module ArnoldPipeline
         elapsed = 0
 
         loop do
-          fetch_results(pipeline_run:)
+          fetch_results(pipeline_run:, tasks:)
 
-          tasks = pipeline_run.tasks.reload
-          trackable = tasks.select { |t| t.external_id.present? }
+          trackable = if tasks
+            tasks.map(&:reload).select { |t| t.external_id.present? }
+          else
+            pipeline_run.tasks.reload.select { |t| t.external_id.present? }
+          end
+
           resolved = trackable.count { |t| task_resolved?(t) }
           total = trackable.size
 
@@ -86,9 +90,9 @@ module ArnoldPipeline
         end
       end
 
-      def merge_results(pipeline_run:)
+      def merge_results(pipeline_run:, tasks: nil)
         logger.info { "Merging results for pipeline run ##{pipeline_run.id}" }
-        provider.merge_results(pipeline_run:)
+        provider.merge_results(pipeline_run:, tasks:)
       end
 
       private
