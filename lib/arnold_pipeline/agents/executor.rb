@@ -12,9 +12,14 @@ module ArnoldPipeline
       end
 
       def call(tasks:, pipeline_run:)
-        logger.info { "Executing #{tasks.size} tasks via #{provider.class.name}" }
+        unpublished = tasks.reject do |t|
+          t.respond_to?(:external_id) ? t.external_id.present? : t["external_id"].present?
+        end
 
-        results = provider.create_tasks(tasks:, pipeline_run:)
+        logger.info { "Executing #{unpublished.size} tasks via #{provider.class.name}" }
+        return [] if unpublished.empty?
+
+        results = provider.create_tasks(tasks: unpublished, pipeline_run:)
 
         results.each do |result|
           task = pipeline_run.tasks.find_by(title: result[:title])

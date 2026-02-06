@@ -6,6 +6,9 @@ require "arnold_pipeline/agents/analyzer"
 
 module ArnoldPipeline
   class Orchestrator
+    STAGES = %i[generate_spec break_tasks publish_tasks await_results analyze].freeze
+    STAGE_CHECKPOINTS = { generate_spec: :spec, break_tasks: :tasks, publish_tasks: :published, await_results: :executed }.freeze
+
     attr_reader :library_manager, :spec_generator, :task_breaker, :executor, :analyzer, :logger
 
     def initialize(
@@ -24,50 +27,45 @@ module ArnoldPipeline
       @analyzer = analyzer || Agents::Analyzer.new(logger: @logger)
     end
 
-    def call(nl_input:)
+    def call(nl_input:, stop_after: nil)
       pipeline_run = PipelineRun.create!(nl_input:, status: :pending)
-      max_iterations = ArnoldPipeline.configuration.max_iterations
+      run_pipeline!(pipeline_run, from: :generate_spec, stop_after:)
+    end
+
+    def resume(pipeline_run:, stop_after: nil)
+      unless pipeline_run.paused? || pipeline_run.failed?
+        raise ArgumentError, "Cannot resume a #{pipeline_run.status} pipeline run"
+      end
+
+      stage = infer_resume_stage(pipeline_run)
+      run_pipeline!(pipeline_run, from: stage, stop_after:)
+    end
+
+    private
+
+    def run_pipeline!(pipeline_run, from:, stop_after: nil)
+      start_index = STAGES.index(from)
 
       begin
-        generate_spec!(pipeline_run)
-        break_tasks!(pipeline_run)
-        execute_tasks!(pipeline_run)
-
-        iteration_number = 0
-        loop do
-          iteration_number += 1
-          analysis = analyze!(pipeline_run, iteration_number)
-
-          case analysis["decision"]
-          when "done"
-            pipeline_run.update!(status: :completed)
-            merge_results!(pipeline_run)
-            break
-          when "iterate_tasks"
-            handle_iterate_tasks!(pipeline_run, analysis)
-            execute_tasks!(pipeline_run)
-          when "iterate_spec"
-            handle_iterate_spec!(pipeline_run, analysis)
-            break_tasks!(pipeline_run)
-            execute_tasks!(pipeline_run)
-          end
-
-          if iteration_number >= max_iterations
-            pipeline_run.update!(status: :max_iterations_reached)
-            merge_results!(pipeline_run)
-            break
+        STAGES[start_index..].each do |stage|
+          if stage == :analyze
+            analysis_loop!(pipeline_run)
+          else
+            send(:"#{stage}!", pipeline_run)
+            checkpoint = STAGE_CHECKPOINTS[stage]
+            if checkpoint && stop_after == checkpoint
+              return pause!(pipeline_run, checkpoint)
+            end
           end
         end
       rescue => e
-        pipeline_run.update!(status: :failed, metadata: { error: e.message })
+        pipeline_run.update!(status: :failed, metadata: (pipeline_run.metadata || {}).merge("error" => e.message))
         logger.error { "Pipeline failed: #{e.message}" }
         raise
       end
 
       pipeline_run.reload
     end
-
-    private
 
     def generate_spec!(pipeline_run)
       pipeline_run.update!(status: :generating_spec)
@@ -121,13 +119,51 @@ module ArnoldPipeline
       end
     end
 
-    def execute_tasks!(pipeline_run)
+    def publish_tasks!(pipeline_run)
       pipeline_run.update!(status: :executing)
-      logger.info { "Executing tasks..." }
+      logger.info { "Publishing tasks..." }
 
       executor.call(tasks: pipeline_run.tasks.reload, pipeline_run:)
+    end
+
+    def await_results!(pipeline_run)
       pipeline_run.update!(status: :awaiting_results)
+      logger.info { "Awaiting results..." }
+
       executor.await_results(pipeline_run:)
+    end
+
+    def analysis_loop!(pipeline_run)
+      max_iterations = ArnoldPipeline.configuration.max_iterations
+      existing_iterations = pipeline_run.iterations.count
+      iteration_number = existing_iterations
+
+      loop do
+        iteration_number += 1
+        analysis = analyze!(pipeline_run, iteration_number)
+
+        case analysis["decision"]
+        when "done"
+          pipeline_run.update!(status: :completed)
+          merge_results!(pipeline_run)
+          break
+        when "iterate_tasks"
+          handle_iterate_tasks!(pipeline_run, analysis)
+          publish_tasks!(pipeline_run)
+          await_results!(pipeline_run)
+        when "iterate_spec"
+          handle_iterate_spec!(pipeline_run, analysis)
+          break_tasks!(pipeline_run)
+          publish_tasks!(pipeline_run)
+          await_results!(pipeline_run)
+        end
+
+        if iteration_number >= max_iterations
+          pipeline_run.update!(status: :max_iterations_reached)
+          merge_results!(pipeline_run)
+          break
+        end
+      end
     end
 
     def analyze!(pipeline_run, iteration_number)
@@ -147,7 +183,7 @@ module ArnoldPipeline
         comments:
       )
 
-      iteration = pipeline_run.iterations.create!(
+      pipeline_run.iterations.create!(
         number: iteration_number,
         decision: result["decision"],
         confidence: result["confidence"],
@@ -157,9 +193,6 @@ module ArnoldPipeline
       )
 
       logger.info { "Decision: #{result['decision']} (confidence: #{result['confidence']}%)" }
-      if iteration.needs_human_review
-        logger.warn { "Low confidence (#{result['confidence']}%) — flagged for human review" }
-      end
 
       result
     end
@@ -214,6 +247,33 @@ module ArnoldPipeline
       executor.merge_results(pipeline_run:)
     rescue => e
       logger.warn { "Merge failed (non-fatal): #{e.message}" }
+    end
+
+    def pause!(pipeline_run, checkpoint)
+      pipeline_run.update!(
+        status: :paused,
+        metadata: (pipeline_run.metadata || {}).merge("paused_at" => checkpoint.to_s)
+      )
+      pipeline_run.reload
+    end
+
+    def infer_resume_stage(pipeline_run)
+      tasks = pipeline_run.tasks
+
+      return :generate_spec unless pipeline_run.specification
+
+      return :break_tasks if tasks.empty?
+
+      return :publish_tasks if tasks.none? { |t| t.external_id.present? }
+
+      has_results = tasks.any? { |t| t.result_diff.present? || t.result_comments.present? }
+      all_resolved = tasks.select { |t| t.external_id.present? }.all? { |t|
+        (t.result_diff.present? && t.result_diff != "[]") || t.failed? || t.result_comments.present?
+      }
+
+      return :await_results unless all_resolved
+
+      :analyze
     end
   end
 end

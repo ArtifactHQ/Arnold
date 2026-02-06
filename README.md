@@ -15,6 +15,11 @@ arnold run "Build a todo list app with user auth and real-time updates" --repo o
 arnold run "Build a todo list app" --repo owner/repo --issue-mention "@claude"
 # Using OpenAI instead:
 arnold run "Build a todo list app" --provider openai --repo owner/repo
+
+# Run only part of the pipeline (see Partial Execution below):
+arnold run "Build a todo list app" --repo owner/repo --stop-after tasks
+arnold resume 1                     # Continue from where you left off
+arnold resume 1 --stop-after published  # Resume and pause again at a later stage
 ```
 
 That's it. Arnold will:
@@ -25,6 +30,8 @@ That's it. Arnold will:
 5. Poll for PR results with exponential backoff
 6. Analyze results against the spec
 7. Iterate up to 3 times until aligned (or flag for human review)
+
+You can stop the pipeline at any stage and resume later — see [Partial Execution & Resume](#partial-execution--resume).
 
 ## Rails Integration
 
@@ -66,11 +73,19 @@ end
 Use programmatically:
 
 ```ruby
-# Synchronous
-result = ArnoldPipeline::Orchestrator.new.call(nl_input: "Build a REST API for inventory management")
+orchestrator = ArnoldPipeline::Orchestrator.new
+
+# Full pipeline
+result = orchestrator.call(nl_input: "Build a REST API for inventory management")
 result.status       # => "completed"
 result.tasks.count  # => 12
 result.iterations   # => [#<Iteration decision="done" confidence=95>]
+
+# Partial execution — stop after task breakdown
+run = orchestrator.call(nl_input: "Build a dashboard app", stop_after: :tasks)
+run.status  # => "paused"
+# Review the spec and tasks, then continue:
+result = orchestrator.resume(pipeline_run: run)
 
 # Async (via ActiveJob)
 run = ArnoldPipeline::PipelineRun.create!(nl_input: "Build a dashboard app")
@@ -81,6 +96,7 @@ ArnoldPipeline::PipelineJob.perform_later(run.id)
 
 ```bash
 arnold run "description" [options]   # Run the full pipeline
+arnold resume ID [options]           # Resume a paused or failed run
 arnold spec ID [options]             # Export a run's specification
 arnold status ID                     # Check a pipeline run
 arnold list                          # List all runs
@@ -92,9 +108,13 @@ arnold version                       # Show version
 #   --model NAME               Model name
 #   --repo OWNER/REPO          GitHub repository
 #   --issue-mention MENTION    Include in issue body (e.g. @claude)
+#   --stop-after STAGE         Pause after stage: spec, tasks, published, executed
 #   --polling-interval SECS    Polling interval (default: 30)
 #   --polling-timeout SECS     Max polling wait (default: 1800)
 #   --verbose                  Debug logging
+
+# Options for `resume`:
+#   --stop-after STAGE         Pause again at a later stage
 
 # Options for `spec`:
 #   -o, --output FILE  Write to file instead of stdout
@@ -168,6 +188,82 @@ After creating GitHub Issues, the Executor waits for external agents (GitHub Act
 3. Stop when all tasks have results, or `polling_timeout` is reached (default: 30 min)
 
 The pipeline transitions through `executing` -> `awaiting_results` -> `analyzing` as it waits. Tasks without an `external_id` (e.g. not submitted to GitHub) are skipped and don't block polling.
+
+## Partial Execution & Resume
+
+The pipeline can be paused at any stage and resumed later. This is useful for reviewing intermediate results before committing to the next step, or for recovering from failures.
+
+### Stages
+
+| `stop_after` | Stops after | What exists when paused |
+|--------------|------------|------------------------|
+| `:spec` | Spec generation | Specification (markdown + structured data) |
+| `:tasks` | Task breakdown | Specification + 5-20 ordered tasks |
+| `:published` | Issue creation | Tasks with GitHub Issue numbers |
+| `:executed` | Result polling | Tasks with PR diffs and comments |
+| `nil` | Full pipeline | Everything including analysis iterations |
+
+### Partial Execution
+
+Stop the pipeline at any stage to review before continuing:
+
+```ruby
+orchestrator = ArnoldPipeline::Orchestrator.new
+
+# Generate spec only
+run = orchestrator.call(nl_input: "Build a todo app", stop_after: :spec)
+run.status                    # => "paused"
+run.metadata["paused_at"]     # => "spec"
+puts run.specification.content  # Review the generated spec
+
+# Generate spec + tasks
+run = orchestrator.call(nl_input: "Build a todo app", stop_after: :tasks)
+run.tasks.each { |t| puts "#{t.position}: #{t.title}" }
+
+# Publish issues but don't wait for results
+run = orchestrator.call(nl_input: "Build a todo app", stop_after: :published)
+run.tasks.each { |t| puts "#{t.title} -> #{t.external_url}" }
+```
+
+### Resume
+
+Resume a paused (or failed) pipeline run. The orchestrator infers where to pick up based on existing state:
+
+```ruby
+# Resume to completion
+result = orchestrator.resume(pipeline_run: run)
+result.status  # => "completed"
+
+# Resume but pause again at a later stage
+result = orchestrator.resume(pipeline_run: run, stop_after: :published)
+result.status  # => "paused"
+```
+
+Resume also works after failures — fix the underlying issue and retry:
+
+```ruby
+# A run that failed during spec generation
+run = orchestrator.call(nl_input: "Build an app")  # raises if LLM is down
+run = ArnoldPipeline::PipelineRun.last
+run.status  # => "failed"
+
+# Later, when the LLM is back:
+result = orchestrator.resume(pipeline_run: run)
+```
+
+### How Resume Infers the Stage
+
+The orchestrator inspects the pipeline run's existing data to determine where to continue:
+
+| State | Resumes from |
+|-------|-------------|
+| No specification | Spec generation |
+| Specification exists, no tasks | Task breakdown |
+| Tasks exist, no GitHub issue numbers | Issue publication |
+| Tasks have issue numbers, incomplete results | Result polling |
+| All tasks have results | Analysis |
+
+If some tasks were published before a pause/failure and others weren't, resume will only publish the remaining tasks — already-published issues are not duplicated.
 
 ## Extending
 
