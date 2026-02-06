@@ -24,7 +24,8 @@ module ArnoldPipeline
           require_relative "github"
           Github.new(
             token: options[:token] || config.github_token,
-            repo: options[:repo] || config.github_repo
+            repo: options[:repo] || config.github_repo,
+            issue_mention: options[:issue_mention] || config.github_issue_mention
           )
         else
           raise ConfigurationError, "Unknown execution provider: #{provider}"

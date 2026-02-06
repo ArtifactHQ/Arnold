@@ -5,9 +5,10 @@ module ArnoldPipeline
   module Providers
     module Execution
       class Github < Base
-        def initialize(token:, repo:)
+        def initialize(token:, repo:, issue_mention: nil)
           @client = Octokit::Client.new(access_token: token)
           @repo = repo
+          @issue_mention = issue_mention
         end
 
         def create_tasks(tasks:, pipeline_run:)
@@ -86,6 +87,9 @@ module ArnoldPipeline
 
         def build_issue_body(description, pipeline_run, dependencies: [])
           body = description.to_s.dup
+          if @issue_mention
+            body << "\n\n#{@issue_mention}"
+          end
           if dependencies.any?
             body << "\n\n**Depends on:** #{dependencies.join(', ')}"
           end

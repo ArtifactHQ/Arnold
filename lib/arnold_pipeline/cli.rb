@@ -14,6 +14,7 @@ module ArnoldPipeline
     option :provider, type: :string, desc: "LLM provider (anthropic or openai)"
     option :model, type: :string, desc: "LLM model name"
     option :repo, type: :string, desc: "GitHub repo (owner/repo)"
+    option :issue_mention, type: :string, desc: "Mention to include in issue body (e.g. @claude)"
     option :polling_interval, type: :numeric, desc: "Polling interval in seconds (default: 30)"
     option :polling_timeout, type: :numeric, desc: "Polling timeout in seconds (default: 1800)"
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
@@ -163,6 +164,7 @@ module ArnoldPipeline
         c.llm_provider = options[:provider].to_sym if options[:provider]
         c.llm_model = options[:model] if options[:model]
         c.github_repo = options[:repo] if options[:repo]
+        c.github_issue_mention = options[:issue_mention] if options[:issue_mention]
         c.polling_interval = options[:polling_interval] if options[:polling_interval]
         c.polling_timeout = options[:polling_timeout] if options[:polling_timeout]
       end
@@ -176,6 +178,7 @@ module ArnoldPipeline
         c.execution_provider = yaml_config[:execution_provider]&.to_sym if yaml_config[:execution_provider]
         c.github_token = yaml_config[:github_token] if yaml_config[:github_token]
         c.github_repo = yaml_config[:github_repo] if yaml_config[:github_repo]
+        c.github_issue_mention = yaml_config[:github_issue_mention] if yaml_config[:github_issue_mention]
         c.max_iterations = yaml_config[:max_iterations] if yaml_config[:max_iterations]
         c.library_path = yaml_config[:library_path] if yaml_config[:library_path]
         c.polling_interval = yaml_config[:polling_interval] if yaml_config[:polling_interval]

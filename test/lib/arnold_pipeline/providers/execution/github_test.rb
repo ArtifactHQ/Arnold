@@ -71,6 +71,42 @@ module ArnoldPipeline
           }
         end
 
+        test "create_tasks includes issue_mention in body when configured" do
+          provider = Github.new(token: "ghp_test", repo: "owner/repo", issue_mention: "@claude")
+
+          stub_request(:post, "https://api.github.com/repos/owner/repo/issues")
+            .to_return(
+              status: 201,
+              headers: { "Content-Type" => "application/json" },
+              body: { number: 1, html_url: "https://github.com/owner/repo/issues/1" }.to_json
+            )
+
+          tasks = [{ "title" => "Setup DB", "description" => "Create schema", "labels" => ["backend"], "position" => 0, "depends_on" => [] }]
+          provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          assert_requested(:post, "https://api.github.com/repos/owner/repo/issues") { |req|
+            body = JSON.parse(req.body)
+            body["body"].include?("@claude")
+          }
+        end
+
+        test "create_tasks omits mention when issue_mention is nil" do
+          stub_request(:post, "https://api.github.com/repos/owner/repo/issues")
+            .to_return(
+              status: 201,
+              headers: { "Content-Type" => "application/json" },
+              body: { number: 1, html_url: "https://github.com/owner/repo/issues/1" }.to_json
+            )
+
+          tasks = [{ "title" => "Setup DB", "description" => "Create schema", "labels" => ["backend"], "position" => 0, "depends_on" => [] }]
+          @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          assert_requested(:post, "https://api.github.com/repos/owner/repo/issues") { |req|
+            body = JSON.parse(req.body)
+            !body["body"].include?("@")
+          }
+        end
+
         test "build factory creates Github provider" do
           ArnoldPipeline.configure do |c|
             c.execution_provider = :github
@@ -80,6 +116,22 @@ module ArnoldPipeline
 
           provider = Execution.build
           assert_kind_of Github, provider
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "build factory passes issue_mention from config" do
+          ArnoldPipeline.configure do |c|
+            c.execution_provider = :github
+            c.github_token = "ghp_test"
+            c.github_repo = "owner/repo"
+            c.github_issue_mention = "@claude"
+          end
+
+          provider = Execution.build
+          assert_kind_of Github, provider
+          # Verify mention is wired by checking instance variable
+          assert_equal "@claude", provider.instance_variable_get(:@issue_mention)
         ensure
           ArnoldPipeline.reset_configuration!
         end

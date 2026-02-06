@@ -10,6 +10,7 @@ module ArnoldPipeline
 
     attr_accessor :llm_provider,
                   :execution_provider, :github_token, :github_repo,
+                  :github_issue_mention,
                   :max_iterations, :library_path,
                   :polling_interval, :polling_timeout, :polling_max_interval
     attr_writer   :llm_api_key, :llm_model
@@ -21,6 +22,7 @@ module ArnoldPipeline
       @execution_provider = :github
       @github_token       = ENV["GITHUB_TOKEN"]
       @github_repo        = nil
+      @github_issue_mention = nil
       @max_iterations     = 3
       @library_path       = nil
       @polling_interval     = 30

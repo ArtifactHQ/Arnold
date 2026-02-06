@@ -11,6 +11,8 @@ export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY=sk-...
 export GITHUB_TOKEN=ghp_...
 
 arnold run "Build a todo list app with user auth and real-time updates" --repo owner/repo
+# Trigger Claude to work on the generated issues:
+arnold run "Build a todo list app" --repo owner/repo --issue-mention "@claude"
 # Using OpenAI instead:
 arnold run "Build a todo list app" --provider openai --repo owner/repo
 ```
@@ -51,6 +53,9 @@ ArnoldPipeline.configure do |config|
   config.github_repo    = "owner/repo"
   config.max_iterations = 3
 
+  # Mention to include in issue body so an agent picks up the issue
+  config.github_issue_mention = "@claude"  # nil to disable
+
   # Polling: how long to wait for external agents to produce PRs
   config.polling_interval     = 30   # initial interval between checks (seconds)
   config.polling_timeout      = 1800 # max total wait time (seconds)
@@ -86,6 +91,7 @@ arnold version                       # Show version
 #   --provider NAME            LLM provider (anthropic/openai)
 #   --model NAME               Model name
 #   --repo OWNER/REPO          GitHub repository
+#   --issue-mention MENTION    Include in issue body (e.g. @claude)
 #   --polling-interval SECS    Polling interval (default: 30)
 #   --polling-timeout SECS     Max polling wait (default: 1800)
 #   --verbose                  Debug logging
@@ -116,6 +122,7 @@ arnold spec 1 --json -o spec.json  # Write JSON to file
 | `execution_provider` | `:github` | — | `:github` |
 | `github_token` | — | `GITHUB_TOKEN` | GitHub personal access token |
 | `github_repo` | — | — | Target repo (`owner/repo`) |
+| `github_issue_mention` | `nil` | — | Mention added to issue body (e.g. `@claude`) |
 | `max_iterations` | `3` | — | Feedback loop cap (1-10) |
 | `polling_interval` | `30` | — | Seconds between PR polling checks |
 | `polling_timeout` | `1800` | — | Max seconds to wait for PRs (30 min) |

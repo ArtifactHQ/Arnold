@@ -11,6 +11,7 @@ module ArnoldPipeline
       assert_equal "claude-sonnet-4-20250514", @config.llm_model
       assert_equal :github, @config.execution_provider
       assert_equal 3, @config.max_iterations
+      assert_nil @config.github_issue_mention
       assert_nil @config.library_path
       assert_equal 30, @config.polling_interval
       assert_equal 1800, @config.polling_timeout
