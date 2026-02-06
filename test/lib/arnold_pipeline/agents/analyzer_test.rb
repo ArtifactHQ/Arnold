@@ -66,6 +66,56 @@ module ArnoldPipeline
           @agent.call(spec_content: "spec", diffs: "diff", iteration_number: 1, persona: @persona)
         end
       end
+
+      test "accepts valid completeness_scores" do
+        analysis = {
+          "decision" => "done",
+          "confidence" => 90,
+          "reasoning" => "Well done",
+          "completeness_scores" => {
+            "new_reader_test" => 85,
+            "coding_agent_test" => 90,
+            "change_request_test" => 80
+          },
+          "anti_patterns_found" => [],
+          "corrective_data" => {}
+        }
+        @llm.expects(:chat).returns("```json\n#{JSON.generate(analysis)}\n```")
+
+        result = @agent.call(spec_content: "spec", diffs: "diff", iteration_number: 1, persona: @persona)
+
+        assert_equal 85, result["completeness_scores"]["new_reader_test"]
+        assert_equal 90, result["completeness_scores"]["coding_agent_test"]
+        assert_equal 80, result["completeness_scores"]["change_request_test"]
+      end
+
+      test "warns but does not raise on invalid completeness_scores" do
+        analysis = {
+          "decision" => "done",
+          "confidence" => 90,
+          "reasoning" => "test",
+          "completeness_scores" => "not a hash",
+          "corrective_data" => {}
+        }
+        @llm.expects(:chat).returns("```json\n#{JSON.generate(analysis)}\n```")
+
+        result = @agent.call(spec_content: "spec", diffs: "diff", iteration_number: 1, persona: @persona)
+        assert_equal "done", result["decision"]
+      end
+
+      test "result without completeness_scores is still valid" do
+        analysis = {
+          "decision" => "done",
+          "confidence" => 95,
+          "reasoning" => "All good",
+          "corrective_data" => {}
+        }
+        @llm.expects(:chat).returns("```json\n#{JSON.generate(analysis)}\n```")
+
+        result = @agent.call(spec_content: "spec", diffs: "diff", iteration_number: 1, persona: @persona)
+        assert_equal "done", result["decision"]
+        assert_nil result["completeness_scores"]
+      end
     end
   end
 end

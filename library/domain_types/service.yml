@@ -1,0 +1,43 @@
+code: SERVICE
+name: Service Delivery / Booking
+keywords:
+  - service
+  - booking
+  - appointment
+  - schedule
+  - reservation
+  - delivery
+  - provider
+  - availability
+  - calendar
+  - hire
+  - cleaning
+  - repair
+  - consulting
+description: >
+  Applications coordinating service delivery between providers and
+  customers. Includes booking platforms, appointment schedulers,
+  on-demand services, and fulfillment systems.
+primary_value: Convenience, access, reliability
+emphasis:
+  - Booking flows and availability management
+  - Service fulfillment and quality assurance
+  - Scheduling logic and conflict resolution
+  - Provider management and ratings
+document_focus:
+  - Scheduling algorithms and availability windows
+  - Cancellation policies and no-show handling
+  - Service provider onboarding and management
+  - Quality metrics and review systems
+watch_for:
+  - Double-booking and scheduling conflicts
+  - No-show and late cancellation scenarios
+  - Quality disputes between parties
+  - Capacity limits and overbooking
+terminology:
+  user: customer/provider
+  item: booking
+  category: service type
+  action: reserve
+  list: schedule
+  notification: booking confirmation

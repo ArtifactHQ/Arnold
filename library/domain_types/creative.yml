@@ -1,0 +1,45 @@
+code: CREATIVE
+name: Creative Tools
+keywords:
+  - creative
+  - design
+  - art
+  - drawing
+  - music
+  - photo
+  - video
+  - editor
+  - canvas
+  - animation
+  - composing
+  - illustration
+  - studio
+  - render
+  - production
+description: >
+  Applications for making, designing, and producing creative works.
+  Includes graphic editors, music production tools, video editors,
+  3D modeling software, and collaborative design platforms.
+primary_value: Expression, output, craft
+emphasis:
+  - Creation workflows and tool ergonomics
+  - Asset management and organization
+  - Export options and format compatibility
+  - Collaboration and version control
+document_focus:
+  - File formats and import/export capabilities
+  - Editing operations and undo/redo systems
+  - Version history and revision tracking
+  - Sharing and collaboration permissions
+watch_for:
+  - Data loss during creation sessions
+  - Format compatibility across platforms
+  - Large file handling and performance
+  - Undo/redo consistency across operations
+terminology:
+  user: creator
+  item: asset
+  category: project
+  action: create
+  list: gallery
+  notification: collaboration update

@@ -1,0 +1,45 @@
+code: PRODUCTIVITY
+name: Business Productivity / Tools
+keywords:
+  - productivity
+  - business
+  - workflow
+  - task
+  - project
+  - management
+  - team
+  - collaboration
+  - organize
+  - planning
+  - tracking
+  - crm
+  - erp
+  - dashboard
+  - office
+description: >
+  Applications that improve efficiency, organization, and output for
+  individuals or teams. Includes project management, CRM, workflow
+  automation, and business tools.
+primary_value: Time saved, work quality, clarity
+emphasis:
+  - Workflows and process automation
+  - Efficiency gains and time savings
+  - Integrations with existing tools
+  - Collaboration and team coordination
+document_focus:
+  - User roles and permission hierarchies
+  - Data ownership and audit trails
+  - Workflow states and transitions
+  - Reporting and analytics dashboards
+watch_for:
+  - Edge cases in complex workflows
+  - Data loss and recovery scenarios
+  - Collaboration conflicts and race conditions
+  - Permission escalation risks
+terminology:
+  user: team member
+  item: task
+  category: project
+  action: assign
+  list: board
+  notification: reminder

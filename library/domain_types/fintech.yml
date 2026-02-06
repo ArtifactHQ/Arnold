@@ -1,0 +1,45 @@
+code: FINTECH
+name: Financial Technology
+keywords:
+  - fintech
+  - finance
+  - banking
+  - payment
+  - money
+  - investment
+  - trading
+  - wallet
+  - budget
+  - expense
+  - loan
+  - credit
+  - transaction
+  - crypto
+  - insurance
+description: >
+  Applications for managing money, transactions, and financial planning.
+  Includes banking apps, payment processors, investment platforms,
+  budgeting tools, and insurance systems.
+primary_value: Security, growth, control
+emphasis:
+  - Security and fraud prevention
+  - Calculation accuracy and precision
+  - Regulatory compliance and audit trails
+  - Transaction integrity and reconciliation
+document_focus:
+  - Transaction flows and state machines
+  - Balance calculations and rounding rules
+  - Regulatory requirements and reporting
+  - Fraud detection and prevention logic
+watch_for:
+  - Rounding errors in financial calculations
+  - Reconciliation failures between systems
+  - Fraud detection false positives and negatives
+  - Regulatory edge cases across jurisdictions
+terminology:
+  user: account holder
+  item: transaction
+  category: account
+  action: transfer
+  list: statement
+  notification: transaction alert

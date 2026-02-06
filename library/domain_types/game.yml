@@ -1,0 +1,48 @@
+code: GAME
+name: Game / Interactive Entertainment
+keywords:
+  - game
+  - gaming
+  - play
+  - player
+  - multiplayer
+  - score
+  - level
+  - quest
+  - rpg
+  - puzzle
+  - arcade
+  - simulation
+  - achievement
+  - leaderboard
+  - turn-based
+  - real-time
+  - interactive
+  - entertainment
+description: >
+  Applications centered on entertainment, challenge, and progression.
+  Includes video games, interactive experiences, simulations, and
+  gamified systems where engagement and fun are primary goals.
+primary_value: Fun, engagement, achievement
+emphasis:
+  - Progression systems and reward loops
+  - Difficulty curves and balance
+  - Player agency and meaningful choices
+  - Replayability and engagement retention
+document_focus:
+  - Win/loss conditions and scoring mechanics
+  - Levels, stages, and progression gates
+  - Player state and save systems
+  - Input handling and responsiveness
+watch_for:
+  - Game balance and fairness
+  - Fun factor and player frustration
+  - Replayability and content depth
+  - Performance under real-time constraints
+terminology:
+  user: player
+  account: profile
+  action: move
+  item: collectible
+  category: genre
+  notification: alert

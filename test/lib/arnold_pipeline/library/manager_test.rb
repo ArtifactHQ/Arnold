@@ -86,6 +86,47 @@ module ArnoldPipeline
         assert_equal "Generic", recipe.name
       end
 
+      test "loads all domain types" do
+        domain_types = @manager.all_domain_types
+        assert_equal 13, domain_types.size
+        codes = domain_types.map(&:code)
+        %w[GAME SOCIAL PRODUCTIVITY MARKETPLACE CONTENT SERVICE ANALYTICS HEALTH EDUCATION FINTECH IOT CREATIVE GENERIC].each do |code|
+          assert_includes codes, code
+        end
+      end
+
+      test "domain types are DomainType data objects" do
+        dt = @manager.all_domain_types.first
+        assert_kind_of DomainType, dt
+        assert_respond_to dt, :code
+        assert_respond_to dt, :name
+        assert_respond_to dt, :keywords
+        assert_respond_to dt, :emphasis
+        assert_respond_to dt, :document_focus
+        assert_respond_to dt, :watch_for
+        assert_respond_to dt, :terminology
+      end
+
+      test "find_domain_type matches game keywords" do
+        dt = @manager.find_domain_type("build a multiplayer game with leaderboards")
+        assert_equal "GAME", dt.code
+      end
+
+      test "find_domain_type matches health keywords" do
+        dt = @manager.find_domain_type("build a fitness tracker for workouts")
+        assert_equal "HEALTH", dt.code
+      end
+
+      test "find_domain_type matches fintech keywords" do
+        dt = @manager.find_domain_type("create a budget and expense tracker for finance")
+        assert_equal "FINTECH", dt.code
+      end
+
+      test "find_domain_type falls back to generic" do
+        dt = @manager.find_domain_type("something completely unrelated xyzzy")
+        assert_equal "GENERIC", dt.code
+      end
+
       test "supports custom library path" do
         custom_path = File.join(Dir.tmpdir, "arnold_test_library_#{Process.pid}")
         FileUtils.mkdir_p(File.join(custom_path, "personas"))

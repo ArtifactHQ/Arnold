@@ -11,6 +11,7 @@ module ArnoldPipeline
         @manager = Library::Manager.new
         @persona = @manager.find_persona("web app")
         @recipe = @manager.find_recipe("web app")
+        @domain_type = @manager.find_domain_type("web app")
       end
 
       test "generates spec with content and structured data" do
@@ -19,7 +20,7 @@ module ArnoldPipeline
 
         @llm.expects(:chat).returns(llm_response)
 
-        result = @agent.call(nl_input: "Build a todo app", persona: @persona, recipe: @recipe)
+        result = @agent.call(nl_input: "Build a todo app", persona: @persona, recipe: @recipe, domain_type: @domain_type)
 
         assert_equal llm_response, result[:content]
         assert_equal json_data, result[:structured_data]
@@ -28,7 +29,7 @@ module ArnoldPipeline
       test "returns nil structured_data when JSON not parseable" do
         @llm.expects(:chat).returns("Just plain text with no JSON")
 
-        result = @agent.call(nl_input: "Build a todo app", persona: @persona, recipe: @recipe)
+        result = @agent.call(nl_input: "Build a todo app", persona: @persona, recipe: @recipe, domain_type: @domain_type)
 
         assert_equal "Just plain text with no JSON", result[:content]
         assert_nil result[:structured_data]

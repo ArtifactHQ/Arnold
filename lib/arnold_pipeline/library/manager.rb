@@ -1,17 +1,20 @@
 require "yaml"
 require_relative "persona"
 require_relative "recipe"
+require_relative "domain_type"
 
 module ArnoldPipeline
   module Library
     class Manager
       FALLBACK_PERSONA = "general_analyst"
       FALLBACK_RECIPE = "generic"
+      FALLBACK_DOMAIN_TYPE = "generic"
 
       def initialize(library_path: nil)
         @library_path = library_path || default_library_path
         @personas = {}
         @recipes = {}
+        @domain_types = {}
         load_all
       end
 
@@ -25,12 +28,21 @@ module ArnoldPipeline
         best || @recipes[FALLBACK_RECIPE] || @recipes.values.first
       end
 
+      def find_domain_type(nl_input)
+        best = best_match(@domain_types.values, nl_input)
+        best || @domain_types[FALLBACK_DOMAIN_TYPE] || @domain_types.values.first
+      end
+
       def all_personas
         @personas.values
       end
 
       def all_recipes
         @recipes.values
+      end
+
+      def all_domain_types
+        @domain_types.values
       end
 
       private
@@ -42,6 +54,7 @@ module ArnoldPipeline
       def load_all
         load_personas
         load_recipes
+        load_domain_types
       end
 
       def load_personas
@@ -68,6 +81,24 @@ module ArnoldPipeline
             keywords: data["keywords"] || [],
             description: data["description"]&.strip,
             sections: data["sections"] || []
+          )
+        end
+      end
+
+      def load_domain_types
+        Dir.glob(File.join(@library_path, "domain_types", "*.yml")).each do |path|
+          data = YAML.safe_load_file(path, permitted_classes: [Symbol])
+          key = File.basename(path, ".yml")
+          @domain_types[key] = DomainType.new(
+            code: data["code"],
+            name: data["name"],
+            keywords: data["keywords"] || [],
+            description: data["description"]&.strip,
+            primary_value: data["primary_value"]&.strip,
+            emphasis: data["emphasis"] || [],
+            document_focus: data["document_focus"] || [],
+            watch_for: data["watch_for"] || [],
+            terminology: data["terminology"] || {}
           )
         end
       end

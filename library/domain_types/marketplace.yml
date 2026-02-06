@@ -1,0 +1,45 @@
+code: MARKETPLACE
+name: E-commerce / Marketplace
+keywords:
+  - marketplace
+  - ecommerce
+  - shop
+  - store
+  - buy
+  - sell
+  - listing
+  - cart
+  - checkout
+  - payment
+  - order
+  - product
+  - inventory
+  - merchant
+  - vendor
+description: >
+  Applications enabling buying, selling, and transactions between
+  parties. Includes online stores, multi-vendor marketplaces, auction
+  sites, and commerce platforms.
+primary_value: Value exchange, discovery, trust
+emphasis:
+  - Listings and product discovery
+  - Search, filtering, and recommendations
+  - Transaction flows and payment handling
+  - Trust, safety, and dispute resolution
+document_focus:
+  - Buyer and seller flows end-to-end
+  - Payment processing and fee structures
+  - Dispute resolution and refund policies
+  - Inventory management and stock conflicts
+watch_for:
+  - Fraud vectors and abuse patterns
+  - Fee calculation edge cases
+  - Inventory race conditions
+  - Tax and compliance requirements
+terminology:
+  user: buyer/seller
+  item: listing
+  category: department
+  action: purchase
+  list: catalog
+  notification: order update

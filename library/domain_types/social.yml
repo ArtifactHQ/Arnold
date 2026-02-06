@@ -1,0 +1,45 @@
+code: SOCIAL
+name: Social Network / Community
+keywords:
+  - social
+  - community
+  - network
+  - friends
+  - followers
+  - feed
+  - post
+  - share
+  - chat
+  - messaging
+  - profile
+  - connections
+  - forum
+  - discussion
+  - group
+description: >
+  Applications focused on connecting people, sharing content, and
+  fostering communication. Includes social networks, community platforms,
+  messaging apps, and forums.
+primary_value: Relationships, belonging, expression
+emphasis:
+  - User profiles and identity
+  - Connections and relationship types
+  - Content sharing and visibility rules
+  - Privacy controls and moderation
+document_focus:
+  - Relationship types and connection mechanics
+  - Content visibility and permission rules
+  - Notification logic and engagement triggers
+  - Moderation workflows and safety systems
+watch_for:
+  - Harassment vectors and abuse prevention
+  - Privacy implications of features
+  - Viral mechanics and unintended amplification
+  - Content moderation at scale
+terminology:
+  user: member
+  item: post
+  category: topic
+  action: interact
+  list: feed
+  notification: update

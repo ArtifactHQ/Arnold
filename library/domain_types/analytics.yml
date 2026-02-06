@@ -1,0 +1,43 @@
+code: ANALYTICS
+name: Data / Analytics Platform
+keywords:
+  - analytics
+  - data
+  - dashboard
+  - metrics
+  - reporting
+  - visualization
+  - insights
+  - bi
+  - intelligence
+  - monitoring
+  - tracking
+  - charts
+  - kpi
+description: >
+  Applications focused on collecting, processing, and presenting data
+  for decision-making. Includes dashboards, BI tools, monitoring
+  systems, and analytics platforms.
+primary_value: Understanding, optimization, prediction
+emphasis:
+  - Data ingestion and transformation pipelines
+  - Visualization and presentation clarity
+  - Export and sharing capabilities
+  - Real-time vs batch processing tradeoffs
+document_focus:
+  - Metric definitions and calculation logic
+  - Data refresh rates and staleness rules
+  - Access controls and data sensitivity levels
+  - Chart types and interaction patterns
+watch_for:
+  - Data accuracy and consistency issues
+  - Performance at scale with large datasets
+  - Misleading visualizations and presentations
+  - Stale data and cache invalidation
+terminology:
+  user: analyst
+  item: report
+  category: dataset
+  action: query
+  list: dashboard
+  notification: alert threshold

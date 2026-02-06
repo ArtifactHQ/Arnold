@@ -1,0 +1,44 @@
+code: CONTENT
+name: Content Platform / Media
+keywords:
+  - content
+  - media
+  - blog
+  - article
+  - video
+  - podcast
+  - streaming
+  - publish
+  - cms
+  - editorial
+  - news
+  - magazine
+  - creator
+  - subscriber
+description: >
+  Applications for creating, consuming, and curating content. Includes
+  blogs, video platforms, podcasts, news sites, and content management
+  systems.
+primary_value: Information, entertainment, learning
+emphasis:
+  - Content types and creation workflows
+  - Discovery algorithms and recommendations
+  - Creator tools and analytics
+  - Consumption experience and engagement
+document_focus:
+  - Content lifecycle from draft to archive
+  - Recommendation and curation logic
+  - Monetization models and creator payouts
+  - Rights management and licensing
+watch_for:
+  - Copyright and intellectual property issues
+  - Content moderation challenges
+  - Creator vs consumer experience balance
+  - Performance with large media files
+terminology:
+  user: reader/creator
+  item: article
+  category: channel
+  action: publish
+  list: feed
+  notification: new content alert

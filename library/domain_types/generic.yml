@@ -1,0 +1,30 @@
+code: GENERIC
+name: General Application
+keywords: []
+description: >
+  Fallback domain type for applications that do not clearly fit into a
+  specific category. Provides balanced, general-purpose guidance
+  applicable to any software project.
+primary_value: Utility, usability, reliability
+emphasis:
+  - Clear user workflows and intuitive navigation
+  - Data integrity and error handling
+  - Performance and responsiveness
+  - Accessibility and inclusive design
+document_focus:
+  - Core user journeys and happy paths
+  - Error states and recovery flows
+  - Data models and relationships
+  - Security and access control basics
+watch_for:
+  - Scope creep and feature overload
+  - Unclear user mental models
+  - Missing error handling paths
+  - Inconsistent behavior across features
+terminology:
+  user: user
+  item: item
+  category: category
+  action: action
+  list: list
+  notification: notification

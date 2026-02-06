@@ -1,0 +1,45 @@
+code: IOT
+name: Hardware / IoT Integration
+keywords:
+  - iot
+  - hardware
+  - device
+  - sensor
+  - smart
+  - automation
+  - embedded
+  - firmware
+  - connected
+  - home
+  - wearable
+  - robot
+  - controller
+  - bluetooth
+  - wifi
+description: >
+  Applications integrating with physical devices, sensors, and hardware.
+  Includes smart home systems, wearable companions, industrial IoT,
+  and device management platforms.
+primary_value: Convenience, efficiency, awareness
+emphasis:
+  - Device communication protocols and reliability
+  - Offline behavior and graceful degradation
+  - Firmware updates and version management
+  - Physical security and access control
+document_focus:
+  - Command protocols and message formats
+  - State synchronization between device and cloud
+  - Failure modes and recovery procedures
+  - Device provisioning and decommissioning
+watch_for:
+  - Connectivity gaps and intermittent failures
+  - Security vulnerabilities in device communication
+  - Device conflicts and resource contention
+  - Battery life and power management
+terminology:
+  user: operator
+  item: device
+  category: device type
+  action: command
+  list: device registry
+  notification: device alert

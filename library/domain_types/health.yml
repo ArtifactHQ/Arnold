@@ -1,0 +1,45 @@
+code: HEALTH
+name: Health / Wellness
+keywords:
+  - health
+  - wellness
+  - fitness
+  - medical
+  - exercise
+  - workout
+  - nutrition
+  - diet
+  - mental
+  - therapy
+  - patient
+  - doctor
+  - telehealth
+  - tracker
+  - wearable
+description: >
+  Applications supporting physical and mental health tracking,
+  improvement, and care delivery. Includes fitness trackers, wellness
+  apps, telehealth platforms, and patient management systems.
+primary_value: Wellbeing, progress, support
+emphasis:
+  - Tracking accuracy and data reliability
+  - Privacy and sensitive data protection
+  - Professional integration and clinical workflows
+  - Motivation and behavior change mechanics
+document_focus:
+  - Health data types and measurement units
+  - Sharing controls and consent management
+  - Alert thresholds and escalation logic
+  - Medical disclaimers and liability boundaries
+watch_for:
+  - Medical advice boundaries and liability
+  - Health data sensitivity and regulations
+  - Regulatory compliance (HIPAA, GDPR health data)
+  - False sense of security from automated health advice
+terminology:
+  user: patient/member
+  item: health record
+  category: condition
+  action: log
+  list: health timeline
+  notification: health alert

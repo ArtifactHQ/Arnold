@@ -40,6 +40,25 @@ module ArnoldPipeline
         unless confidence.is_a?(Numeric) && confidence.between?(0, 100)
           raise Error, "Invalid confidence: #{confidence}. Must be 0-100."
         end
+
+        validate_completeness_scores(result["completeness_scores"]) if result.key?("completeness_scores")
+      end
+
+      def validate_completeness_scores(scores)
+        return unless scores
+
+        unless scores.is_a?(Hash)
+          logger.warn { "completeness_scores is not a hash, ignoring" }
+          return
+        end
+
+        %w[new_reader_test coding_agent_test change_request_test].each do |key|
+          next unless scores.key?(key)
+          value = scores[key]
+          unless value.is_a?(Numeric) && value.between?(0, 100)
+            logger.warn { "completeness_scores.#{key} is invalid (#{value}), ignoring" }
+          end
+        end
       end
     end
   end

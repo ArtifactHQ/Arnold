@@ -1,0 +1,45 @@
+code: EDUCATION
+name: Learning / Education
+keywords:
+  - education
+  - learning
+  - course
+  - lesson
+  - student
+  - teacher
+  - classroom
+  - quiz
+  - exam
+  - certification
+  - training
+  - tutorial
+  - curriculum
+  - lms
+  - school
+description: >
+  Applications for teaching, learning, and skill development. Includes
+  LMS platforms, course builders, tutoring apps, certification systems,
+  and educational games.
+primary_value: Knowledge, competence, credentials
+emphasis:
+  - Learning paths and curriculum structure
+  - Assessment accuracy and fairness
+  - Progress tracking and motivation
+  - Credential verification and value
+document_focus:
+  - Curriculum structure and prerequisite chains
+  - Grading logic and rubric definitions
+  - Completion criteria and certificate issuance
+  - Instructor tools and content management
+watch_for:
+  - Cheating vectors and academic integrity
+  - Accessibility and inclusive design
+  - Prerequisite enforcement edge cases
+  - Assessment validity and bias
+terminology:
+  user: student/instructor
+  item: lesson
+  category: course
+  action: enroll
+  list: curriculum
+  notification: assignment reminder
