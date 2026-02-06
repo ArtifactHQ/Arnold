@@ -10,7 +10,8 @@ module ArnoldPipeline
 
     attr_accessor :llm_provider,
                   :execution_provider, :github_token, :github_repo,
-                  :max_iterations, :library_path
+                  :max_iterations, :library_path,
+                  :polling_interval, :polling_timeout, :polling_max_interval
     attr_writer   :llm_api_key, :llm_model
 
     def initialize
@@ -22,6 +23,9 @@ module ArnoldPipeline
       @github_repo        = nil
       @max_iterations     = 3
       @library_path       = nil
+      @polling_interval     = 30
+      @polling_timeout      = 1800
+      @polling_max_interval = 300
     end
 
     def llm_api_key
@@ -38,6 +42,7 @@ module ArnoldPipeline
       validate_execution_provider!
       validate_github_config!
       validate_max_iterations!
+      validate_polling_config!
       true
     end
 
@@ -79,6 +84,20 @@ module ArnoldPipeline
       return if @max_iterations.is_a?(Integer) && @max_iterations.between?(1, 10)
 
       raise ConfigurationError, "max_iterations must be an integer between 1 and 10."
+    end
+
+    def validate_polling_config!
+      unless @polling_interval.is_a?(Numeric) && @polling_interval > 0
+        raise ConfigurationError, "polling_interval must be a positive number."
+      end
+
+      unless @polling_timeout.is_a?(Numeric) && @polling_timeout > 0
+        raise ConfigurationError, "polling_timeout must be a positive number."
+      end
+
+      unless @polling_max_interval.is_a?(Numeric) && @polling_max_interval > 0
+        raise ConfigurationError, "polling_max_interval must be a positive number."
+      end
     end
   end
 end

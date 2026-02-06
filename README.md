@@ -20,8 +20,9 @@ That's it. Arnold will:
 2. Generate a structured specification
 3. Break it into 5-20 dependency-ordered tasks
 4. Create GitHub Issues and trigger execution
-5. Analyze results against the spec
-6. Iterate up to 3 times until aligned (or flag for human review)
+5. Poll for PR results with exponential backoff
+6. Analyze results against the spec
+7. Iterate up to 3 times until aligned (or flag for human review)
 
 ## Rails Integration
 
@@ -49,6 +50,11 @@ ArnoldPipeline.configure do |config|
   config.github_token   = ENV["GITHUB_TOKEN"]
   config.github_repo    = "owner/repo"
   config.max_iterations = 3
+
+  # Polling: how long to wait for external agents to produce PRs
+  config.polling_interval     = 30   # initial interval between checks (seconds)
+  config.polling_timeout      = 1800 # max total wait time (seconds)
+  config.polling_max_interval = 300  # backoff cap (seconds)
 end
 ```
 
@@ -76,11 +82,13 @@ arnold list                          # List all runs
 arnold version                       # Show version
 
 # Options for `run`:
-#   --config FILE      YAML config file
-#   --provider NAME    LLM provider (anthropic/openai)
-#   --model NAME       Model name
-#   --repo OWNER/REPO  GitHub repository
-#   --verbose          Debug logging
+#   --config FILE              YAML config file
+#   --provider NAME            LLM provider (anthropic/openai)
+#   --model NAME               Model name
+#   --repo OWNER/REPO          GitHub repository
+#   --polling-interval SECS    Polling interval (default: 30)
+#   --polling-timeout SECS     Max polling wait (default: 1800)
+#   --verbose                  Debug logging
 
 # Options for `spec`:
 #   -o, --output FILE  Write to file instead of stdout
@@ -109,6 +117,9 @@ arnold spec 1 --json -o spec.json  # Write JSON to file
 | `github_token` | — | `GITHUB_TOKEN` | GitHub personal access token |
 | `github_repo` | — | — | Target repo (`owner/repo`) |
 | `max_iterations` | `3` | — | Feedback loop cap (1-10) |
+| `polling_interval` | `30` | — | Seconds between PR polling checks |
+| `polling_timeout` | `1800` | — | Max seconds to wait for PRs (30 min) |
+| `polling_max_interval` | `300` | — | Backoff cap in seconds (5 min) |
 | `library_path` | built-in | — | Custom personas/recipes dir |
 
 ## Architecture
@@ -126,7 +137,7 @@ Spec Generator ── NL + persona + recipe --> structured Markdown spec
 Task Breaker ── spec --> 5-20 ordered tasks (JSON)
   |
   v
-Executor ── tasks --> GitHub Issues, fetch PR diffs
+Executor ── tasks --> GitHub Issues, poll for PR diffs (exponential backoff)
   |
   v
 Analyzer ── diffs + spec --> decision + confidence
@@ -140,6 +151,16 @@ Max 3 iterations, then stop. <70% confidence flags for human review.
 ```
 
 **Agents** are stateless service objects — input in, output out. The **Orchestrator** owns state, persistence, and the feedback loop.
+
+### Result Polling
+
+After creating GitHub Issues, the Executor waits for external agents (GitHub Actions, Copilot, etc.) to produce PRs. It uses exponential backoff polling:
+
+1. Check for PR diffs every `polling_interval` seconds (default: 30s)
+2. Double the interval each cycle, capped at `polling_max_interval` (default: 5 min)
+3. Stop when all tasks have results, or `polling_timeout` is reached (default: 30 min)
+
+The pipeline transitions through `executing` -> `awaiting_results` -> `analyzing` as it waits. Tasks without an `external_id` (e.g. not submitted to GitHub) are skipped and don't block polling.
 
 ## Extending
 

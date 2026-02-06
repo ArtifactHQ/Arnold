@@ -14,6 +14,8 @@ module ArnoldPipeline
     option :provider, type: :string, desc: "LLM provider (anthropic or openai)"
     option :model, type: :string, desc: "LLM model name"
     option :repo, type: :string, desc: "GitHub repo (owner/repo)"
+    option :polling_interval, type: :numeric, desc: "Polling interval in seconds (default: 30)"
+    option :polling_timeout, type: :numeric, desc: "Polling timeout in seconds (default: 1800)"
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
     def run_pipeline(description)
       setup_standalone!
@@ -161,6 +163,8 @@ module ArnoldPipeline
         c.llm_provider = options[:provider].to_sym if options[:provider]
         c.llm_model = options[:model] if options[:model]
         c.github_repo = options[:repo] if options[:repo]
+        c.polling_interval = options[:polling_interval] if options[:polling_interval]
+        c.polling_timeout = options[:polling_timeout] if options[:polling_timeout]
       end
     end
 
@@ -174,6 +178,9 @@ module ArnoldPipeline
         c.github_repo = yaml_config[:github_repo] if yaml_config[:github_repo]
         c.max_iterations = yaml_config[:max_iterations] if yaml_config[:max_iterations]
         c.library_path = yaml_config[:library_path] if yaml_config[:library_path]
+        c.polling_interval = yaml_config[:polling_interval] if yaml_config[:polling_interval]
+        c.polling_timeout = yaml_config[:polling_timeout] if yaml_config[:polling_timeout]
+        c.polling_max_interval = yaml_config[:polling_max_interval] if yaml_config[:polling_max_interval]
       end
     end
 

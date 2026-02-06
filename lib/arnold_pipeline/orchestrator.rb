@@ -75,11 +75,14 @@ module ArnoldPipeline
 
       persona = library_manager.find_persona(pipeline_run.nl_input)
       recipe = library_manager.find_recipe(pipeline_run.nl_input)
+      domain_type = library_manager.find_domain_type(pipeline_run.nl_input)
+      logger.info { "Selected domain type: #{domain_type.code} — #{domain_type.name}" }
 
       result = spec_generator.call(
         nl_input: pipeline_run.nl_input,
         persona:,
-        recipe:
+        recipe:,
+        domain_type:
       )
 
       if pipeline_run.specification
@@ -123,7 +126,8 @@ module ArnoldPipeline
       logger.info { "Executing tasks..." }
 
       executor.call(tasks: pipeline_run.tasks.reload, pipeline_run:)
-      executor.fetch_results(pipeline_run:)
+      pipeline_run.update!(status: :awaiting_results)
+      executor.await_results(pipeline_run:)
     end
 
     def analyze!(pipeline_run, iteration_number)

@@ -35,7 +35,7 @@ module ArnoldPipeline
       stub_spec_generation!
       stub_task_breakdown!(times: 1)
       @executor.stubs(:call).returns([])
-      @executor.stubs(:fetch_results).returns([])
+      @executor.stubs(:await_results).returns(nil)
       @executor.stubs(:merge_results).returns([])
 
       @analyzer.expects(:call).once.returns(analysis_result("done", 95))
@@ -51,7 +51,7 @@ module ArnoldPipeline
       stub_spec_generation!
       stub_task_breakdown!(times: 1)
       @executor.stubs(:call).returns([])
-      @executor.stubs(:fetch_results).returns([])
+      @executor.stubs(:await_results).returns(nil)
       @executor.stubs(:merge_results).returns([])
 
       corrective = {
@@ -76,7 +76,7 @@ module ArnoldPipeline
       stub_spec_generation!
       @task_breaker.stubs(:call).returns(sample_tasks)
       @executor.stubs(:call).returns([])
-      @executor.stubs(:fetch_results).returns([])
+      @executor.stubs(:await_results).returns(nil)
       @executor.stubs(:merge_results).returns([])
 
       call_count = sequence("analysis_calls")
@@ -96,7 +96,7 @@ module ArnoldPipeline
       stub_spec_generation!
       @task_breaker.stubs(:call).returns(sample_tasks)
       @executor.stubs(:call).returns([])
-      @executor.stubs(:fetch_results).returns([])
+      @executor.stubs(:await_results).returns(nil)
       @executor.stubs(:merge_results).returns([])
 
       corrective = {
@@ -127,7 +127,7 @@ module ArnoldPipeline
       stub_spec_generation!
       stub_task_breakdown!(times: 1)
       @executor.stubs(:call).returns([])
-      @executor.stubs(:fetch_results).returns([])
+      @executor.stubs(:await_results).returns(nil)
       @executor.stubs(:merge_results).returns([])
 
       @analyzer.expects(:call).once.returns(analysis_result("done", 50))

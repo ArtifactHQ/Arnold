@@ -8,7 +8,8 @@ module ArnoldPipeline
       analyzing: 4,
       completed: 5,
       max_iterations_reached: 6,
-      failed: 7
+      failed: 7,
+      awaiting_results: 8
     }
 
     has_one :specification, dependent: :destroy

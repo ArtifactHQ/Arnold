@@ -14,7 +14,7 @@ module ArnoldPipeline
     end
 
     test "has all expected status values" do
-      expected = %w[pending generating_spec breaking_tasks executing analyzing completed max_iterations_reached failed]
+      expected = %w[pending generating_spec breaking_tasks executing analyzing completed max_iterations_reached failed awaiting_results]
       assert_equal expected, PipelineRun.statuses.keys
     end
 

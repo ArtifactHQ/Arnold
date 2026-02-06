@@ -45,6 +45,147 @@ module ArnoldPipeline
         results = @executor.merge_results(pipeline_run: @pipeline_run)
         assert_equal 1, results.size
       end
+
+      # --- await_results tests ---
+
+      test "await_results returns immediately when all tasks have results on first fetch" do
+        sleep_calls = []
+        executor = Executor.new(
+          provider: @provider,
+          logger: Logger.new(File::NULL),
+          sleep_func: ->(s) { sleep_calls << s }
+        )
+
+        task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42", result_diff: '[{"filename":"schema.rb"}]')
+
+        @provider.stubs(:fetch_results).returns([])
+
+        ArnoldPipeline.configure do |c|
+          c.polling_interval = 2
+          c.polling_timeout = 20
+          c.polling_max_interval = 6
+        end
+
+        executor.await_results(pipeline_run: @pipeline_run)
+
+        assert_empty sleep_calls, "Should not sleep when all tasks already have results"
+      ensure
+        ArnoldPipeline.reset_configuration!
+      end
+
+      test "await_results polls until all tasks have results" do
+        sleep_calls = []
+        executor = Executor.new(
+          provider: @provider,
+          logger: Logger.new(File::NULL),
+          sleep_func: ->(s) { sleep_calls << s }
+        )
+
+        task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
+        fetch_count = 0
+
+        @provider.stubs(:fetch_results).with { |kwargs|
+          fetch_count += 1
+          # Simulate result appearing on second fetch
+          if fetch_count >= 2
+            task.update!(result_diff: '[{"filename":"schema.rb"}]')
+          end
+          true
+        }.returns([])
+
+        ArnoldPipeline.configure do |c|
+          c.polling_interval = 2
+          c.polling_timeout = 20
+          c.polling_max_interval = 6
+        end
+
+        executor.await_results(pipeline_run: @pipeline_run)
+
+        assert_equal [2], sleep_calls
+      ensure
+        ArnoldPipeline.reset_configuration!
+      end
+
+      test "await_results stops after timeout with partial results" do
+        sleep_calls = []
+        executor = Executor.new(
+          provider: @provider,
+          logger: Logger.new(File::NULL),
+          sleep_func: ->(s) { sleep_calls << s }
+        )
+
+        @pipeline_run.tasks.create!(title: "Task 1", position: 0, external_id: "1")
+        @pipeline_run.tasks.create!(title: "Task 2", position: 1, external_id: "2")
+
+        @provider.stubs(:fetch_results).returns([])
+
+        ArnoldPipeline.configure do |c|
+          c.polling_interval = 2
+          c.polling_timeout = 10
+          c.polling_max_interval = 6
+        end
+
+        executor.await_results(pipeline_run: @pipeline_run)
+
+        # Backoff: 2, 4, 4 (capped by remaining time) = 10s total
+        assert_equal [2, 4, 4], sleep_calls
+      ensure
+        ArnoldPipeline.reset_configuration!
+      end
+
+      test "await_results uses exponential backoff with cap" do
+        sleep_calls = []
+        executor = Executor.new(
+          provider: @provider,
+          logger: Logger.new(File::NULL),
+          sleep_func: ->(s) { sleep_calls << s }
+        )
+
+        @pipeline_run.tasks.create!(title: "Task 1", position: 0, external_id: "1")
+
+        @provider.stubs(:fetch_results).returns([])
+
+        ArnoldPipeline.configure do |c|
+          c.polling_interval = 2
+          c.polling_timeout = 20
+          c.polling_max_interval = 6
+        end
+
+        executor.await_results(pipeline_run: @pipeline_run)
+
+        # Backoff: 2, 4, 6, 6, 2 (remaining) = 20s total
+        assert_equal [2, 4, 6, 6, 2], sleep_calls
+      ensure
+        ArnoldPipeline.reset_configuration!
+      end
+
+      test "await_results tasks without external_id do not block completion" do
+        sleep_calls = []
+        executor = Executor.new(
+          provider: @provider,
+          logger: Logger.new(File::NULL),
+          sleep_func: ->(s) { sleep_calls << s }
+        )
+
+        # Task with external_id and result — counts as complete
+        @pipeline_run.tasks.create!(title: "Task 1", position: 0, external_id: "1", result_diff: '[{"filename":"a.rb"}]')
+        # Task without external_id — should not block
+        @pipeline_run.tasks.create!(title: "Task 2", position: 1, external_id: nil)
+
+        @provider.stubs(:fetch_results).returns([])
+
+        ArnoldPipeline.configure do |c|
+          c.polling_interval = 2
+          c.polling_timeout = 10
+          c.polling_max_interval = 6
+        end
+
+        executor.await_results(pipeline_run: @pipeline_run)
+
+        assert_empty sleep_calls, "Tasks without external_id should not block completion"
+      ensure
+        ArnoldPipeline.reset_configuration!
+      end
     end
   end
 end

@@ -12,6 +12,9 @@ module ArnoldPipeline
       assert_equal :github, @config.execution_provider
       assert_equal 3, @config.max_iterations
       assert_nil @config.library_path
+      assert_equal 30, @config.polling_interval
+      assert_equal 1800, @config.polling_timeout
+      assert_equal 300, @config.polling_max_interval
     end
 
     test "validate! passes with valid config" do
@@ -131,6 +134,47 @@ module ArnoldPipeline
       ArnoldPipeline.reset_configuration!
 
       assert_equal :anthropic, ArnoldPipeline.configuration.llm_provider
+    end
+
+    test "validate! raises on invalid polling_interval" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.polling_interval = 0
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/polling_interval must be a positive number/, error.message)
+    end
+
+    test "validate! raises on invalid polling_timeout" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.polling_timeout = -1
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/polling_timeout must be a positive number/, error.message)
+    end
+
+    test "validate! raises on invalid polling_max_interval" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.polling_max_interval = 0
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/polling_max_interval must be a positive number/, error.message)
+    end
+
+    test "validate! accepts custom polling values" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.polling_interval = 10
+      @config.polling_timeout = 600
+      @config.polling_max_interval = 120
+
+      assert @config.validate!
     end
   end
 end

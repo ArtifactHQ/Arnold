@@ -13,6 +13,9 @@ module ArnoldPipeline
         c.github_token = "ghp_test"
         c.github_repo = "testowner/testrepo"
         c.max_iterations = 3
+        c.polling_interval = 0.01
+        c.polling_timeout = 0.05
+        c.polling_max_interval = 0.02
       end
 
       stub_anthropic_api!
@@ -167,6 +170,7 @@ module ArnoldPipeline
 
         ```json
         {
+          "application_type": "PRODUCTIVITY",
           "features": ["authentication", "crud_todos", "real_time"],
           "tech_stack": {"backend": "Rails 8", "database": "PostgreSQL", "frontend": "Hotwire"},
           "data_models": [{"name": "User", "attributes": ["email", "password"]}, {"name": "Todo", "attributes": ["title", "completed"]}],
