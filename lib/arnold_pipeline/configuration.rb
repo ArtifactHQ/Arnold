@@ -3,19 +3,33 @@ module ArnoldPipeline
     VALID_LLM_PROVIDERS = %i[anthropic openai].freeze
     VALID_EXECUTION_PROVIDERS = %i[github].freeze
 
-    attr_accessor :llm_provider, :llm_api_key, :llm_model,
+    PROVIDER_DEFAULTS = {
+      anthropic: { env_key: "ANTHROPIC_API_KEY", model: "claude-sonnet-4-20250514" },
+      openai:    { env_key: "OPENAI_API_KEY",    model: "gpt-4o" }
+    }.freeze
+
+    attr_accessor :llm_provider,
                   :execution_provider, :github_token, :github_repo,
                   :max_iterations, :library_path
+    attr_writer   :llm_api_key, :llm_model
 
     def initialize
       @llm_provider       = :anthropic
-      @llm_api_key        = ENV["ANTHROPIC_API_KEY"]
-      @llm_model          = "claude-sonnet-4-20250514"
+      @llm_api_key        = nil
+      @llm_model          = nil
       @execution_provider = :github
       @github_token       = ENV["GITHUB_TOKEN"]
       @github_repo        = nil
       @max_iterations     = 3
       @library_path       = nil
+    end
+
+    def llm_api_key
+      @llm_api_key || ENV[PROVIDER_DEFAULTS.dig(@llm_provider, :env_key).to_s]
+    end
+
+    def llm_model
+      @llm_model || PROVIDER_DEFAULTS.dig(@llm_provider, :model)
     end
 
     def validate!
@@ -36,9 +50,11 @@ module ArnoldPipeline
     end
 
     def validate_llm_api_key!
-      return if @llm_api_key && !@llm_api_key.empty?
+      key = llm_api_key
+      return if key && !key.empty?
 
-      raise ConfigurationError, "LLM API key is required. Set llm_api_key or the appropriate environment variable."
+      env_var = PROVIDER_DEFAULTS.dig(@llm_provider, :env_key) || "ANTHROPIC_API_KEY"
+      raise ConfigurationError, "LLM API key is required. Set llm_api_key or #{env_var} environment variable."
     end
 
     def validate_execution_provider!

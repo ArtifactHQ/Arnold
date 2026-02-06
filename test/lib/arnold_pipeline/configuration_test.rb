@@ -87,6 +87,33 @@ module ArnoldPipeline
       assert @config.validate!
     end
 
+    test "llm_api_key resolves from env based on provider" do
+      @config.llm_provider = :openai
+      original = ENV["OPENAI_API_KEY"]
+      ENV["OPENAI_API_KEY"] = "sk-openai-test"
+
+      assert_equal "sk-openai-test", @config.llm_api_key
+    ensure
+      ENV["OPENAI_API_KEY"] = original
+    end
+
+    test "llm_model defaults based on provider" do
+      assert_equal "claude-sonnet-4-20250514", @config.llm_model
+
+      @config.llm_provider = :openai
+      assert_equal "gpt-4o", @config.llm_model
+    end
+
+    test "explicit llm_api_key takes precedence over env" do
+      @config.llm_api_key = "explicit-key"
+      assert_equal "explicit-key", @config.llm_api_key
+    end
+
+    test "explicit llm_model takes precedence over provider default" do
+      @config.llm_model = "custom-model"
+      assert_equal "custom-model", @config.llm_model
+    end
+
     test "configure block works on module" do
       ArnoldPipeline.configure do |config|
         config.llm_provider = :openai

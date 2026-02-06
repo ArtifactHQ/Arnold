@@ -7,10 +7,12 @@ Agentic workflow system that transforms natural language descriptions into execu
 ```bash
 gem install arnold_pipeline
 
-export ANTHROPIC_API_KEY=sk-ant-...
+export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY=sk-...
 export GITHUB_TOKEN=ghp_...
 
 arnold run "Build a todo list app with user auth and real-time updates" --repo owner/repo
+# Using OpenAI instead:
+arnold run "Build a todo list app" --provider openai --repo owner/repo
 ```
 
 That's it. Arnold will:
@@ -68,8 +70,10 @@ ArnoldPipeline::PipelineJob.perform_later(run.id)
 
 ```bash
 arnold run "description" [options]   # Run the full pipeline
+arnold spec ID [options]             # Export a run's specification
 arnold status ID                     # Check a pipeline run
 arnold list                          # List all runs
+arnold version                       # Show version
 
 # Options for `run`:
 #   --config FILE      YAML config file
@@ -77,6 +81,21 @@ arnold list                          # List all runs
 #   --model NAME       Model name
 #   --repo OWNER/REPO  GitHub repository
 #   --verbose          Debug logging
+
+# Options for `spec`:
+#   -o, --output FILE  Write to file instead of stdout
+#   --json             Output structured JSON data instead of markdown
+```
+
+### Exporting Specifications
+
+After a pipeline run, export the generated spec:
+
+```bash
+arnold spec 1                    # Print spec markdown to stdout
+arnold spec 1 --json             # Print structured JSON instead
+arnold spec 1 -o spec.md         # Write markdown to file
+arnold spec 1 --json -o spec.json  # Write JSON to file
 ```
 
 ## Configuration Reference
@@ -84,8 +103,8 @@ arnold list                          # List all runs
 | Option | Default | Env Var | Description |
 |--------|---------|---------|-------------|
 | `llm_provider` | `:anthropic` | — | `:anthropic` or `:openai` |
-| `llm_api_key` | — | `ANTHROPIC_API_KEY` | API key for the LLM provider |
-| `llm_model` | `claude-sonnet-4-20250514` | — | Model identifier |
+| `llm_api_key` | — | `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` | Auto-detected from provider |
+| `llm_model` | per-provider | — | `claude-sonnet-4-20250514` (anthropic) / `gpt-4o` (openai) |
 | `execution_provider` | `:github` | — | `:github` |
 | `github_token` | — | `GITHUB_TOKEN` | GitHub personal access token |
 | `github_repo` | — | — | Target repo (`owner/repo`) |

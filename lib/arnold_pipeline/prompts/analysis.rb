@@ -22,9 +22,18 @@ module ArnoldPipeline
             "confidence": 0-100,
             "reasoning": "Detailed explanation of your analysis",
             "corrective_data": {
-              "tasks": [...] // if iterate_tasks: array of corrective task objects
+              "tasks": [...], // if iterate_tasks (see task format below)
               "spec_changes": "..." // if iterate_spec: description of needed spec changes
             }
+          }
+
+          When decision is "iterate_tasks", each task in corrective_data.tasks must have:
+          {
+            "title": "Short descriptive title",
+            "description": "Detailed description with acceptance criteria",
+            "priority": 0,
+            "labels": ["backend", "bugfix"],
+            "depends_on": []
           }
 
           Confidence Guidelines:

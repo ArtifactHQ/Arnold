@@ -164,8 +164,14 @@ module ArnoldPipeline
       pipeline_run.tasks.destroy_all
 
       corrective_tasks.each_with_index do |td, i|
+        title = td["title"].presence
+        unless title
+          logger.warn { "Skipping corrective task at index #{i}: missing title" }
+          next
+        end
+
         pipeline_run.tasks.create!(
-          title: td["title"],
+          title: title,
           description: td["description"],
           priority: td["priority"] || 0,
           labels: td["labels"] || [],

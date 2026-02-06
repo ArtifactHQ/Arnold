@@ -1,5 +1,5 @@
 require "arnold_pipeline/version"
-require "arnold_pipeline/engine"
+require "arnold_pipeline/engine" if defined?(Rails)
 require "arnold_pipeline/configuration"
 
 module ArnoldPipeline

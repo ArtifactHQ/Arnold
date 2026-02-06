@@ -2,6 +2,7 @@ require "thor"
 require "yaml"
 require "json"
 require "logger"
+require "fileutils"
 
 module ArnoldPipeline
   class Cli < Thor
@@ -17,6 +18,7 @@ module ArnoldPipeline
     def run_pipeline(description)
       setup_standalone!
       load_config!(options)
+      require "arnold_pipeline/orchestrator"
 
       logger = build_logger(options[:verbose])
       orchestrator = Orchestrator.new(logger:)
@@ -78,6 +80,38 @@ module ArnoldPipeline
       say "Pipeline Runs:", :green
       runs.each do |run_record|
         say "  ##{run_record.id} [#{run_record.status}] #{run_record.nl_input.truncate(60)} (#{run_record.created_at.strftime('%Y-%m-%d %H:%M')})"
+      end
+    end
+
+    desc "spec ID", "Export the specification for a pipeline run"
+    option :output, type: :string, aliases: "-o", desc: "Write to file instead of stdout"
+    option :json, type: :boolean, default: false, desc: "Output structured JSON data instead of markdown"
+    def spec(id)
+      setup_standalone!
+
+      run_record = PipelineRun.find_by(id:)
+      unless run_record
+        say "Pipeline run ##{id} not found", :red
+        return
+      end
+
+      spec = run_record.specification
+      unless spec
+        say "No specification found for pipeline run ##{id}", :yellow
+        return
+      end
+
+      content = if options[:json]
+        JSON.pretty_generate(spec.structured_data || {})
+      else
+        spec.content
+      end
+
+      if options[:output]
+        File.write(options[:output], content)
+        say "Specification (v#{spec.version}) written to #{options[:output]}", :green
+      else
+        say content
       end
     end
 
