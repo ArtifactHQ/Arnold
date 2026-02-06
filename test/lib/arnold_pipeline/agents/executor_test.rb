@@ -240,7 +240,7 @@ module ArnoldPipeline
         ArnoldPipeline.reset_configuration!
       end
 
-      test "await_results considers tasks with comments as resolved" do
+      test "await_results considers tasks with substantive comments as resolved" do
         sleep_calls = []
         executor = Executor.new(
           provider: @provider,
@@ -263,7 +263,35 @@ module ArnoldPipeline
 
         executor.await_results(pipeline_run: @pipeline_run)
 
-        assert_empty sleep_calls, "Should not sleep when tasks have comments (Claude gave feedback)"
+        assert_empty sleep_calls, "Should not sleep when tasks have substantive comments"
+      ensure
+        ArnoldPipeline.reset_configuration!
+      end
+
+      test "await_results does not consider WIP-only comments as resolved" do
+        sleep_calls = []
+        executor = Executor.new(
+          provider: @provider,
+          logger: Logger.new(File::NULL),
+          sleep_func: ->(s) { sleep_calls << s }
+        )
+
+        task = @pipeline_run.tasks.create!(
+          title: "Setup DB", position: 0, external_id: "42", status: :in_progress,
+          result_comments: [{ source: "issue", author: "copilot", body: "Claude Code is working on this issue. I'll analyze this and get back to you.", created_at: "2025-02-06T00:00:00Z" }]
+        )
+
+        @provider.stubs(:fetch_results).returns([])
+
+        ArnoldPipeline.configure do |c|
+          c.polling_interval = 2
+          c.polling_timeout = 6
+          c.polling_max_interval = 4
+        end
+
+        executor.await_results(pipeline_run: @pipeline_run)
+
+        assert_not_empty sleep_calls, "Should keep polling when only WIP comments are present"
       ensure
         ArnoldPipeline.reset_configuration!
       end

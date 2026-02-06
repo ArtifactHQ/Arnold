@@ -411,7 +411,7 @@ module ArnoldPipeline
       task.external_id.present? && (
         (task.result_diff.present? && task.result_diff != "[]") ||
         task.failed? ||
-        task.result_comments.present?
+        task.has_substantive_comments?
       )
     end
 
@@ -435,7 +435,7 @@ module ArnoldPipeline
       return :execute if tasks.any? { |t| t.external_id.blank? }
 
       all_resolved = tasks.select { |t| t.external_id.present? }.all? { |t|
-        (t.result_diff.present? && t.result_diff != "[]") || t.failed? || t.result_comments.present?
+        (t.result_diff.present? && t.result_diff != "[]") || t.failed? || t.has_substantive_comments?
       }
 
       return :execute unless all_resolved

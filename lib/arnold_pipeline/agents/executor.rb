@@ -100,7 +100,7 @@ module ArnoldPipeline
       def task_resolved?(task)
         (task.result_diff.present? && task.result_diff != "[]") ||
           task.failed? ||
-          task.result_comments.present?
+          task.has_substantive_comments?
       end
     end
   end
