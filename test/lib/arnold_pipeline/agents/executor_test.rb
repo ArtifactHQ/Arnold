@@ -74,6 +74,34 @@ module ArnoldPipeline
         assert_equal 1, results.size
       end
 
+      test "call passes prior_context through to provider" do
+        task = @pipeline_run.tasks.create!(title: "Build API", position: 0)
+
+        @provider.expects(:create_tasks).with { |kwargs|
+          kwargs[:prior_context] == "## Prior Implementation Context\n\n**Tier 0 completed:** Setup done."
+        }.returns([
+          { external_id: "43", external_url: "https://github.com/o/r/issues/43", title: "Build API" }
+        ])
+
+        @executor.call(
+          tasks: [task],
+          pipeline_run: @pipeline_run,
+          prior_context: "## Prior Implementation Context\n\n**Tier 0 completed:** Setup done."
+        )
+      end
+
+      test "call defaults prior_context to nil" do
+        task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0)
+
+        @provider.expects(:create_tasks).with { |kwargs|
+          kwargs[:prior_context].nil?
+        }.returns([
+          { external_id: "42", external_url: "https://github.com/o/r/issues/42", title: "Setup DB" }
+        ])
+
+        @executor.call(tasks: [task], pipeline_run: @pipeline_run)
+      end
+
       # --- await_results tests ---
 
       test "await_results returns immediately when all tasks have results on first fetch" do

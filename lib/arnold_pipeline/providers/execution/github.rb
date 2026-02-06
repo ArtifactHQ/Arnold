@@ -11,7 +11,7 @@ module ArnoldPipeline
           @issue_mention = issue_mention
         end
 
-        def create_tasks(tasks:, pipeline_run:)
+        def create_tasks(tasks:, pipeline_run:, prior_context: nil)
           position_to_issue = {}
 
           tasks.map do |task|
@@ -27,7 +27,7 @@ module ArnoldPipeline
             issue = @client.create_issue(
               @repo,
               title,
-              build_issue_body(description, pipeline_run, dependencies: dep_refs),
+              build_issue_body(description, pipeline_run, dependencies: dep_refs, prior_context:),
               labels: labels.map(&:to_s)
             )
 
@@ -93,8 +93,11 @@ module ArnoldPipeline
 
         private
 
-        def build_issue_body(description, pipeline_run, dependencies: [])
+        def build_issue_body(description, pipeline_run, dependencies: [], prior_context: nil)
           body = description.to_s.dup
+          if prior_context.present?
+            body << "\n\n#{prior_context}"
+          end
           if @issue_mention
             body << "\n\n#{@issue_mention}"
           end

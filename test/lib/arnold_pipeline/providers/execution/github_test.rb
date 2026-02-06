@@ -107,6 +107,44 @@ module ArnoldPipeline
           }
         end
 
+        test "create_tasks with prior_context includes it in issue body" do
+          stub_request(:post, "https://api.github.com/repos/owner/repo/issues")
+            .to_return(
+              status: 201,
+              headers: { "Content-Type" => "application/json" },
+              body: { number: 1, html_url: "https://github.com/owner/repo/issues/1" }.to_json
+            )
+
+          tasks = [{ "title" => "Build API", "description" => "Create endpoints", "labels" => ["backend"], "position" => 0, "depends_on" => [] }]
+          prior_context = "## Prior Implementation Context\n\n**Tier 0 completed:** Set up Rails project."
+
+          @provider.create_tasks(tasks:, pipeline_run: @pipeline_run, prior_context:)
+
+          assert_requested(:post, "https://api.github.com/repos/owner/repo/issues") { |req|
+            body = JSON.parse(req.body)
+            body["body"].include?("Prior Implementation Context") &&
+              body["body"].include?("Tier 0 completed")
+          }
+        end
+
+        test "create_tasks without prior_context omits context section" do
+          stub_request(:post, "https://api.github.com/repos/owner/repo/issues")
+            .to_return(
+              status: 201,
+              headers: { "Content-Type" => "application/json" },
+              body: { number: 1, html_url: "https://github.com/owner/repo/issues/1" }.to_json
+            )
+
+          tasks = [{ "title" => "Setup DB", "description" => "Create schema", "labels" => ["backend"], "position" => 0, "depends_on" => [] }]
+
+          @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          assert_requested(:post, "https://api.github.com/repos/owner/repo/issues") { |req|
+            body = JSON.parse(req.body)
+            !body["body"].include?("Prior Implementation Context")
+          }
+        end
+
         test "fetch_results returns comments from issues and PRs" do
           task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
 

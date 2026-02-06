@@ -10,12 +10,21 @@ module ArnoldPipeline
       @executor = stub("executor")
       @analyzer = stub("analyzer")
 
+      @tier_gate_check = stub("tier_gate_check")
+      @tier_gate_check.stubs(:call).returns({
+        "pass" => true,
+        "issues" => [],
+        "context_summary" => "Tier complete.",
+        "corrective_tasks" => []
+      })
+
       @orchestrator = Orchestrator.new(
         library_manager: @library_manager,
         spec_generator: @spec_generator,
         task_breaker: @task_breaker,
         executor: @executor,
         analyzer: @analyzer,
+        tier_gate_check: @tier_gate_check,
         logger: Logger.new(File::NULL)
       )
 

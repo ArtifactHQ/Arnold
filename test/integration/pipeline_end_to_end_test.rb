@@ -16,6 +16,8 @@ module ArnoldPipeline
         c.polling_interval = 0.01
         c.polling_timeout = 0.05
         c.polling_max_interval = 0.02
+        c.tier_gate_enabled = false
+        c.context_propagation_enabled = false
       end
 
       stub_anthropic_api!

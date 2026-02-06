@@ -5,6 +5,7 @@ require "arnold_pipeline/configuration"
 module ArnoldPipeline
   class Error < StandardError; end
   class ConfigurationError < Error; end
+  class TierGateError < Error; end
 
   class << self
     def configuration

@@ -2,7 +2,7 @@ module ArnoldPipeline
   module Providers
     module Execution
       class Base
-        def create_tasks(tasks:, pipeline_run:)
+        def create_tasks(tasks:, pipeline_run:, prior_context: nil)
           raise NotImplementedError, "#{self.class}#create_tasks must be implemented"
         end
 

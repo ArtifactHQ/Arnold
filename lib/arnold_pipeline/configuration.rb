@@ -12,7 +12,8 @@ module ArnoldPipeline
                   :execution_provider, :github_token, :github_repo,
                   :github_issue_mention,
                   :max_iterations, :library_path,
-                  :polling_interval, :polling_timeout, :polling_max_interval
+                  :polling_interval, :polling_timeout, :polling_max_interval,
+                  :tier_gate_enabled, :context_propagation_enabled, :max_tier_retries
     attr_writer   :llm_api_key, :llm_model
 
     def initialize
@@ -28,6 +29,9 @@ module ArnoldPipeline
       @polling_interval     = 30
       @polling_timeout      = 1800
       @polling_max_interval = 300
+      @tier_gate_enabled          = true
+      @context_propagation_enabled = true
+      @max_tier_retries           = 2
     end
 
     def llm_api_key
@@ -45,6 +49,7 @@ module ArnoldPipeline
       validate_github_config!
       validate_max_iterations!
       validate_polling_config!
+      validate_max_tier_retries!
       true
     end
 
@@ -86,6 +91,12 @@ module ArnoldPipeline
       return if @max_iterations.is_a?(Integer) && @max_iterations.between?(1, 10)
 
       raise ConfigurationError, "max_iterations must be an integer between 1 and 10."
+    end
+
+    def validate_max_tier_retries!
+      return if @max_tier_retries.is_a?(Integer) && @max_tier_retries.between?(0, 5)
+
+      raise ConfigurationError, "max_tier_retries must be an integer between 0 and 5."
     end
 
     def validate_polling_config!

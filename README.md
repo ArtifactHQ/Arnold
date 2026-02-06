@@ -67,6 +67,11 @@ ArnoldPipeline.configure do |config|
   config.polling_interval     = 30   # initial interval between checks (seconds)
   config.polling_timeout      = 1800 # max total wait time (seconds)
   config.polling_max_interval = 300  # backoff cap (seconds)
+
+  # Tier gating: LLM validates each tier's output before proceeding
+  config.tier_gate_enabled          = true  # fail-fast on broken tiers
+  config.context_propagation_enabled = true  # pass summaries to next tier's issues
+  config.max_tier_retries           = 2     # corrective retries before pausing (0-5)
 end
 ```
 
@@ -147,6 +152,9 @@ arnold spec 1 --json -o spec.json  # Write JSON to file
 | `polling_interval` | `30` | — | Seconds between PR polling checks |
 | `polling_timeout` | `1800` | — | Max seconds to wait for PRs (30 min) |
 | `polling_max_interval` | `300` | — | Backoff cap in seconds (5 min) |
+| `tier_gate_enabled` | `true` | — | LLM validates each tier's output before next tier |
+| `context_propagation_enabled` | `true` | — | Prepend tier summaries to next tier's issue bodies |
+| `max_tier_retries` | `2` | — | Corrective retries per tier before pausing (0-5) |
 | `library_path` | built-in | — | Custom personas/recipes dir |
 
 ## Architecture
@@ -165,7 +173,11 @@ Task Breaker ── spec --> 5-20 ordered tasks (JSON)
   |
   v
 Executor ── tasks --> GitHub Issues, poll for PR diffs (exponential backoff)
-  |
+  |                     (receives prior tier context when context_propagation_enabled)
+  v
+Tier Gate Check ── diffs --> pass/fail + context summary (per tier)
+  |                          fail --> corrective tasks + retry (up to max_tier_retries)
+  |                          still failing --> pause for human review
   v
 Analyzer ── diffs + spec --> decision + confidence
   |
@@ -188,6 +200,34 @@ After creating GitHub Issues, the Executor waits for external agents (GitHub Act
 3. Stop when all tasks have results, or `polling_timeout` is reached (default: 30 min)
 
 The pipeline transitions through `executing` -> `awaiting_results` -> `analyzing` as it waits. Tasks without an `external_id` (e.g. not submitted to GitHub) are skipped and don't block polling.
+
+### Tier Gating & Context Propagation
+
+Tasks are executed tier-by-tier (tier 0 first, then tier 1, etc.). After each tier's PRs are merged, two optional features kick in:
+
+**Tier Gate Check** (`tier_gate_enabled`) — An LLM reviews the tier's diffs and decides pass/fail. If the tier fails:
+1. Corrective tasks are created at the same tier and executed
+2. The gate re-runs. If it still fails, retry up to `max_tier_retries` times
+3. If retries are exhausted, the pipeline pauses with status `paused` and metadata indicating the failure — resume after manual review
+
+Gate checks are lenient by default — only critical, build-breaking issues cause a failure. Minor issues are noted but don't block.
+
+**Context Propagation** (`context_propagation_enabled`) — The gate check also produces a 2-3 sentence summary of what was built. This summary is accumulated across tiers and prepended to the next tier's GitHub issue bodies, giving coding agents explicit context about what already exists in the repo.
+
+Both features use a single LLM call per tier. If the gate check errors (e.g. LLM timeout), it's treated as non-fatal and the pipeline continues.
+
+```ruby
+# Disable both features for faster execution (no per-tier LLM calls)
+config.tier_gate_enabled = false
+config.context_propagation_enabled = false
+
+# Keep context but skip gate enforcement
+config.tier_gate_enabled = false
+config.context_propagation_enabled = true
+
+# Zero retries = pause immediately on first gate failure
+config.max_tier_retries = 0
+```
 
 ## Partial Execution & Resume
 

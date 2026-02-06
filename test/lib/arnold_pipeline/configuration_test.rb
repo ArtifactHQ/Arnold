@@ -16,6 +16,9 @@ module ArnoldPipeline
       assert_equal 30, @config.polling_interval
       assert_equal 1800, @config.polling_timeout
       assert_equal 300, @config.polling_max_interval
+      assert_equal true, @config.tier_gate_enabled
+      assert_equal true, @config.context_propagation_enabled
+      assert_equal 2, @config.max_tier_retries
     end
 
     test "validate! passes with valid config" do
@@ -174,6 +177,54 @@ module ArnoldPipeline
       @config.polling_interval = 10
       @config.polling_timeout = 600
       @config.polling_max_interval = 120
+
+      assert @config.validate!
+    end
+
+    test "validate! raises on invalid max_tier_retries (negative)" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.max_tier_retries = -1
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/max_tier_retries must be an integer between 0 and 5/, error.message)
+    end
+
+    test "validate! raises on invalid max_tier_retries (too high)" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.max_tier_retries = 6
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/max_tier_retries must be an integer between 0 and 5/, error.message)
+    end
+
+    test "validate! raises on non-integer max_tier_retries" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.max_tier_retries = 1.5
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/max_tier_retries must be an integer between 0 and 5/, error.message)
+    end
+
+    test "validate! accepts max_tier_retries of 0" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.max_tier_retries = 0
+
+      assert @config.validate!
+    end
+
+    test "validate! accepts max_tier_retries of 5" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.max_tier_retries = 5
 
       assert @config.validate!
     end

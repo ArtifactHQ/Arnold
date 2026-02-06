@@ -3,6 +3,7 @@ require "arnold_pipeline/agents/spec_generator"
 require "arnold_pipeline/agents/task_breaker"
 require "arnold_pipeline/agents/executor"
 require "arnold_pipeline/agents/analyzer"
+require "arnold_pipeline/agents/tier_gate_check"
 require "arnold_pipeline/tier_calculator"
 
 module ArnoldPipeline
@@ -10,7 +11,7 @@ module ArnoldPipeline
     STAGES = %i[generate_spec break_tasks execute analyze].freeze
     STAGE_CHECKPOINTS = { generate_spec: :spec, break_tasks: :tasks, execute: :executed }.freeze
 
-    attr_reader :library_manager, :spec_generator, :task_breaker, :executor, :analyzer, :logger
+    attr_reader :library_manager, :spec_generator, :task_breaker, :executor, :analyzer, :tier_gate_check, :logger
 
     def initialize(
       library_manager: nil,
@@ -18,6 +19,7 @@ module ArnoldPipeline
       task_breaker: nil,
       executor: nil,
       analyzer: nil,
+      tier_gate_check: nil,
       logger: nil
     )
       @logger = logger || Logger.new($stdout, level: Logger::INFO)
@@ -26,6 +28,7 @@ module ArnoldPipeline
       @task_breaker = task_breaker || Agents::TaskBreaker.new(logger: @logger)
       @executor = executor || Agents::Executor.new(logger: @logger)
       @analyzer = analyzer || Agents::Analyzer.new(logger: @logger)
+      @tier_gate_check = tier_gate_check || Agents::TierGateCheck.new(logger: @logger)
     end
 
     def call(nl_input:, stop_after: nil)
@@ -59,6 +62,9 @@ module ArnoldPipeline
             end
           end
         end
+      rescue TierGateError => e
+        logger.warn { "Pipeline paused: #{e.message}" }
+        pipeline_run.reload
       rescue => e
         pipeline_run.update!(status: :failed, metadata: (pipeline_run.metadata || {}).merge("error" => e.message))
         logger.error { "Pipeline failed: #{e.message}" }
@@ -127,6 +133,7 @@ module ArnoldPipeline
       logger.info { "Executing tasks..." }
 
       max_tier = pipeline_run.tasks.maximum(:tier) || 0
+      accumulated_context = load_accumulated_context(pipeline_run)
 
       (0..max_tier).each do |tier_num|
         tier_tasks = pipeline_run.tasks.in_tier(tier_num).to_a
@@ -136,8 +143,10 @@ module ArnoldPipeline
 
         logger.info { "Tier #{tier_num}: executing #{tier_tasks.size} tasks" }
 
+        prior_context = build_prior_context(accumulated_context)
+
         # Publish (executor skips tasks with existing external_id)
-        executor.call(tasks: tier_tasks, pipeline_run:)
+        executor.call(tasks: tier_tasks, pipeline_run:, prior_context:)
 
         # Await results for this tier only
         pipeline_run.update!(status: :awaiting_results)
@@ -145,6 +154,22 @@ module ArnoldPipeline
 
         # Merge this tier before next tier starts
         merge_tier_results!(pipeline_run, tier_tasks)
+
+        # Gate check + context (when either feature is enabled)
+        if gate_check_needed?
+          gate_result = run_tier_gate!(pipeline_run, tier_num, tier_tasks)
+
+          if gate_result
+            if ArnoldPipeline.configuration.tier_gate_enabled && !gate_result["pass"]
+              handle_tier_gate_failure!(pipeline_run, tier_num, tier_tasks, gate_result, accumulated_context)
+            end
+
+            if ArnoldPipeline.configuration.context_propagation_enabled
+              store_tier_context!(pipeline_run, tier_num, gate_result["context_summary"])
+              accumulated_context = load_accumulated_context(pipeline_run)
+            end
+          end
+        end
       end
     end
 
@@ -269,6 +294,117 @@ module ArnoldPipeline
       executor.merge_results(pipeline_run:, tasks: tier_tasks)
     rescue => e
       logger.warn { "Tier merge failed (non-fatal): #{e.message}" }
+    end
+
+    def gate_check_needed?
+      ArnoldPipeline.configuration.tier_gate_enabled || ArnoldPipeline.configuration.context_propagation_enabled
+    end
+
+    def run_tier_gate!(pipeline_run, tier_num, tier_tasks)
+      tier_tasks.each(&:reload)
+
+      task_summaries = tier_tasks.map { |t| "- **#{t.title}**: #{t.description}" }.join("\n")
+      diffs = tier_tasks.map(&:result_diff).compact.join("\n\n")
+      comments = format_task_comments(tier_tasks)
+
+      tier_gate_check.call(
+        tier_number: tier_num,
+        task_summaries: task_summaries,
+        diffs: diffs,
+        comments: comments
+      )
+    rescue => e
+      logger.warn { "Tier gate check failed (non-fatal): #{e.message}" }
+      nil
+    end
+
+    def handle_tier_gate_failure!(pipeline_run, tier_num, tier_tasks, gate_result, accumulated_context)
+      metadata = pipeline_run.metadata || {}
+      tier_retries = metadata["tier_retries"] || {}
+      retry_count = tier_retries[tier_num.to_s] || 0
+      max_retries = ArnoldPipeline.configuration.max_tier_retries
+
+      if retry_count >= max_retries
+        issues_text = (gate_result["issues"] || []).join("; ")
+        pipeline_run.update!(
+          status: :paused,
+          metadata: metadata.merge(
+            "paused_at" => "tier_gate_failed",
+            "tier_gate_failure" => { "tier" => tier_num, "issues" => gate_result["issues"] }
+          )
+        )
+        raise TierGateError, "Tier #{tier_num} failed gate check after #{max_retries} retries: #{issues_text}"
+      end
+
+      # Increment retry count
+      tier_retries[tier_num.to_s] = retry_count + 1
+      pipeline_run.update!(metadata: metadata.merge("tier_retries" => tier_retries))
+
+      logger.info { "Tier #{tier_num} gate failed (retry #{retry_count + 1}/#{max_retries}), creating corrective tasks" }
+
+      # Create corrective tasks at the same tier
+      corrective_tasks = gate_result["corrective_tasks"] || []
+      max_position = pipeline_run.tasks.maximum(:position) || 0
+
+      created_tasks = corrective_tasks.each_with_index.map do |td, i|
+        pipeline_run.tasks.create!(
+          title: td["title"],
+          description: td["description"],
+          labels: td["labels"] || [],
+          position: max_position + i + 1,
+          tier: tier_num
+        )
+      end
+
+      return if created_tasks.empty?
+
+      # Execute corrective tasks
+      prior_context = build_prior_context(accumulated_context)
+      pipeline_run.update!(status: :executing)
+      executor.call(tasks: created_tasks, pipeline_run:, prior_context:)
+
+      pipeline_run.update!(status: :awaiting_results)
+      executor.await_results(pipeline_run:, tasks: created_tasks)
+
+      merge_tier_results!(pipeline_run, created_tasks)
+
+      # Re-run gate check
+      all_tier_tasks = pipeline_run.tasks.in_tier(tier_num).to_a
+      new_gate_result = run_tier_gate!(pipeline_run, tier_num, all_tier_tasks)
+
+      if new_gate_result && !new_gate_result["pass"]
+        handle_tier_gate_failure!(pipeline_run, tier_num, all_tier_tasks, new_gate_result, accumulated_context)
+      end
+
+      # Update context if re-gate passed
+      if new_gate_result && ArnoldPipeline.configuration.context_propagation_enabled
+        store_tier_context!(pipeline_run, tier_num, new_gate_result["context_summary"])
+      end
+    end
+
+    def store_tier_context!(pipeline_run, tier_num, summary)
+      return unless summary.present?
+
+      metadata = pipeline_run.metadata || {}
+      tier_contexts = metadata["tier_contexts"] || []
+      # Replace existing context for this tier if retried
+      tier_contexts.reject! { |tc| tc["tier"] == tier_num }
+      tier_contexts << { "tier" => tier_num, "summary" => summary }
+      pipeline_run.update!(metadata: metadata.merge("tier_contexts" => tier_contexts))
+    end
+
+    def load_accumulated_context(pipeline_run)
+      (pipeline_run.metadata || {})["tier_contexts"] || []
+    end
+
+    def build_prior_context(tier_contexts)
+      return nil if tier_contexts.blank?
+
+      lines = tier_contexts.sort_by { |tc| tc["tier"] }.map do |tc|
+        "**Tier #{tc['tier']} completed:** #{tc['summary']}"
+      end
+
+      "## Prior Implementation Context\n\n#{lines.join("\n\n")}"
     end
 
     def tier_task_resolved?(task)

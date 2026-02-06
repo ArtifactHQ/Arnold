@@ -11,7 +11,7 @@ module ArnoldPipeline
         @sleep_func = sleep_func
       end
 
-      def call(tasks:, pipeline_run:)
+      def call(tasks:, pipeline_run:, prior_context: nil)
         unpublished = tasks.reject do |t|
           t.respond_to?(:external_id) ? t.external_id.present? : t["external_id"].present?
         end
@@ -19,7 +19,7 @@ module ArnoldPipeline
         logger.info { "Executing #{unpublished.size} tasks via #{provider.class.name}" }
         return [] if unpublished.empty?
 
-        results = provider.create_tasks(tasks: unpublished, pipeline_run:)
+        results = provider.create_tasks(tasks: unpublished, pipeline_run:, prior_context:)
 
         results.each do |result|
           task = pipeline_run.tasks.find_by(title: result[:title])
