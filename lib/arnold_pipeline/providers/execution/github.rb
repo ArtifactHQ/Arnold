@@ -11,17 +11,26 @@ module ArnoldPipeline
         end
 
         def create_tasks(tasks:, pipeline_run:)
+          position_to_issue = {}
+
           tasks.map do |task|
             labels = task.respond_to?(:labels) ? (task.labels || []) : (task["labels"] || [])
             title = task.respond_to?(:title) ? task.title : task["title"]
             description = task.respond_to?(:description) ? task.description : task["description"]
+            position = task.respond_to?(:position) ? task.position : task["position"]
+            depends_on = task.respond_to?(:depends_on) ? (task.depends_on || []) : (task["depends_on"] || [])
+
+            dep_refs = depends_on.filter_map { |pos| position_to_issue[pos] }
+                                 .map { |num| "##{num}" }
 
             issue = @client.create_issue(
               @repo,
               title,
-              build_issue_body(description, pipeline_run),
+              build_issue_body(description, pipeline_run, dependencies: dep_refs),
               labels: labels.map(&:to_s)
             )
+
+            position_to_issue[position] = issue.number
 
             {
               external_id: issue.number.to_s,
@@ -75,8 +84,13 @@ module ArnoldPipeline
 
         private
 
-        def build_issue_body(description, pipeline_run)
-          "#{description}\n\n---\n_Pipeline Run ##{pipeline_run.id}_"
+        def build_issue_body(description, pipeline_run, dependencies: [])
+          body = description.to_s.dup
+          if dependencies.any?
+            body << "\n\n**Depends on:** #{dependencies.join(', ')}"
+          end
+          body << "\n\n---\n_Pipeline Run ##{pipeline_run.id}_"
+          body
         end
 
         def determine_status(pulls)

@@ -27,6 +27,50 @@ module ArnoldPipeline
           assert_equal "https://github.com/owner/repo/issues/42", results.first[:external_url]
         end
 
+        test "create_tasks includes dependency references in issue body" do
+          issue_counter = 0
+          stub_request(:post, "https://api.github.com/repos/owner/repo/issues")
+            .to_return do |request|
+              issue_counter += 1
+              {
+                status: 201,
+                headers: { "Content-Type" => "application/json" },
+                body: { number: issue_counter, html_url: "https://github.com/owner/repo/issues/#{issue_counter}" }.to_json
+              }
+            end
+
+          tasks = [
+            { "title" => "Setup DB", "description" => "Create schema", "labels" => ["backend"], "position" => 0, "depends_on" => [] },
+            { "title" => "Build API", "description" => "Create endpoints", "labels" => ["backend"], "position" => 1, "depends_on" => [0] },
+            { "title" => "Add auth", "description" => "Secure endpoints", "labels" => ["backend"], "position" => 2, "depends_on" => [0, 1] }
+          ]
+
+          results = @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          assert_equal 3, results.size
+
+          # Verify the request bodies
+          assert_requested(:post, "https://api.github.com/repos/owner/repo/issues", times: 3)
+
+          # First task (no dependencies)
+          assert_requested(:post, "https://api.github.com/repos/owner/repo/issues") { |req|
+            body = JSON.parse(req.body)
+            body["title"] == "Setup DB" && !body["body"].include?("Depends on")
+          }
+
+          # Second task depends on first (issue #1)
+          assert_requested(:post, "https://api.github.com/repos/owner/repo/issues") { |req|
+            body = JSON.parse(req.body)
+            body["title"] == "Build API" && body["body"].include?("**Depends on:** #1")
+          }
+
+          # Third task depends on first and second (issues #1, #2)
+          assert_requested(:post, "https://api.github.com/repos/owner/repo/issues") { |req|
+            body = JSON.parse(req.body)
+            body["title"] == "Add auth" && body["body"].include?("**Depends on:** #1, #2")
+          }
+        end
+
         test "build factory creates Github provider" do
           ArnoldPipeline.configure do |c|
             c.execution_provider = :github
