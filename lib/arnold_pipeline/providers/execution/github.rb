@@ -61,13 +61,21 @@ module ArnoldPipeline
 
             comments = fetch_comments(issue_number, pulls)
 
+            workflow_active, workflow_details = if ArnoldPipeline.configuration.workflow_status_enabled
+              check_workflows_active?(issue_number, pulls)
+            else
+              [false, "disabled"]
+            end
+
             {
               task_id: task.id,
               external_id: task.external_id,
               diffs: diffs,
               comments: comments,
               issue_state: issue_state,
-              status: determine_status(pulls, issue_state:)
+              status: determine_status(pulls, issue_state:),
+              workflow_active: workflow_active,
+              workflow_details: workflow_details
             }
           end.compact
         end
@@ -122,6 +130,37 @@ module ArnoldPipeline
           end
 
           comments
+        end
+
+        def check_workflows_active?(issue_number, pulls)
+          # Strategy 1: Check runs on PR head commits
+          pulls.each do |pr|
+            next unless pr.respond_to?(:head) && pr.head&.respond_to?(:sha)
+
+            check_runs = @client.check_runs_for_ref(@repo, pr.head.sha)
+            runs = check_runs.respond_to?(:check_runs) ? check_runs.check_runs : []
+            active_runs = runs.select { |run| %w[queued in_progress].include?(run.status) }
+            if active_runs.any?
+              details = active_runs.map { |r| "#{r.name}(#{r.status})" }.join(", ")
+              return [true, "PR ##{pr.number} check runs: #{details}"]
+            end
+          end
+
+          # Strategy 2: Match workflow runs by branch name containing issue number
+          pattern = ArnoldPipeline.configuration.workflow_branch_pattern
+          %w[in_progress queued].each do |status|
+            workflow_runs = @client.repository_workflow_runs(@repo, status:)
+            runs = workflow_runs.respond_to?(:workflow_runs) ? workflow_runs.workflow_runs : []
+            matching = runs.select { |run| run.head_branch&.match?(pattern) && run.head_branch.match?(/#{issue_number}/) }
+            if matching.any?
+              details = matching.map { |r| "#{r.head_branch}(#{r.status})" }.join(", ")
+              return [true, "branch workflow runs: #{details}"]
+            end
+          end
+
+          [false, "no active workflows"]
+        rescue => e
+          [false, "error: #{e.message}"]
         end
 
         def determine_status(pulls, issue_state: "open")

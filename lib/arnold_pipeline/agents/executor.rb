@@ -44,7 +44,15 @@ module ArnoldPipeline
           updates = { result_diff: result[:diffs].to_json }
           updates[:result_comments] = result[:comments] if result[:comments]
           updates[:status] = :failed if result[:status] == :failed
+          updates[:workflow_active] = result[:workflow_active] if result.key?(:workflow_active)
           task.update!(updates)
+
+          logger.debug {
+            "Task ##{result[:external_id]}: diffs=#{result[:diffs].size}, " \
+            "comments=#{(result[:comments] || []).size}, " \
+            "status=#{result[:status]}, workflow_active=#{result[:workflow_active]}" \
+            "#{result[:workflow_details] ? " (#{result[:workflow_details]})" : ""}"
+          }
         end
 
         results
@@ -68,6 +76,10 @@ module ArnoldPipeline
 
           resolved = trackable.count { |t| task_resolved?(t) }
           total = trackable.size
+
+          logger.debug {
+            trackable.map { |t| "  #{t.resolution_summary}" }.join("\n")
+          }
 
           if resolved >= total
             logger.info { "All #{total} tasks resolved." }
@@ -98,9 +110,17 @@ module ArnoldPipeline
       private
 
       def task_resolved?(task)
-        (task.result_diff.present? && task.result_diff != "[]") ||
+        if task.workflow_active?
+          logger.debug { "  #{task.resolution_summary} → NOT RESOLVED (workflow active)" }
+          return false
+        end
+
+        resolved = (task.result_diff.present? && task.result_diff != "[]") ||
           task.failed? ||
           task.has_substantive_comments?
+
+        logger.debug { "  #{task.resolution_summary} → #{resolved ? 'RESOLVED' : 'NOT RESOLVED'}" }
+        resolved
       end
     end
   end

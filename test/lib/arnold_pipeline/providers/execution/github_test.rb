@@ -9,6 +9,15 @@ module ArnoldPipeline
         setup do
           @provider = Github.new(token: "ghp_test", repo: "owner/repo")
           @pipeline_run = ArnoldPipeline::PipelineRun.create!(nl_input: "Build an app")
+          ArnoldPipeline.configure do |c|
+            c.workflow_status_enabled = false
+            c.github_token = "ghp_test"
+            c.github_repo = "owner/repo"
+          end
+        end
+
+        teardown do
+          ArnoldPipeline.reset_configuration!
         end
 
         test "create_tasks creates GitHub issues" do
@@ -345,6 +354,235 @@ module ArnoldPipeline
 
           assert_equal 1, results.size
           assert_equal task1.id, results.first[:task_id]
+        end
+
+        # --- workflow checking tests ---
+
+        test "fetch_results returns workflow_active true when PR check runs are in progress" do
+          ArnoldPipeline.configure do |c|
+            c.workflow_status_enabled = true
+            c.github_token = "ghp_test"
+            c.github_repo = "owner/repo"
+          end
+
+          task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { number: 42, state: "open" }.to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+            .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
+            .with(query: { state: "all" })
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: [{
+                number: 10, title: "Fix #42", body: "Closes #42", state: "open", merged_at: nil,
+                head: { sha: "abc123" }
+              }].to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/files")
+            .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/comments")
+            .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/commits/abc123/check-runs")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { check_runs: [{ name: "CI", status: "in_progress", conclusion: nil }] }.to_json
+            )
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run)
+
+          assert results.first[:workflow_active], "Should detect active workflow from PR check runs"
+          assert_includes results.first[:workflow_details], "PR #10 check runs: CI(in_progress)"
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "fetch_results returns workflow_active false when all checks are completed" do
+          ArnoldPipeline.configure do |c|
+            c.workflow_status_enabled = true
+            c.github_token = "ghp_test"
+            c.github_repo = "owner/repo"
+          end
+
+          task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { number: 42, state: "open" }.to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+            .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
+            .with(query: { state: "all" })
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: [{
+                number: 10, title: "Fix #42", body: "Closes #42", state: "open", merged_at: nil,
+                head: { sha: "abc123" }
+              }].to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/files")
+            .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/comments")
+            .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/commits/abc123/check-runs")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { check_runs: [{ name: "CI", status: "completed", conclusion: "success" }] }.to_json
+            )
+
+          # No active workflow runs by branch either
+          stub_request(:get, "https://api.github.com/repos/owner/repo/actions/runs")
+            .with(query: { status: "in_progress" })
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { workflow_runs: [] }.to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/actions/runs")
+            .with(query: { status: "queued" })
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { workflow_runs: [] }.to_json
+            )
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run)
+
+          refute results.first[:workflow_active], "Should not detect active workflow when all checks complete"
+          assert_equal "no active workflows", results.first[:workflow_details]
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "fetch_results returns workflow_active true when branch workflow run matches issue" do
+          ArnoldPipeline.configure do |c|
+            c.workflow_status_enabled = true
+            c.github_token = "ghp_test"
+            c.github_repo = "owner/repo"
+          end
+
+          task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { number: 42, state: "open" }.to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+            .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
+
+          # No PRs — fall through to branch-based check
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
+            .with(query: { state: "all" })
+            .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/actions/runs")
+            .with(query: { status: "in_progress" })
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { workflow_runs: [{ head_branch: "claude/issue-42-setup-db" }] }.to_json
+            )
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run)
+
+          assert results.first[:workflow_active], "Should detect active workflow from branch name matching issue number"
+          assert_includes results.first[:workflow_details], "branch workflow runs:"
+          assert_includes results.first[:workflow_details], "claude/issue-42-setup-db"
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "fetch_results returns workflow_active false on API error (graceful degradation)" do
+          ArnoldPipeline.configure do |c|
+            c.workflow_status_enabled = true
+            c.github_token = "ghp_test"
+            c.github_repo = "owner/repo"
+          end
+
+          task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { number: 42, state: "open" }.to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+            .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
+            .with(query: { state: "all" })
+            .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
+
+          # Workflow runs API returns an error
+          stub_request(:get, "https://api.github.com/repos/owner/repo/actions/runs")
+            .with(query: { status: "in_progress" })
+            .to_return(status: 500, headers: { "Content-Type" => "application/json" }, body: { message: "Internal Server Error" }.to_json)
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run)
+
+          refute results.first[:workflow_active], "Should return false on API error"
+          assert_match(/error:/, results.first[:workflow_details])
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "fetch_results returns workflow_active false when workflow_status_enabled is false" do
+          ArnoldPipeline.configure do |c|
+            c.workflow_status_enabled = false
+            c.github_token = "ghp_test"
+            c.github_repo = "owner/repo"
+          end
+
+          task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { number: 42, state: "open" }.to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+            .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
+            .with(query: { state: "all" })
+            .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run)
+
+          refute results.first[:workflow_active], "Should skip workflow check when disabled"
+          assert_equal "disabled", results.first[:workflow_details]
+        ensure
+          ArnoldPipeline.reset_configuration!
         end
 
         test "build factory creates Github provider" do

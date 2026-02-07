@@ -333,6 +333,74 @@ module ArnoldPipeline
         assert_equal 1, results.size
       end
 
+      test "task_resolved? returns false when workflow_active is true even with diffs" do
+        task = @pipeline_run.tasks.create!(
+          title: "Setup DB", position: 0, external_id: "42",
+          result_diff: '[{"filename":"schema.rb"}]',
+          workflow_active: true
+        )
+
+        refute @executor.send(:task_resolved?, task), "Should not resolve task with active workflow"
+      end
+
+      test "task_resolved? returns true when workflow_active is false with diffs" do
+        task = @pipeline_run.tasks.create!(
+          title: "Setup DB", position: 0, external_id: "42",
+          result_diff: '[{"filename":"schema.rb"}]',
+          workflow_active: false
+        )
+
+        assert @executor.send(:task_resolved?, task), "Should resolve task when workflow inactive and diffs present"
+      end
+
+      test "fetch_results persists workflow_active from provider" do
+        task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
+
+        @provider.expects(:fetch_results).returns([
+          { task_id: task.id, external_id: "42", diffs: [], comments: [], status: :pending, workflow_active: true }
+        ])
+
+        @executor.fetch_results(pipeline_run: @pipeline_run)
+
+        task.reload
+        assert task.workflow_active?, "Should persist workflow_active from provider result"
+      end
+
+      test "await_results does not resolve tasks with workflow_active even with diffs" do
+        sleep_calls = []
+        executor = Executor.new(
+          provider: @provider,
+          logger: Logger.new(File::NULL),
+          sleep_func: ->(s) { sleep_calls << s }
+        )
+
+        task = @pipeline_run.tasks.create!(
+          title: "Setup DB", position: 0, external_id: "42",
+          result_diff: '[{"filename":"schema.rb"}]',
+          workflow_active: true
+        )
+
+        fetch_count = 0
+        @provider.stubs(:fetch_results).with { |kwargs|
+          fetch_count += 1
+          # Clear workflow_active on second fetch
+          task.update!(workflow_active: false) if fetch_count >= 2
+          true
+        }.returns([])
+
+        ArnoldPipeline.configure do |c|
+          c.polling_interval = 2
+          c.polling_timeout = 20
+          c.polling_max_interval = 6
+        end
+
+        executor.await_results(pipeline_run: @pipeline_run)
+
+        assert_equal [2], sleep_calls, "Should poll once more while workflow is active"
+      ensure
+        ArnoldPipeline.reset_configuration!
+      end
+
       test "await_results tasks without external_id do not block completion" do
         sleep_calls = []
         executor = Executor.new(

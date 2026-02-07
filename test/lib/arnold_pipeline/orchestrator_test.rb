@@ -171,6 +171,46 @@ module ArnoldPipeline
       assert result.iterations.first.needs_human_review
     end
 
+    test "tier_task_resolved? returns false when workflow_active is true" do
+      stub_spec_generation!
+      stub_task_breakdown!(times: 1)
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, external_id: "42",
+        result_diff: '[{"filename":"schema.rb"}]',
+        workflow_active: true
+      )
+
+      refute @orchestrator.send(:tier_task_resolved?, task),
+        "tier_task_resolved? should return false when workflow_active"
+    end
+
+    test "tier_task_resolved? returns true when workflow_active is false with diffs" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, external_id: "42",
+        result_diff: '[{"filename":"schema.rb"}]',
+        workflow_active: false
+      )
+
+      assert @orchestrator.send(:tier_task_resolved?, task),
+        "tier_task_resolved? should return true when workflow inactive and diffs present"
+    end
+
+    test "infer_resume_stage returns execute when tasks have workflow_active" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :paused)
+      pipeline_run.create_specification!(content: "Spec content", version: 1)
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, external_id: "42",
+        result_diff: '[{"filename":"schema.rb"}]',
+        workflow_active: true
+      )
+
+      stage = @orchestrator.send(:infer_resume_stage, pipeline_run)
+      assert_equal :execute, stage, "Should infer execute stage when tasks have active workflows"
+    end
+
     private
 
     def stub_spec_generation!

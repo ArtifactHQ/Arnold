@@ -121,12 +121,21 @@ module ArnoldPipeline
       assert task.has_substantive_comments?
     end
 
-    # --- true cases: unknown/generic (safe default) ---
+    # --- false cases: non-resolution comments (no explicit completion/failure signal) ---
 
-    test "returns true for unknown comment format" do
+    test "returns false for unknown comment without resolution signal" do
       task = @run.tasks.create!(title: "Task", position: 0,
         result_comments: [build_comment("Here are the changes I made to the codebase.")])
-      assert task.has_substantive_comments?
+      assert_not task.has_substantive_comments?
+    end
+
+    test "returns false for planning/analysis comment" do
+      task = @run.tasks.create!(title: "Task", position: 0,
+        result_comments: [build_comment(
+          "Project Bootstrap Analysis\nTasks:\n- Gather context\n- Create backend\n" \
+          "Analysis: I've analyzed the repository structure.\nSetting up the project structure..."
+        )])
+      assert_not task.has_substantive_comments?
     end
 
     # --- true cases: mixed ---

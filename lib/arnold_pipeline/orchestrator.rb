@@ -139,7 +139,10 @@ module ArnoldPipeline
         tier_tasks = pipeline_run.tasks.in_tier(tier_num).to_a
 
         # Resume: skip fully resolved tiers
-        next if tier_tasks.all? { |t| tier_task_resolved?(t) }
+        if tier_tasks.all? { |t| tier_task_resolved?(t) }
+          logger.info { "Tier #{tier_num}: skipping (all #{tier_tasks.size} tasks already resolved)" }
+          next
+        end
 
         logger.info { "Tier #{tier_num}: executing #{tier_tasks.size} tasks" }
 
@@ -307,12 +310,20 @@ module ArnoldPipeline
       diffs = tier_tasks.map(&:result_diff).compact.join("\n\n")
       comments = format_task_comments(tier_tasks)
 
-      tier_gate_check.call(
+      result = tier_gate_check.call(
         tier_number: tier_num,
         task_summaries: task_summaries,
         diffs: diffs,
         comments: comments
       )
+
+      if result
+        status = result["pass"] ? "PASSED" : "FAILED"
+        issues = result["issues"]&.join("; ") || "none"
+        logger.info { "Tier #{tier_num} gate: #{status} — issues: #{issues}" }
+      end
+
+      result
     rescue => e
       logger.warn { "Tier gate check failed (non-fatal): #{e.message}" }
       nil
@@ -354,6 +365,11 @@ module ArnoldPipeline
           position: max_position + i + 1,
           tier: tier_num
         )
+      end
+
+      if created_tasks.any?
+        titles = created_tasks.map(&:title).join(", ")
+        logger.info { "Created #{created_tasks.size} corrective tasks for tier #{tier_num}: #{titles}" }
       end
 
       return if created_tasks.empty?
@@ -408,7 +424,7 @@ module ArnoldPipeline
     end
 
     def tier_task_resolved?(task)
-      task.external_id.present? && (
+      task.external_id.present? && !task.workflow_active? && (
         (task.result_diff.present? && task.result_diff != "[]") ||
         task.failed? ||
         task.has_substantive_comments?
@@ -435,7 +451,7 @@ module ArnoldPipeline
       return :execute if tasks.any? { |t| t.external_id.blank? }
 
       all_resolved = tasks.select { |t| t.external_id.present? }.all? { |t|
-        (t.result_diff.present? && t.result_diff != "[]") || t.failed? || t.has_substantive_comments?
+        !t.workflow_active? && ((t.result_diff.present? && t.result_diff != "[]") || t.failed? || t.has_substantive_comments?)
       }
 
       return :execute unless all_resolved

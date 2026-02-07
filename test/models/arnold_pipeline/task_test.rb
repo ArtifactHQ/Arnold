@@ -45,5 +45,58 @@ module ArnoldPipeline
       task = @run.tasks.create!(title: "Setup DB", position: 0)
       assert_equal @run, task.pipeline_run
     end
+
+    # --- resolution_summary tests ---
+
+    test "resolution_summary shows no_signals when task has no resolution indicators" do
+      task = @run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
+      assert_equal "Setup DB (#42): no_signals", task.resolution_summary
+    end
+
+    test "resolution_summary shows has_diffs when task has diffs" do
+      task = @run.tasks.create!(title: "Setup DB", position: 0, external_id: "42", result_diff: '[{"filename":"schema.rb"}]')
+      assert_equal "Setup DB (#42): has_diffs", task.resolution_summary
+    end
+
+    test "resolution_summary shows failed when task failed" do
+      task = @run.tasks.create!(title: "Setup DB", position: 0, external_id: "42", status: :failed)
+      assert_equal "Setup DB (#42): failed", task.resolution_summary
+    end
+
+    test "resolution_summary shows workflow_active when workflow is active" do
+      task = @run.tasks.create!(title: "Setup DB", position: 0, external_id: "42", workflow_active: true)
+      assert_equal "Setup DB (#42): workflow_active", task.resolution_summary
+    end
+
+    test "resolution_summary shows multiple signals" do
+      task = @run.tasks.create!(
+        title: "Setup DB", position: 0, external_id: "42",
+        workflow_active: true,
+        result_diff: '[{"filename":"schema.rb"}]',
+        result_comments: [{ "source" => "issue", "author" => "copilot", "body" => "Can't do this" }]
+      )
+      assert_equal "Setup DB (#42): workflow_active, has_diffs, resolution_comments", task.resolution_summary
+    end
+
+    test "resolution_summary ignores empty diffs array" do
+      task = @run.tasks.create!(title: "Setup DB", position: 0, external_id: "42", result_diff: "[]")
+      assert_equal "Setup DB (#42): no_signals", task.resolution_summary
+    end
+
+    test "resolution_summary shows non_resolution_comments for planning comments" do
+      task = @run.tasks.create!(
+        title: "Setup DB", position: 0, external_id: "42",
+        result_comments: [{ "source" => "issue", "author" => "copilot", "body" => "Analyzing the repository structure..." }]
+      )
+      assert_equal "Setup DB (#42): non_resolution_comments", task.resolution_summary
+    end
+
+    test "resolution_summary shows wip_comments_only for WIP comments" do
+      task = @run.tasks.create!(
+        title: "Setup DB", position: 0, external_id: "42",
+        result_comments: [{ "source" => "issue", "author" => "copilot", "body" => "Claude Code is working on this issue." }]
+      )
+      assert_equal "Setup DB (#42): wip_comments_only", task.resolution_summary
+    end
   end
 end

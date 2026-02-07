@@ -19,6 +19,8 @@ module ArnoldPipeline
       assert_equal true, @config.tier_gate_enabled
       assert_equal true, @config.context_propagation_enabled
       assert_equal 2, @config.max_tier_retries
+      assert_equal true, @config.workflow_status_enabled
+      assert_kind_of Regexp, @config.workflow_branch_pattern
     end
 
     test "validate! passes with valid config" do

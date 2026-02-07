@@ -13,7 +13,8 @@ module ArnoldPipeline
                   :github_issue_mention,
                   :max_iterations, :library_path,
                   :polling_interval, :polling_timeout, :polling_max_interval,
-                  :tier_gate_enabled, :context_propagation_enabled, :max_tier_retries
+                  :tier_gate_enabled, :context_propagation_enabled, :max_tier_retries,
+                  :workflow_status_enabled, :workflow_branch_pattern
     attr_writer   :llm_api_key, :llm_model
 
     def initialize
@@ -32,6 +33,8 @@ module ArnoldPipeline
       @tier_gate_enabled          = true
       @context_propagation_enabled = true
       @max_tier_retries           = 2
+      @workflow_status_enabled     = true
+      @workflow_branch_pattern     = /issue[-_]?\d+/i
     end
 
     def llm_api_key
