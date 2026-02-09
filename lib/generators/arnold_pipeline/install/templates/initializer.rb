@@ -8,7 +8,7 @@ ArnoldPipeline.configure do |config|
   # Model to use for LLM calls
   # config.llm_model = "claude-sonnet-4-20250514"
 
-  # Execution provider: :github
+  # Execution provider: :github (more providers coming soon)
   # config.execution_provider = :github
 
   # GitHub personal access token (defaults to ENV["GITHUB_TOKEN"])

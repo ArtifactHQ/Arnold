@@ -21,8 +21,13 @@ module ArnoldPipeline
     option :issue_mention, type: :string, desc: "Mention to include in issue body (e.g. @claude)"
     option :polling_interval, type: :numeric, desc: "Polling interval in seconds (default: 30)"
     option :polling_timeout, type: :numeric, desc: "Polling timeout in seconds (default: 1800)"
+    option :execution_provider, type: :string, desc: "Execution provider (github, claude_code, null)"
+    option :claude_code_repo_path, type: :string, desc: "Path to repo for Claude Code provider"
+    option :claude_code_model, type: :string, desc: "Claude Code model (default: sonnet)"
+    option :claude_code_max_turns, type: :numeric, desc: "Max turns for Claude Code execution"
+    option :claude_code_permission_mode, type: :string, desc: "Claude Code permission mode (default: auto)"
     option :stop_after, type: :string, desc: "Stop after stage: spec, tasks, executed"
-    option :preview, type: :boolean, default: false, aliases: ["--dry-run"], desc: "Generate spec and tasks without publishing to GitHub. Note: makes LLM API calls and creates local database records."
+    option :preview, type: :boolean, default: false, aliases: ["--dry-run"], desc: "Generate spec and tasks without publishing to execution provider. Note: makes LLM API calls and creates local database records."
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
     def run_pipeline(description)
       if description == "--help" || description == "-h"
@@ -44,8 +49,14 @@ module ArnoldPipeline
 
           result = orchestrator.call(nl_input: description, stop_after: :tasks)
 
-          say "DRY RUN — spec and tasks generated locally (no GitHub issues will be created)", :yellow
-          say "  Repository: #{ArnoldPipeline.configuration.github_repo || '(not configured)'}"
+          say "DRY RUN — spec and tasks generated locally (not published to execution provider)", :yellow
+          say "  Execution provider: #{ArnoldPipeline.configuration.execution_provider}"
+          case ArnoldPipeline.configuration.execution_provider
+          when :github
+            say "  Repository: #{ArnoldPipeline.configuration.github_repo || '(not configured)'}"
+          when :claude_code
+            say "  Repo path: #{ArnoldPipeline.configuration.claude_code_repo_path || '(not configured)'}"
+          end
           say "  Description: \"#{description}\""
           say "  Tasks to create: #{result.tasks.count}"
 
@@ -80,6 +91,17 @@ module ArnoldPipeline
 
     desc "resume ID", "Resume a paused or failed pipeline run"
     option :config, type: :string, desc: "Path to YAML config file"
+    option :provider, type: :string, desc: "LLM provider (anthropic or openai)"
+    option :model, type: :string, desc: "LLM model name"
+    option :repo, type: :string, desc: "GitHub repo (owner/repo)"
+    option :issue_mention, type: :string, desc: "Mention to include in issue body (e.g. @claude)"
+    option :polling_interval, type: :numeric, desc: "Polling interval in seconds (default: 30)"
+    option :polling_timeout, type: :numeric, desc: "Polling timeout in seconds (default: 1800)"
+    option :execution_provider, type: :string, desc: "Execution provider (github, claude_code, null)"
+    option :claude_code_repo_path, type: :string, desc: "Path to repo for Claude Code provider"
+    option :claude_code_model, type: :string, desc: "Claude Code model (default: sonnet)"
+    option :claude_code_max_turns, type: :numeric, desc: "Max turns for Claude Code execution"
+    option :claude_code_permission_mode, type: :string, desc: "Claude Code permission mode (default: auto)"
     option :stop_after, type: :string, desc: "Stop after stage: spec, tasks, executed"
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
     def resume(id)
@@ -89,7 +111,7 @@ module ArnoldPipeline
       end
       with_error_handling do
         setup_standalone!
-        load_config!(options) if options[:config]
+        load_config!(options)
         require "arnold_pipeline/orchestrator"
 
         run_record = PipelineRun.find_by(id:)
@@ -306,6 +328,11 @@ module ArnoldPipeline
         c.github_issue_mention = options[:issue_mention] if options[:issue_mention]
         c.polling_interval = options[:polling_interval] if options[:polling_interval]
         c.polling_timeout = options[:polling_timeout] if options[:polling_timeout]
+        c.execution_provider = options[:execution_provider].to_sym if options[:execution_provider]
+        c.claude_code_repo_path = options[:claude_code_repo_path] if options[:claude_code_repo_path]
+        c.claude_code_model = options[:claude_code_model] if options[:claude_code_model]
+        c.claude_code_max_turns = options[:claude_code_max_turns] if options[:claude_code_max_turns]
+        c.claude_code_permission_mode = options[:claude_code_permission_mode] if options[:claude_code_permission_mode]
       end
     end
 
@@ -327,6 +354,10 @@ module ArnoldPipeline
         c.context_propagation_enabled = yaml_config[:context_propagation_enabled] unless yaml_config[:context_propagation_enabled].nil?
         c.max_tier_retries = yaml_config[:max_tier_retries] if yaml_config[:max_tier_retries]
         c.workflow_status_enabled = yaml_config[:workflow_status_enabled] unless yaml_config[:workflow_status_enabled].nil?
+        c.claude_code_repo_path = yaml_config[:claude_code_repo_path] if yaml_config[:claude_code_repo_path]
+        c.claude_code_model = yaml_config[:claude_code_model] if yaml_config[:claude_code_model]
+        c.claude_code_max_turns = yaml_config[:claude_code_max_turns] if yaml_config[:claude_code_max_turns]
+        c.claude_code_permission_mode = yaml_config[:claude_code_permission_mode] if yaml_config[:claude_code_permission_mode]
         if yaml_config[:workflow_branch_pattern]
           begin
             c.workflow_branch_pattern = Regexp.new(yaml_config[:workflow_branch_pattern])
@@ -399,7 +430,7 @@ module ArnoldPipeline
       lines << "Tier: #{task.tier} | Priority: #{task.priority} | Status: #{task.status}"
       lines << "Labels: #{task.labels.join(', ')}" if task.labels.any?
       lines << "Depends on: #{task.depends_on.join(', ')}" if task.depends_on.any?
-      lines << "GitHub: #{task.external_url}" if task.external_url
+      lines << "Link: #{task.external_url}" if task.external_url
       lines << ""
       lines << task.description if task.description.present?
       lines.join("\n")

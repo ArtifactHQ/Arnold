@@ -17,7 +17,7 @@ module ArnoldPipeline
       "pending" => %w[generating_spec executing failed],
       "generating_spec" => %w[breaking_tasks paused failed],
       "breaking_tasks" => %w[executing paused failed],
-      "executing" => %w[awaiting_results failed],
+      "executing" => %w[awaiting_results analyzing failed],
       "awaiting_results" => %w[analyzing executing paused failed max_iterations_reached],
       "analyzing" => %w[completed max_iterations_reached executing breaking_tasks failed],
       "paused" => %w[generating_spec breaking_tasks executing analyzing failed],

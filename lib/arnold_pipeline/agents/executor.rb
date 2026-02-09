@@ -16,7 +16,7 @@ module ArnoldPipeline
           t.respond_to?(:external_id) ? t.external_id.present? : t["external_id"].present?
         end
 
-        logger.info { "[Arnold] Publishing #{unpublished.size} tasks to GitHub..." }
+        logger.info { "[Arnold] Publishing #{unpublished.size} tasks..." }
         return [] if unpublished.empty?
 
         results = provider.create_tasks(tasks: unpublished, pipeline_run:, prior_context:)

@@ -307,6 +307,16 @@ module ArnoldPipeline
       ENV["OPENAI_API_KEY"] = original_openai
     end
 
+    # --- provider delegation tests ---
+
+    test "validate! delegates execution validation to provider class" do
+      @config.llm_api_key = "sk-test"
+      @config.execution_provider = :null
+
+      # Null provider has no-op validation, so this should pass without github config
+      assert @config.validate!
+    end
+
     # --- stop_after validation tests ---
 
     test "validate! with stop_after: :spec skips GitHub validation" do

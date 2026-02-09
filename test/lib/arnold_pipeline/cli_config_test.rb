@@ -50,7 +50,7 @@ module ArnoldPipeline
       refute ArnoldPipeline.configuration.tier_gate_enabled
     end
 
-    test "run --dry-run shows accurate message about GitHub issues" do
+    test "run --dry-run shows accurate message about execution provider" do
       mock_run = PipelineRun.create!(nl_input: "Build an app", status: :paused)
       mock_run.tasks.create!(title: "Setup", tier: 0, position: 0, status: :pending)
 
@@ -61,8 +61,77 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["run", "--dry-run", "Build an app"]) }
       assert_match(/DRY RUN/, output)
-      assert_match(/no GitHub issues will be created/, output)
+      assert_match(/not published to execution provider/, output)
+      assert_match(/Repository: test\/repo/, output)
       refute_match(/no changes will be made/, output)
+    end
+
+    test "load_config! sets execution_provider from CLI flag" do
+      cli = Cli.new
+      cli.send(:load_config!, { execution_provider: "claude_code" })
+      assert_equal :claude_code, ArnoldPipeline.configuration.execution_provider
+    end
+
+    test "load_config! sets claude_code_repo_path from CLI flag" do
+      cli = Cli.new
+      cli.send(:load_config!, { claude_code_repo_path: "/tmp/my-repo" })
+      assert_equal "/tmp/my-repo", ArnoldPipeline.configuration.claude_code_repo_path
+    end
+
+    test "load_config! sets claude_code_model from CLI flag" do
+      cli = Cli.new
+      cli.send(:load_config!, { claude_code_model: "opus" })
+      assert_equal "opus", ArnoldPipeline.configuration.claude_code_model
+    end
+
+    test "load_config! sets claude_code_max_turns from CLI flag" do
+      cli = Cli.new
+      cli.send(:load_config!, { claude_code_max_turns: 50 })
+      assert_equal 50, ArnoldPipeline.configuration.claude_code_max_turns
+    end
+
+    test "load_config! sets claude_code_permission_mode from CLI flag" do
+      cli = Cli.new
+      cli.send(:load_config!, { claude_code_permission_mode: "manual" })
+      assert_equal "manual", ArnoldPipeline.configuration.claude_code_permission_mode
+    end
+
+    test "apply_config! loads claude_code_repo_path from YAML" do
+      cli = Cli.new
+      cli.send(:apply_config!, { claude_code_repo_path: "/home/user/project" })
+      assert_equal "/home/user/project", ArnoldPipeline.configuration.claude_code_repo_path
+    end
+
+    test "apply_config! loads claude_code_model from YAML" do
+      cli = Cli.new
+      cli.send(:apply_config!, { claude_code_model: "haiku" })
+      assert_equal "haiku", ArnoldPipeline.configuration.claude_code_model
+    end
+
+    test "apply_config! loads claude_code_max_turns from YAML" do
+      cli = Cli.new
+      cli.send(:apply_config!, { claude_code_max_turns: 100 })
+      assert_equal 100, ArnoldPipeline.configuration.claude_code_max_turns
+    end
+
+    test "apply_config! loads claude_code_permission_mode from YAML" do
+      cli = Cli.new
+      cli.send(:apply_config!, { claude_code_permission_mode: "plan" })
+      assert_equal "plan", ArnoldPipeline.configuration.claude_code_permission_mode
+    end
+
+    test "apply_config! loads execution_provider as symbol from YAML" do
+      cli = Cli.new
+      cli.send(:apply_config!, { execution_provider: "claude_code" })
+      assert_equal :claude_code, ArnoldPipeline.configuration.execution_provider
+    end
+
+    test "CLI flags override YAML values for claude_code settings" do
+      cli = Cli.new
+      cli.send(:apply_config!, { claude_code_model: "opus", execution_provider: "github" })
+      cli.send(:load_config!, { claude_code_model: "sonnet", execution_provider: "claude_code" })
+      assert_equal "sonnet", ArnoldPipeline.configuration.claude_code_model
+      assert_equal :claude_code, ArnoldPipeline.configuration.execution_provider
     end
 
     private

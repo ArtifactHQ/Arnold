@@ -1,6 +1,3 @@
-require "octokit"
-require "faraday"
-
 module ArnoldPipeline
   class TierExecutionEngine
     attr_reader :executor, :tier_gate_check, :logger
@@ -13,7 +10,7 @@ module ArnoldPipeline
 
     def execute_tiers!(pipeline_run)
       pipeline_run.update!(status: :executing)
-      logger.info { "[Arnold] Publishing tasks to GitHub..." }
+      logger.info { "[Arnold] Publishing tasks..." }
 
       max_tier = pipeline_run.tasks.maximum(:tier) || 0
       accumulated_context = load_accumulated_context(pipeline_run)
@@ -34,9 +31,17 @@ module ArnoldPipeline
         # Publish (executor skips tasks with existing external_id)
         executor.call(tasks: tier_tasks, pipeline_run:, prior_context:)
 
-        # Await results for this tier only
-        pipeline_run.update!(status: :awaiting_results)
-        executor.await_results(pipeline_run:, tasks: tier_tasks)
+        if executor.provider.async?
+          # Async providers: poll until results available
+          pipeline_run.update!(status: :awaiting_results)
+          executor.await_results(pipeline_run:, tasks: tier_tasks)
+        else
+          # Sync providers: results available immediately after publish.
+          # Reload tasks to pick up external_id set by executor.call (which
+          # updates via a separate find_by query, leaving these objects stale).
+          tier_tasks.each(&:reload)
+          executor.fetch_results(pipeline_run:, tasks: tier_tasks)
+        end
 
         # Merge this tier before next tier starts
         merge_tier_results!(pipeline_run, tier_tasks)
@@ -63,7 +68,8 @@ module ArnoldPipeline
     def merge_all_results!(pipeline_run)
       logger.info { "[Arnold] Merging results..." }
       executor.merge_results(pipeline_run:)
-    rescue Octokit::Error, Faraday::Error => e
+    rescue => e
+      raise unless recoverable_merge_error?(e)
       logger.warn { "[Arnold] Merge failed (non-fatal): #{e.message}" }
     end
 
@@ -92,8 +98,13 @@ module ArnoldPipeline
     def merge_tier_results!(pipeline_run, tier_tasks)
       logger.info { "[Arnold] Merging tier results..." }
       executor.merge_results(pipeline_run:, tasks: tier_tasks)
-    rescue Octokit::Error, Faraday::Error => e
+    rescue => e
+      raise unless recoverable_merge_error?(e)
       logger.warn { "[Arnold] Tier merge failed (non-fatal): #{e.message}" }
+    end
+
+    def recoverable_merge_error?(error)
+      executor.provider.recoverable_errors.any? { |klass| error.is_a?(klass) }
     end
 
     def gate_check_needed?
@@ -166,8 +177,13 @@ module ArnoldPipeline
         pipeline_run.update!(status: :executing)
         executor.call(tasks: created_tasks, pipeline_run:, prior_context:)
 
-        pipeline_run.update!(status: :awaiting_results)
-        executor.await_results(pipeline_run:, tasks: created_tasks)
+        if executor.provider.async?
+          pipeline_run.update!(status: :awaiting_results)
+          executor.await_results(pipeline_run:, tasks: created_tasks)
+        else
+          created_tasks.each(&:reload)
+          executor.fetch_results(pipeline_run:, tasks: created_tasks)
+        end
 
         merge_tier_results!(pipeline_run, created_tasks)
 

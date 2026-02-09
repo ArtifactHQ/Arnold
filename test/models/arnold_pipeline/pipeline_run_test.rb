@@ -92,6 +92,12 @@ module ArnoldPipeline
       assert run_record.valid?, "Expected analyzing -> breaking_tasks to be valid"
     end
 
+    test "allows valid transition from executing to analyzing (sync provider)" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :executing)
+      run_record.status = :analyzing
+      assert run_record.valid?, "Expected executing -> analyzing to be valid"
+    end
+
     test "allows valid transition from paused to executing (resume)" do
       run_record = PipelineRun.create!(nl_input: "Build an app", status: :paused)
       run_record.status = :executing
