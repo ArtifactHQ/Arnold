@@ -85,11 +85,7 @@ module ArnoldPipeline
         end
 
         def fetch_results(pipeline_run:, tasks: nil)
-          # Reload tasks to pick up external_id set by Executor#call, which updates
-          # via find_by (a separate object). Without reload, stale in-memory objects
-          # from TierExecutionEngine's sync path will have nil external_id.
-          target_tasks = tasks ? tasks.map(&:reload) : pipeline_run.tasks
-          target_tasks.filter_map do |task|
+          (tasks || pipeline_run.tasks).filter_map do |task|
             next unless task.external_id
 
             stored = @results[task.external_id]

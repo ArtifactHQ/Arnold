@@ -123,7 +123,7 @@ end
 
 **Async polling** (`agents/executor.rb:61-103`): Calls `fetch_results` repeatedly with exponential backoff (`polling_interval` doubling to `polling_max_interval`). Exits when all tasks are resolved or `polling_timeout` exceeded. A task is resolved when `workflow_active == false` AND at least one of: non-empty `result_diff`, `failed?` status, or substantive comments.
 
-**Sync stale-object caveat:** In the sync path, `executor.call()` updates task records in the database (sets `external_id`) via a separate `find_by` query. The in-memory task objects passed to `fetch_results` are **stale** — their `external_id` is still `nil`. Sync providers should call `tasks.map(&:reload)` at the start of `fetch_results` to pick up the updated `external_id`. (Async providers avoid this because `await_results` reloads tasks internally.)
+**Sync task reload (handled by engine):** After `executor.call()` sets `external_id` in the database, the `TierExecutionEngine` automatically reloads task objects before calling `fetch_results` on sync providers. Providers do not need to reload tasks themselves.
 
 **State machine** (`pipeline_run.rb:20`): `executing` can transition to both `awaiting_results` (async) and `analyzing` (sync). Both paths reach `analyzing`.
 
@@ -208,9 +208,7 @@ module ArnoldPipeline
         end
 
         def fetch_results(pipeline_run:, tasks: nil)
-          # Sync providers: reload tasks to pick up external_id set by Executor#call
-          target_tasks = tasks ? tasks.map(&:reload) : pipeline_run.tasks
-          target_tasks.filter_map do |task|
+          (tasks || pipeline_run.tasks).filter_map do |task|
             next unless task.external_id
             # TODO: collect real diffs/status
             { task_id: task.id, external_id: task.external_id, diffs: [],
@@ -326,7 +324,7 @@ Run: `bundle exec rails test test/lib/arnold_pipeline/providers/execution/local_
 
 **Sync providers skip `awaiting_results`.** State goes `executing -> analyzing` directly. Polling config is irrelevant.
 
-**Sync providers receive stale task objects.** In the sync path, `TierExecutionEngine` passes the same task array to both `executor.call()` and `executor.fetch_results()`. After `call()` updates `external_id` in the DB, the in-memory objects are stale. Your `fetch_results` must reload tasks (`tasks.map(&:reload)`) or it will see `external_id: nil` and skip all tasks silently.
+**Stale objects after publish (handled by engine).** After `create_tasks`, in-memory Task objects may have `nil` `external_id` even though the DB was updated. The `TierExecutionEngine` reloads tasks automatically before calling `fetch_results` on sync providers. Providers should NOT reload tasks themselves.
 
 **`recoverable_errors` only covers merge.** Errors from `create_tasks`/`fetch_results` always propagate regardless of this list.
 
