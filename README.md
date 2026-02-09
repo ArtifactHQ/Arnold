@@ -19,7 +19,7 @@ arnold run "Build a todo list app" --provider openai --repo owner/repo
 # Run only part of the pipeline (see Partial Execution below):
 arnold run "Build a todo list app" --repo owner/repo --stop-after tasks
 arnold resume 1                     # Continue from where you left off
-arnold resume 1 --stop-after published  # Resume and pause again at a later stage
+arnold resume 1 --stop-after executed   # Resume and pause again at a later stage
 ```
 
 That's it. Arnold will:
@@ -113,7 +113,7 @@ arnold version                       # Show version
 #   --model NAME               Model name
 #   --repo OWNER/REPO          GitHub repository
 #   --issue-mention MENTION    Include in issue body (e.g. @claude)
-#   --stop-after STAGE         Pause after stage: spec, tasks, published, executed
+#   --stop-after STAGE         Pause after stage: spec, tasks, executed
 #   --polling-interval SECS    Polling interval (default: 30)
 #   --polling-timeout SECS     Max polling wait (default: 1800)
 #   --verbose                  Debug logging
@@ -402,8 +402,7 @@ The pipeline can be paused at any stage and resumed later. This is useful for re
 |--------------|------------|------------------------|
 | `:spec` | Spec generation | Specification (markdown + structured data) |
 | `:tasks` | Task breakdown | Specification + 5-20 ordered tasks |
-| `:published` | Issue creation | Tasks with GitHub Issue numbers |
-| `:executed` | Result polling | Tasks with PR diffs and comments |
+| `:executed` | Execution (issue creation + result polling) | Tasks with GitHub Issue numbers, PR diffs, and comments |
 | `nil` | Full pipeline | Everything including analysis iterations |
 
 ### Partial Execution
@@ -423,8 +422,8 @@ puts run.specification.content  # Review the generated spec
 run = orchestrator.call(nl_input: "Build a todo app", stop_after: :tasks)
 run.tasks.each { |t| puts "#{t.position}: #{t.title}" }
 
-# Publish issues but don't wait for results
-run = orchestrator.call(nl_input: "Build a todo app", stop_after: :published)
+# Execute (create issues and poll for results) but don't run analysis
+run = orchestrator.call(nl_input: "Build a todo app", stop_after: :executed)
 run.tasks.each { |t| puts "#{t.title} -> #{t.external_url}" }
 ```
 
@@ -438,7 +437,7 @@ result = orchestrator.resume(pipeline_run: run)
 result.status  # => "completed"
 
 # Resume but pause again at a later stage
-result = orchestrator.resume(pipeline_run: run, stop_after: :published)
+result = orchestrator.resume(pipeline_run: run, stop_after: :executed)
 result.status  # => "paused"
 ```
 
