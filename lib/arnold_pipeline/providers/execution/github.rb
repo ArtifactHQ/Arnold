@@ -159,7 +159,7 @@ module ArnoldPipeline
           end
 
           [false, "no active workflows"]
-        rescue => e
+        rescue Octokit::Error, Faraday::Error => e
           [false, "error: #{e.message}"]
         end
 

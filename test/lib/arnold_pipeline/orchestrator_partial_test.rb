@@ -197,7 +197,7 @@ module ArnoldPipeline
     test "infer_resume_stage returns generate_spec when no spec exists" do
       run = PipelineRun.create!(nl_input: "test", status: :paused)
 
-      stage = @orchestrator.send(:infer_resume_stage, run)
+      stage = ResumeInferrer.call(run)
       assert_equal :generate_spec, stage
     end
 
@@ -205,7 +205,7 @@ module ArnoldPipeline
       run = PipelineRun.create!(nl_input: "test", status: :paused)
       run.create_specification!(content: "spec", structured_data: {}, version: 1)
 
-      stage = @orchestrator.send(:infer_resume_stage, run)
+      stage = ResumeInferrer.call(run)
       assert_equal :break_tasks, stage
     end
 
@@ -214,7 +214,7 @@ module ArnoldPipeline
       run.create_specification!(content: "spec", structured_data: {}, version: 1)
       run.tasks.create!(title: "Task 1", position: 0)
 
-      stage = @orchestrator.send(:infer_resume_stage, run)
+      stage = ResumeInferrer.call(run)
       assert_equal :execute, stage
     end
 
@@ -223,7 +223,7 @@ module ArnoldPipeline
       run.create_specification!(content: "spec", structured_data: {}, version: 1)
       run.tasks.create!(title: "Task 1", position: 0, tier: 0)
 
-      stage = @orchestrator.send(:infer_resume_stage, run)
+      stage = ResumeInferrer.call(run)
       assert_equal :execute, stage
     end
 
@@ -232,7 +232,7 @@ module ArnoldPipeline
       run.create_specification!(content: "spec", structured_data: {}, version: 1)
       run.tasks.create!(title: "Task 1", position: 0, tier: 0, external_id: "1")
 
-      stage = @orchestrator.send(:infer_resume_stage, run)
+      stage = ResumeInferrer.call(run)
       assert_equal :execute, stage
     end
 
@@ -241,7 +241,7 @@ module ArnoldPipeline
       run.create_specification!(content: "spec", structured_data: {}, version: 1)
       run.tasks.create!(title: "Task 1", position: 0, tier: 0, external_id: "1", result_diff: '[{"filename":"a.rb"}]')
 
-      stage = @orchestrator.send(:infer_resume_stage, run)
+      stage = ResumeInferrer.call(run)
       assert_equal :analyze, stage
     end
 

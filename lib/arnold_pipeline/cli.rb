@@ -6,6 +6,8 @@ require "fileutils"
 
 module ArnoldPipeline
   class Cli < Thor
+    def self.exit_on_failure? = true
+
     STANDALONE_DB_DIR = File.expand_path("~/.arnold_pipeline")
     STANDALONE_DB_PATH = File.join(STANDALONE_DB_DIR, "pipeline.sqlite3")
 
@@ -17,37 +19,114 @@ module ArnoldPipeline
     option :issue_mention, type: :string, desc: "Mention to include in issue body (e.g. @claude)"
     option :polling_interval, type: :numeric, desc: "Polling interval in seconds (default: 30)"
     option :polling_timeout, type: :numeric, desc: "Polling timeout in seconds (default: 1800)"
+    option :stop_after, type: :string, desc: "Stop after stage: spec, tasks, executed"
+    option :dry_run, type: :boolean, default: false, desc: "Show what would happen without executing"
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
     def run_pipeline(description)
-      setup_standalone!
-      load_config!(options)
-      require "arnold_pipeline/orchestrator"
+      with_error_handling do
+        setup_standalone!
+        load_config!(options)
+        require "arnold_pipeline/orchestrator"
 
-      logger = build_logger(options[:verbose])
-      orchestrator = Orchestrator.new(logger:)
+        if options[:dry_run]
+          logger = build_logger(options[:verbose])
+          orchestrator = Orchestrator.new(logger:)
 
-      say "Starting pipeline for: #{description}", :green
-      result = orchestrator.call(nl_input: description)
+          result = orchestrator.call(nl_input: description, stop_after: :tasks)
 
-      say "\nPipeline #{result.status}!", status_color(result.status)
-      say "  Run ID: #{result.id}"
-      say "  Tasks: #{result.tasks.count}"
-      say "  Iterations: #{result.iterations.count}"
+          say "DRY RUN - no changes will be made", :yellow
+          say "  Repository: #{ArnoldPipeline.configuration.github_repo || '(not configured)'}"
+          say "  Description: \"#{description}\""
+          say "  Tasks to create: #{result.tasks.count}"
 
-      if result.iterations.any?
-        last = result.iterations.order(:number).last
-        say "  Final decision: #{last.decision} (confidence: #{last.confidence}%)"
+          result.tasks.group_by(&:tier).sort.each do |tier, tasks|
+            say "    Tier #{tier}: #{tasks.count} #{tasks.count == 1 ? 'task' : 'tasks'}"
+          end
+
+          say "\nRun without --dry-run to execute."
+          return
+        end
+
+        stop_after = validate_stop_after(options[:stop_after])
+        logger = build_logger(options[:verbose])
+        orchestrator = Orchestrator.new(logger:)
+
+        say "Starting pipeline for: #{description}", :green
+        result = orchestrator.call(nl_input: description, stop_after:)
+
+        say "\nPipeline #{result.status}!", status_color(result.status)
+        say "  Run ID: #{result.id}"
+        say "  Tasks: #{result.tasks.count}"
+        say "  Iterations: #{result.iterations.count}"
+
+        if result.iterations.any?
+          last = result.iterations.order(:number).last
+          say "  Final decision: #{last.decision} (confidence: #{last.confidence}%)"
+        end
       end
     end
     map "run" => :run_pipeline
+    map "--version" => :version, "-v" => :version
+
+    desc "resume ID", "Resume a paused or failed pipeline run"
+    option :config, type: :string, desc: "Path to YAML config file"
+    option :stop_after, type: :string, desc: "Stop after stage: spec, tasks, executed"
+    option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
+    def resume(id)
+      with_error_handling do
+        setup_standalone!
+        load_config!(options) if options[:config]
+        require "arnold_pipeline/orchestrator"
+
+        run_record = PipelineRun.find_by(id:)
+        unless run_record
+          say_error "Pipeline run ##{id} not found", :red
+          raise SystemExit.new(1)
+        end
+
+        unless run_record.paused? || run_record.failed?
+          say_error "Pipeline run ##{id} is #{run_record.status} and cannot be resumed", :red
+          raise SystemExit.new(1)
+        end
+
+        stop_after = validate_stop_after(options[:stop_after])
+        logger = build_logger(options[:verbose])
+        orchestrator = Orchestrator.new(logger:)
+
+        say "Resuming pipeline run ##{id}...", :green
+        result = orchestrator.resume(pipeline_run: run_record, stop_after:)
+
+        say "\nPipeline #{result.status}!", status_color(result.status)
+        say "  Run ID: #{result.id}"
+        say "  Tasks: #{result.tasks.count}"
+      end
+    end
 
     desc "status ID", "Show the status of a pipeline run"
+    option :json, type: :boolean, default: false, desc: "Output as JSON"
     def status(id)
       setup_standalone!
 
       run_record = PipelineRun.find_by(id:)
       unless run_record
         say "Pipeline run ##{id} not found", :red
+        return
+      end
+
+      if options[:json]
+        data = {
+          id: run_record.id,
+          status: run_record.status,
+          input: run_record.nl_input,
+          task_count: run_record.tasks.count,
+          iteration_count: run_record.iterations.count,
+          created_at: run_record.created_at.iso8601,
+          spec_version: run_record.specification&.version,
+          iterations: run_record.iterations.order(:number).map { |iter|
+            { number: iter.number, decision: iter.decision, confidence: iter.confidence, needs_human_review: iter.needs_human_review }
+          }
+        }
+        say JSON.pretty_generate(data)
         return
       end
 
@@ -70,10 +149,24 @@ module ArnoldPipeline
 
     desc "list", "List all pipeline runs"
     option :limit, type: :numeric, default: 20, desc: "Number of runs to show"
+    option :json, type: :boolean, default: false, desc: "Output as JSON"
     def list
       setup_standalone!
 
       runs = PipelineRun.order(created_at: :desc).limit(options[:limit])
+
+      if options[:json]
+        data = runs.map { |run_record|
+          {
+            id: run_record.id,
+            status: run_record.status,
+            description: run_record.nl_input,
+            created_at: run_record.created_at.iso8601
+          }
+        }
+        say JSON.pretty_generate(data)
+        return
+      end
 
       if runs.empty?
         say "No pipeline runs found", :yellow
@@ -189,6 +282,32 @@ module ArnoldPipeline
 
     def build_logger(verbose)
       Logger.new($stdout, level: verbose ? Logger::DEBUG : Logger::INFO)
+    end
+
+    VALID_STOP_AFTER = %w[spec tasks executed].freeze
+
+    def validate_stop_after(value)
+      return nil if value.nil?
+
+      unless VALID_STOP_AFTER.include?(value)
+        say_error "Invalid --stop-after value '#{value}'. Must be one of: #{VALID_STOP_AFTER.join(', ')}", :red
+        raise SystemExit.new(1)
+      end
+
+      value.to_sym
+    end
+
+    def with_error_handling
+      yield
+    rescue ArnoldPipeline::ConfigurationError => e
+      say_error "Configuration error: #{e.message}", :red
+      raise SystemExit.new(1)
+    rescue Errno::ENOENT => e
+      say_error "File not found: #{e.message}", :red
+      raise SystemExit.new(1)
+    rescue Psych::SyntaxError => e
+      say_error "Invalid YAML in config file: #{e.message}", :red
+      raise SystemExit.new(1)
     end
 
     def status_color(status)

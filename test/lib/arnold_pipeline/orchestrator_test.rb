@@ -172,9 +172,6 @@ module ArnoldPipeline
     end
 
     test "tier_task_resolved? returns false when workflow_active is true" do
-      stub_spec_generation!
-      stub_task_breakdown!(times: 1)
-
       pipeline_run = PipelineRun.create!(nl_input: "Build an app")
       task = pipeline_run.tasks.create!(
         title: "Setup DB", position: 0, external_id: "42",
@@ -182,7 +179,7 @@ module ArnoldPipeline
         workflow_active: true
       )
 
-      refute @orchestrator.send(:tier_task_resolved?, task),
+      refute @orchestrator.tier_execution_engine.tier_task_resolved?(task),
         "tier_task_resolved? should return false when workflow_active"
     end
 
@@ -194,7 +191,7 @@ module ArnoldPipeline
         workflow_active: false
       )
 
-      assert @orchestrator.send(:tier_task_resolved?, task),
+      assert @orchestrator.tier_execution_engine.tier_task_resolved?(task),
         "tier_task_resolved? should return true when workflow inactive and diffs present"
     end
 
@@ -207,7 +204,7 @@ module ArnoldPipeline
         workflow_active: true
       )
 
-      stage = @orchestrator.send(:infer_resume_stage, pipeline_run)
+      stage = ResumeInferrer.call(pipeline_run)
       assert_equal :execute, stage, "Should infer execute stage when tasks have active workflows"
     end
 

@@ -585,6 +585,39 @@ module ArnoldPipeline
           ArnoldPipeline.reset_configuration!
         end
 
+        test "check_workflows_active? lets unexpected exceptions bubble up" do
+          ArnoldPipeline.configure do |c|
+            c.workflow_status_enabled = true
+            c.github_token = "ghp_test"
+            c.github_repo = "owner/repo"
+          end
+
+          task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: { number: 42, state: "open" }.to_json
+            )
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+            .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
+
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
+            .with(query: { state: "all" })
+            .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
+
+          # Stub the workflow runs call to raise a programming error
+          @provider.instance_variable_get(:@client).stubs(:repository_workflow_runs).raises(NoMethodError, "undefined method 'foo'")
+
+          assert_raises(NoMethodError) do
+            @provider.fetch_results(pipeline_run: @pipeline_run)
+          end
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
         test "build factory creates Github provider" do
           ArnoldPipeline.configure do |c|
             c.execution_provider = :github
