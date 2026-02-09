@@ -225,6 +225,38 @@ module ArnoldPipeline
       end
     end
 
+    desc "tasks ID", "Export the tasks for a pipeline run"
+    option :output, type: :string, aliases: "-o", desc: "Write to file instead of stdout"
+    option :json, type: :boolean, default: false, desc: "Output as JSON"
+    def tasks(id)
+      setup_standalone!
+
+      run_record = PipelineRun.find_by(id:)
+      unless run_record
+        say_error "Pipeline run ##{id} not found", :red
+        raise SystemExit.new(1)
+      end
+
+      task_records = run_record.tasks.ordered
+      if task_records.empty?
+        say_error "No tasks found for pipeline run ##{id}", :yellow
+        raise SystemExit.new(1)
+      end
+
+      content = if options[:json]
+        JSON.pretty_generate(task_records.map { |t| task_to_hash(t) })
+      else
+        task_records.map { |t| format_task(t) }.join("\n\n")
+      end
+
+      if options[:output]
+        File.write(options[:output], content)
+        $stderr.puts "#{task_records.size} tasks written to #{options[:output]}"
+      else
+        say content
+      end
+    end
+
     desc "version", "Show the version"
     def version
       say "arnold_pipeline #{ArnoldPipeline::VERSION}"
@@ -343,6 +375,34 @@ module ArnoldPipeline
 
     def quiet_say(message, *args)
       say(message, *args) unless options[:quiet]
+    end
+
+    def task_to_hash(task)
+      {
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        position: task.position,
+        tier: task.tier,
+        priority: task.priority,
+        status: task.status,
+        labels: task.labels,
+        depends_on: task.depends_on,
+        external_id: task.external_id,
+        external_url: task.external_url
+      }
+    end
+
+    def format_task(task)
+      lines = []
+      lines << "## [#{task.position}] #{task.title}"
+      lines << "Tier: #{task.tier} | Priority: #{task.priority} | Status: #{task.status}"
+      lines << "Labels: #{task.labels.join(', ')}" if task.labels.any?
+      lines << "Depends on: #{task.depends_on.join(', ')}" if task.depends_on.any?
+      lines << "GitHub: #{task.external_url}" if task.external_url
+      lines << ""
+      lines << task.description if task.description.present?
+      lines.join("\n")
     end
 
     def status_color(status)

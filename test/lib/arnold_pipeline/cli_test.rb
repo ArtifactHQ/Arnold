@@ -332,6 +332,79 @@ module ArnoldPipeline
       assert_match(/Description cannot be empty/, stderr_output)
     end
 
+    test "tasks outputs task list" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.tasks.create!(title: "Setup project", description: "Initialize the project", tier: 0, position: 0, priority: 1, status: :pending, labels: ["setup"], depends_on: [])
+      run_record.tasks.create!(title: "Add models", description: "Create data models", tier: 1, position: 1, priority: 2, status: :pending, labels: ["backend"], depends_on: [0])
+
+      output = capture_output { Cli.start(["tasks", run_record.id.to_s]) }
+
+      assert_match(/\[0\] Setup project/, output)
+      assert_match(/\[1\] Add models/, output)
+      assert_match(/Tier: 0/, output)
+      assert_match(/Tier: 1/, output)
+      assert_match(/Initialize the project/, output)
+      assert_match(/Labels: setup/, output)
+      assert_match(/Depends on: 0/, output)
+    end
+
+    test "tasks --json outputs valid JSON array" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.tasks.create!(title: "Setup project", description: "Initialize", tier: 0, position: 0, priority: 1, status: :pending, labels: ["setup"], depends_on: [])
+      run_record.tasks.create!(title: "Add models", description: "Models", tier: 1, position: 1, priority: 2, status: :pending, labels: [], depends_on: [0])
+
+      output = capture_output { Cli.start(["tasks", run_record.id.to_s, "--json"]) }
+
+      parsed = JSON.parse(output)
+      assert_kind_of Array, parsed
+      assert_equal 2, parsed.length
+      first = parsed.first
+      assert_equal "Setup project", first["title"]
+      assert_equal 0, first["tier"]
+      assert_equal 0, first["position"]
+      assert_equal 1, first["priority"]
+      assert_equal ["setup"], first["labels"]
+      assert first.key?("depends_on")
+      assert first.key?("external_id")
+      assert first.key?("external_url")
+    end
+
+    test "tasks writes to file with --output flag" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.tasks.create!(title: "Setup project", tier: 0, position: 0, status: :pending)
+
+      outfile = File.join(Dir.tmpdir, "arnold_tasks_test_#{SecureRandom.hex(4)}.md")
+
+      stderr_output = nil
+      original_stderr = $stderr
+      $stderr = StringIO.new
+      begin
+        capture_output { Cli.start(["tasks", run_record.id.to_s, "--output", outfile]) }
+        stderr_output = $stderr.string
+      ensure
+        $stderr = original_stderr
+      end
+
+      assert_match(/1 tasks written to/, stderr_output)
+      assert_match(/Setup project/, File.read(outfile))
+    ensure
+      File.delete(outfile) if outfile && File.exist?(outfile)
+    end
+
+    test "tasks with non-existent ID exits with error" do
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start(["tasks", "99999"]) }
+      end
+    end
+
+    test "tasks with no tasks exits with error" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :pending)
+
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start(["tasks", run_record.id.to_s]) }
+      end
+    end
+
     test "run --quiet suppresses informational output" do
       mock_run = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
 
