@@ -1,0 +1,122 @@
+name: Landing Page
+type: landing_page
+keywords:
+  - landing
+  - marketing
+  - homepage
+  - launch
+  - waitlist
+  - coming soon
+  - signup
+  - conversion
+  - seo
+  - static
+  - brochure
+  - portfolio
+description: >
+  Marketing or product landing page built with Rails 8+. Primarily
+  static content with dynamic elements for lead capture, waitlists,
+  or early signups. Uses Rails for form handling, email delivery,
+  and simple admin. Can serve as the public face of a larger Rails
+  application or stand alone.
+
+framework:
+  primary: Rails 8+
+  frontend: ERB views with Turbo for form interactions
+  css: Tailwind CSS via tailwindcss-rails
+  deployment: Kamal 2 (or static export if purely static)
+
+sections:
+  - name: Content & Layout
+    description: >
+      Page sections, copy structure, visual hierarchy, and responsive
+      design across devices.
+    rails_tools:
+      - ActionView (ERB templates, partials for each section)
+      - Tailwind CSS (utility-first responsive styling)
+    guidance:
+      - Structure page as composable partials (hero, features, pricing, CTA, footer)
+      - Design mobile-first; test at 320px, 768px, and 1280px breakpoints
+      - Keep above-the-fold content focused on one clear value proposition
+      - Use partials so sections can be reordered or A/B tested easily
+      - Include social proof section (testimonials, logos, stats)
+
+  - name: Lead Capture & Forms
+    description: >
+      Email signup forms, waitlist registration, contact forms, and
+      form submission handling.
+    rails_tools:
+      - ActionController (form handling)
+      - ActiveRecord (Lead, Subscriber, or Contact model)
+      - ActionMailer (confirmation emails)
+      - Turbo Streams (inline form success/error feedback)
+    guidance:
+      - Use Turbo for form submission to avoid full page reloads
+      - Validate email format server-side; show inline errors
+      - Send confirmation or welcome email via ActionMailer + Solid Queue
+      - Store UTM parameters and referrer with each lead for attribution
+      - Implement honeypot or rate limiting for spam prevention
+
+  - name: SEO & Meta
+    description: >
+      Search engine optimization, social sharing metadata, and
+      structured data.
+    rails_tools:
+      - ActionView helpers (meta tags, title, canonical URL)
+      - Custom SEO concern or helper module
+    guidance:
+      - Set unique title, description, and OG tags per page
+      - Include Open Graph and Twitter Card meta for social sharing
+      - Generate sitemap.xml (sitemap_generator gem or manual)
+      - Use semantic HTML (h1, h2, article, section) for crawlability
+      - Implement canonical URLs to prevent duplicate content
+
+  - name: Analytics & Tracking
+    description: >
+      Conversion tracking, visitor analytics, and A/B testing hooks.
+    guidance:
+      - Integrate analytics (Plausible, PostHog, or Google Analytics)
+      - Track form submissions as conversion events
+      - Set up goal funnels (visit → scroll → form start → submit)
+      - Plan A/B testing for headlines and CTAs (simple cookie-based variant assignment)
+      - Respect Do Not Track and cookie consent requirements
+
+  - name: Admin & Data Access
+    description: >
+      Simple admin interface to view leads, export data, and manage
+      page content.
+    rails_tools:
+      - Simple controller with authentication for admin views
+      - CSV export via Ruby CSV library
+    guidance:
+      - Build a minimal admin behind authentication (even HTTP Basic is fine early on)
+      - Show lead count, daily signups, and source breakdown
+      - Provide CSV export for leads
+      - Don't over-build admin; this is a landing page, not a CMS
+
+  - name: Performance & Delivery
+    description: >
+      Page load speed, asset optimization, and caching for fast
+      first impressions.
+    rails_tools:
+      - Propshaft (asset pipeline)
+      - Solid Cache (page caching)
+      - Thruster (gzip, HTTP/2)
+    guidance:
+      - Target under 2 second load time on 3G connection
+      - Use page-level caching; landing pages rarely change per-request
+      - Optimize images (WebP, responsive srcset)
+      - Minimize external scripts; each one adds latency
+      - Use Thruster for automatic gzip and HTTP/2 in production
+
+  - name: Deployment
+    description: >
+      Production hosting, domain setup, and SSL.
+    rails_tools:
+      - Kamal 2 (deployment)
+      - Thruster (auto SSL via Let's Encrypt)
+    guidance:
+      - Deploy with Kamal to a single small VPS (landing pages are low-traffic)
+      - Configure custom domain and SSL via Thruster
+      - Set up redirects (www → apex or vice versa)
+      - Plan for scaling up if a launch goes viral (Kamal can add servers)

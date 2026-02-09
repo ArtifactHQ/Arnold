@@ -11,18 +11,152 @@ keywords:
   - browser
   - spa
   - page
+  - webapp
+  - portal
+  - saas
+  - platform
 description: >
-  Full-stack web application with frontend UI, backend API, database,
-  and optional authentication. Covers responsive design, routing,
-  state management, and deployment.
+  Full-stack web application built on Rails 8+. Uses Hotwire (Turbo +
+  Stimulus) for reactive UI without heavy JavaScript frameworks. Covers
+  models, controllers, views, authentication, background jobs, real-time
+  features, and deployment via Kamal.
+
+framework:
+  primary: Rails 8+
+  frontend: Hotwire (Turbo Drive, Turbo Frames, Turbo Streams), Stimulus
+  asset_pipeline: Propshaft with importmaps (default) or jsbundling-rails
+  css: Tailwind CSS via tailwindcss-rails
+  deployment: Kamal 2
+  proxy: Thruster (HTTP/2, SSL, gzip)
+
 sections:
-  - name: Frontend
-    description: UI components, pages, layouts, and client-side interactions
-  - name: Backend
-    description: API endpoints, business logic, middleware, and server configuration
-  - name: Database
-    description: Data models, relationships, migrations, and seed data
-  - name: Authentication
-    description: User registration, login, sessions, and access control
-  - name: Deployment
-    description: Hosting, CI/CD, environment configuration
+  - name: Models & Database
+    description: >
+      ActiveRecord models, associations, validations, scopes, callbacks,
+      database schema (migrations), and seed data.
+    rails_tools:
+      - ActiveRecord (models, migrations, associations)
+      - ActiveStorage (file uploads)
+      - ActionText (rich text content)
+    guidance:
+      - Define all models with explicit validations and associations
+      - Use database-level constraints alongside ActiveRecord validations
+      - Plan migrations with rollback safety in mind
+      - Use counter_cache and database indexes for query performance
+
+  - name: Controllers & Routing
+    description: >
+      RESTful routes, controllers, strong parameters, filters, and
+      response formats (HTML, Turbo Stream, JSON).
+    rails_tools:
+      - ActionController
+      - ActionDispatch (routing)
+    guidance:
+      - Follow RESTful conventions; use resources/resource in routes
+      - Keep controllers thin; push logic to models or service objects
+      - Use before_action for authentication and authorization checks
+      - Support both HTML and Turbo Stream response formats
+
+  - name: Views & Frontend
+    description: >
+      ERB templates, layouts, partials, Turbo Frames for partial page
+      updates, Turbo Streams for real-time updates, and Stimulus
+      controllers for client-side behavior.
+    rails_tools:
+      - ActionView (ERB, partials, layouts, helpers)
+      - Turbo Drive (seamless navigation)
+      - Turbo Frames (scoped page updates)
+      - Turbo Streams (real-time DOM updates)
+      - Stimulus (lightweight JS controllers)
+    guidance:
+      - Default to server-rendered HTML with Turbo for interactivity
+      - Use Turbo Frames to avoid full page reloads on interactions
+      - Use Stimulus only for behavior that can't be handled by Turbo
+      - Keep JavaScript minimal; resist the pull toward SPA patterns
+      - Design mobile-first responsive layouts with Tailwind
+
+  - name: Authentication & Authorization
+    description: >
+      User registration, login, sessions, password resets, and
+      role-based access control.
+    rails_tools:
+      - Rails 8 authentication generator (bin/rails generate authentication)
+      - has_secure_password (bcrypt)
+      - Session management (cookie-based)
+    guidance:
+      - Start with the Rails 8 built-in authentication generator
+      - Add role/permission system only if multiple user types exist
+      - Use Current attributes for request-scoped user context
+      - Plan password reset and email confirmation flows early
+
+  - name: Background Jobs & Async
+    description: >
+      Asynchronous task processing for emails, data imports, scheduled
+      tasks, and long-running operations.
+    rails_tools:
+      - Solid Queue (default job backend in Rails 8)
+      - ActiveJob (job interface)
+      - ActionMailer (email delivery)
+    guidance:
+      - Use Solid Queue as the default; no Redis dependency needed
+      - Make all jobs idempotent and safe to retry
+      - Use ActionMailer with deliver_later for all transactional emails
+      - Define recurring jobs for scheduled tasks (Solid Queue recurring)
+
+  - name: Real-Time Features
+    description: >
+      WebSocket connections for live updates, notifications, and
+      collaborative features.
+    rails_tools:
+      - Solid Cable (Action Cable adapter, no Redis needed)
+      - ActionCable (WebSocket framework)
+      - Turbo Streams over WebSocket (broadcasts)
+    guidance:
+      - Use Turbo Stream broadcasts for model-driven live updates
+      - Use ActionCable channels for bidirectional real-time features
+      - Solid Cable removes the Redis dependency for pub/sub
+      - Design graceful degradation when WebSocket connection drops
+
+  - name: Caching & Performance
+    description: >
+      Page and fragment caching, database query optimization, and
+      asset performance.
+    rails_tools:
+      - Solid Cache (database-backed cache store)
+      - Fragment caching (cache helpers in views)
+      - Russian doll caching (nested cache keys)
+      - ActiveRecord query optimization (includes, eager_load)
+    guidance:
+      - Use Solid Cache as default; no Memcached/Redis needed
+      - Apply fragment caching to expensive partials early
+      - Use eager loading to eliminate N+1 queries
+      - Monitor with rack-mini-profiler in development
+
+  - name: Testing
+    description: >
+      Test strategy covering models, controllers, system tests, and
+      integration points.
+    rails_tools:
+      - Minitest (default) or RSpec
+      - Capybara (system tests)
+      - Fixtures or FactoryBot (test data)
+    guidance:
+      - Write model tests for all validations and critical business logic
+      - Write system tests for core user flows end-to-end
+      - Test Turbo Frame and Turbo Stream responses explicitly
+      - Keep test database seeding fast and deterministic
+
+  - name: Deployment & Infrastructure
+    description: >
+      Production deployment, environment configuration, SSL, and
+      monitoring.
+    rails_tools:
+      - Kamal 2 (Docker-based deployment)
+      - Thruster (HTTP/2 proxy with auto SSL)
+      - Rails credentials (encrypted secrets)
+      - Dockerfile (included by default in Rails 8)
+    guidance:
+      - Use Kamal for zero-downtime deploys to any VPS or cloud server
+      - Store secrets in Rails encrypted credentials, never in ENV alone
+      - Use Thruster as the production entry point for SSL and compression
+      - Plan database backup and migration strategy for production

@@ -1,0 +1,135 @@
+name: Mobile App
+type: mobile_app
+keywords:
+  - mobile
+  - ios
+  - android
+  - native
+  - react native
+  - flutter
+  - phone
+  - tablet
+  - app store
+  - play store
+  - push notification
+  - offline
+description: >
+  Mobile application with a Rails 8+ API backend. The frontend is a
+  native or cross-platform mobile app (React Native, Flutter, Swift,
+  Kotlin) that communicates with Rails via JSON API. Rails handles
+  authentication, business logic, data storage, push notifications,
+  file uploads, and background processing.
+
+framework:
+  backend: Rails 8+ (API mode)
+  frontend: React Native (recommended default), Flutter, or native Swift/Kotlin
+  auth: Token-based (JWT or Rails session tokens via API)
+  push: Action Notifier or third-party (Firebase Cloud Messaging, APNs)
+  deployment_backend: Kamal 2
+  deployment_mobile: App Store / Google Play
+
+sections:
+  - name: API Backend
+    description: >
+      Rails API-mode application serving JSON endpoints to the mobile
+      client. Covers all server-side logic, data storage, and
+      integrations.
+    rails_tools:
+      - ActionController::API
+      - ActiveRecord (models, migrations)
+      - ActiveStorage (file uploads via direct upload)
+      - Solid Queue (background jobs)
+    guidance:
+      - Build the API using the api_service recipe as foundation
+      - Version the API from day one (breaking changes strand old app versions)
+      - Support direct upload to cloud storage for images/videos
+      - Design endpoints for mobile-friendly payloads (minimize round trips)
+      - Include device registration endpoint for push notification tokens
+
+  - name: Screens & Navigation
+    description: >
+      Screen inventory, navigation patterns, tab structure, modals,
+      and deep linking.
+    guidance:
+      - Map every screen with a name, purpose, and data requirements
+      - Define navigation hierarchy (tabs, stacks, drawers)
+      - Plan deep linking scheme (app://resource/id) from the start
+      - Design for both phone and tablet layouts where applicable
+      - Keep navigation depth shallow (3 taps to any core feature)
+
+  - name: Authentication & Session
+    description: >
+      User registration, login, token management, biometric auth,
+      and session persistence on device.
+    rails_tools:
+      - Rails 8 authentication generator (adapted for API tokens)
+      - has_secure_password
+      - Custom token generation and refresh logic
+    guidance:
+      - Use short-lived access tokens with longer-lived refresh tokens
+      - Store tokens securely (Keychain on iOS, Keystore on Android)
+      - Support biometric authentication as a convenience layer
+      - Handle token expiry gracefully (auto-refresh, not hard logout)
+      - Plan the "logged out" experience (what's visible without auth)
+
+  - name: Offline & Data Sync
+    description: >
+      Local data storage, offline capability, and synchronization
+      strategy with the Rails backend.
+    guidance:
+      - Decide offline strategy early (offline-first vs online-required)
+      - Cache critical data locally for read access when offline
+      - Queue writes locally and sync when connectivity returns
+      - Handle merge conflicts with a clear strategy (last-write-wins, or manual)
+      - Show clear offline/online indicators in the UI
+      - Use ETags or last_modified headers from Rails for efficient sync
+
+  - name: Push Notifications
+    description: >
+      Notification types, delivery triggers, and device token
+      management.
+    rails_tools:
+      - Solid Queue (trigger notifications from background jobs)
+      - Custom notification service wrapping FCM/APNs
+    guidance:
+      - Register device tokens via API endpoint on app launch
+      - Handle token rotation (devices get new tokens periodically)
+      - Define notification categories with distinct actions
+      - Support notification preferences (user can mute categories)
+      - Test notification delivery on real devices early
+
+  - name: File & Media Handling
+    description: >
+      Image uploads, camera integration, video, and media display.
+    rails_tools:
+      - ActiveStorage (direct upload from mobile to cloud storage)
+      - Image processing (variants for thumbnails)
+    guidance:
+      - Use ActiveStorage direct upload to avoid proxying through Rails
+      - Generate image variants server-side for different screen densities
+      - Handle camera and photo library permissions explicitly
+      - Compress images client-side before upload on slow connections
+      - Plan for large file uploads with resumable upload support
+
+  - name: Testing
+    description: >
+      Backend API tests and mobile-specific testing strategy.
+    rails_tools:
+      - Minitest or RSpec (API request specs)
+      - Fixtures or FactoryBot
+    guidance:
+      - Test all API endpoints with request specs (see api_service recipe)
+      - Write mobile UI tests (XCTest, Espresso, or Detox for React Native)
+      - Test offline sync scenarios explicitly
+      - Test push notification registration and delivery flow
+      - Test on real devices, not just simulators
+
+  - name: Distribution
+    description: >
+      App store submission, beta testing, and update strategy.
+    guidance:
+      - Set up beta distribution early (TestFlight, Google Play Internal Testing)
+      - Plan app store metadata, screenshots, and review guidelines compliance
+      - Implement over-the-air updates for JS bundle (React Native) where possible
+      - Handle forced update flow for breaking API changes
+      - Plan app signing and certificate management from the start

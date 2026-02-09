@@ -8,18 +8,104 @@ keywords:
   - script
   - tool
   - utility
+  - rake
+  - generator
 description: >
-  Command-line interface tool with argument parsing, subcommands,
-  configuration files, and formatted output. May include interactive
-  prompts and progress indicators.
+  Command-line interface tool built in Ruby. Uses Thor or GLI for
+  argument parsing and subcommands. May optionally depend on Rails
+  components (ActiveRecord, ActiveSupport) for database access or
+  utilities, but runs as a standalone executable, not a web server.
+
+framework:
+  primary: Ruby (standalone)
+  cli_framework: Thor (preferred) or GLI
+  optional_rails: >
+    ActiveRecord (standalone) for database access,
+    ActiveSupport for core extensions and utilities
+  packaging: RubyGems or self-contained executable via Traveling Ruby
+
 sections:
-  - name: Commands
-    description: Subcommands, arguments, flags, and help text
+  - name: Commands & Arguments
+    description: >
+      Top-level commands, subcommands, positional arguments, flags,
+      options, and help text.
+    tools:
+      - Thor (command DSL, argument parsing, help generation)
+      - OptionParser (stdlib alternative for simple tools)
+    guidance:
+      - Define a clear command hierarchy (tool command subcommand --flag)
+      - Provide --help at every level with usage examples
+      - Use sensible defaults for all optional flags
+      - Support both short (-v) and long (--verbose) flag forms
+      - Exit with appropriate codes (0 success, 1 user error, 2 system error)
+
   - name: Configuration
-    description: Config file format, defaults, and environment variables
+    description: >
+      Config file loading, environment variable support, and
+      cascading defaults.
+    tools:
+      - YAML or TOML config files
+      - ENV variables with fallback chains
+      - XDG Base Directory conventions (~/.config/toolname/)
+    guidance:
+      - Support config file, ENV vars, and flags with clear precedence
+      - Use XDG paths on Linux/macOS, AppData on Windows
+      - Provide a config init or setup command to generate defaults
+      - Never require a config file; work with sensible defaults
+
   - name: Core Logic
-    description: Business logic and data processing
-  - name: Output
-    description: Formatting, colors, progress bars, and logging
-  - name: Distribution
-    description: Packaging, installation, and platform support
+    description: >
+      Business logic, data processing, file manipulation, and
+      external API calls.
+    tools:
+      - Plain Ruby classes and modules
+      - ActiveRecord (standalone) if database access is needed
+      - ActiveSupport for time, string, and collection utilities
+      - Net::HTTP, Faraday, or HTTParty for API calls
+    guidance:
+      - Keep logic in plain Ruby objects, independent of CLI framework
+      - Use dependency injection to keep logic testable
+      - Handle interrupts (Ctrl+C) gracefully with signal trapping
+      - If using ActiveRecord standalone, manage connections explicitly
+
+  - name: Output & User Interaction
+    description: >
+      Formatted output, colors, tables, progress indicators, and
+      interactive prompts.
+    tools:
+      - TTY toolkit (tty-prompt, tty-table, tty-progressbar, tty-spinner)
+      - Pastel (color output)
+      - $stdout / $stderr separation
+    guidance:
+      - Send normal output to stdout, errors and warnings to stderr
+      - Support --quiet and --no-color flags
+      - Use progress bars for long operations
+      - Use interactive prompts for destructive actions (with --yes override)
+      - Format structured data as tables or JSON (--format flag)
+
+  - name: Testing
+    description: >
+      Unit tests for logic, integration tests for command execution,
+      and output verification.
+    tools:
+      - Minitest or RSpec
+      - Aruba (CLI integration testing)
+      - StringIO (capture stdout/stderr in tests)
+    guidance:
+      - Test core logic independently from CLI interface
+      - Test full command invocations with Aruba for integration coverage
+      - Verify exit codes, stdout content, and stderr content
+      - Test config file parsing and precedence rules
+
+  - name: Distribution & Packaging
+    description: >
+      Gem packaging, installation instructions, and platform support.
+    tools:
+      - RubyGems (gem build, gem push)
+      - Bundler (dependency management)
+      - Traveling Ruby or Ruby Packer (self-contained binaries)
+    guidance:
+      - Package as a gem with a clear bin/ executable
+      - Pin dependencies tightly in gemspec
+      - Test on Ruby versions you claim to support
+      - Provide Homebrew formula or install script if targeting non-Ruby users

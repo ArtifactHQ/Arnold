@@ -9,17 +9,132 @@ keywords:
   - service
   - json
   - backend
+  - headless
+  - webhook
 description: >
-  Backend API service exposing RESTful or GraphQL endpoints. Focuses on
-  request/response contracts, authentication, rate limiting, and documentation.
+  Backend API service built on Rails 8+ in API mode. Exposes RESTful or
+  GraphQL endpoints with token-based authentication, rate limiting,
+  versioning, and structured error responses. Serves as backend for
+  mobile apps, SPAs, third-party integrations, or microservice
+  architectures.
+
+framework:
+  primary: Rails 8+ (API mode)
+  serialization: Jbuilder, ActiveModelSerializers, or Alba
+  auth: JWT or API key-based (custom or Doorkeeper for OAuth)
+  docs: Rswag (OpenAPI/Swagger) or manual OpenAPI spec
+  deployment: Kamal 2
+
 sections:
-  - name: Endpoints
-    description: API routes, request/response schemas, and versioning
-  - name: Authentication
-    description: API keys, OAuth, JWT tokens, and authorization
-  - name: Data Layer
-    description: Models, database schema, and data access patterns
-  - name: Middleware
-    description: Rate limiting, logging, CORS, and error handling
-  - name: Documentation
-    description: OpenAPI/Swagger specs and usage examples
+  - name: Endpoints & Routing
+    description: >
+      RESTful resource routes, versioned API namespaces, request/response
+      schemas, and pagination.
+    rails_tools:
+      - ActionController::API (lightweight base controller)
+      - ActionDispatch routing with namespace versioning
+      - Jbuilder or Alba (JSON serialization)
+    guidance:
+      - Version APIs from day one (api/v1/ namespace)
+      - Use consistent JSON response envelopes (data, meta, errors)
+      - Implement cursor-based or page-based pagination on all list endpoints
+      - Return appropriate HTTP status codes; don't overuse 200 for errors
+      - Define clear request/response schemas before implementation
+
+  - name: Authentication & Authorization
+    description: >
+      API key management, token-based auth (JWT or session tokens),
+      OAuth flows for third-party access, and scoped permissions.
+    rails_tools:
+      - has_secure_password (for user-facing auth)
+      - Custom token middleware or Doorkeeper (OAuth2)
+      - Rails credentials (secret storage)
+    guidance:
+      - Use bearer tokens in Authorization header, not query params
+      - Implement API key rotation and revocation
+      - Scope permissions per token or per API key
+      - Return 401 for missing auth, 403 for insufficient permissions
+      - Log all authentication events for audit
+
+  - name: Models & Data Layer
+    description: >
+      ActiveRecord models, database schema, query optimization,
+      and data integrity rules.
+    rails_tools:
+      - ActiveRecord (models, migrations, associations)
+      - ActiveStorage (file handling via API)
+    guidance:
+      - Use database constraints as the source of truth for integrity
+      - Design models for API consumption (avoid leaking internal structure)
+      - Use serializers to control exactly what fields are exposed
+      - Plan for soft deletes on user-facing resources
+
+  - name: Middleware & Cross-Cutting Concerns
+    description: >
+      Rate limiting, CORS configuration, request logging, error
+      handling, and request validation.
+    rails_tools:
+      - Rack::Cors (CORS handling)
+      - Rack::Attack (rate limiting and throttling)
+      - ActiveSupport::Notifications (instrumentation)
+      - Custom exception handling middleware
+    guidance:
+      - Configure CORS explicitly; don't use wildcard in production
+      - Implement rate limiting per API key or IP with Rack::Attack
+      - Return structured error JSON with error codes, not just messages
+      - Log request/response metadata for debugging (not sensitive data)
+      - Use rescue_from in base controller for consistent error responses
+
+  - name: Background Jobs & Webhooks
+    description: >
+      Async processing for heavy operations and outbound webhook
+      delivery to consumers.
+    rails_tools:
+      - Solid Queue (job backend)
+      - ActiveJob (job interface)
+      - ActionMailer (transactional emails)
+    guidance:
+      - Offload anything over 200ms to a background job
+      - Implement webhook delivery with retries and exponential backoff
+      - Make all jobs idempotent; use unique job keys to prevent duplicates
+      - Provide webhook signature verification for consumers
+
+  - name: Documentation & Developer Experience
+    description: >
+      API documentation, interactive exploration, and onboarding
+      for consumers.
+    rails_tools:
+      - Rswag (generates OpenAPI spec from RSpec tests)
+      - Custom /docs endpoint or hosted Swagger UI
+    guidance:
+      - Generate OpenAPI 3.x spec; keep it in sync with implementation
+      - Include request/response examples for every endpoint
+      - Document error codes and their meanings
+      - Provide a Postman collection or equivalent for quick testing
+
+  - name: Testing
+    description: >
+      Request specs, contract testing, and integration tests for
+      all API endpoints.
+    rails_tools:
+      - Minitest or RSpec (request specs)
+      - Fixtures or FactoryBot
+      - Rswag (spec-driven API testing)
+    guidance:
+      - Write request specs for every endpoint and status code path
+      - Test authentication and authorization edge cases explicitly
+      - Validate JSON response structure, not just status codes
+      - Test rate limiting behavior under load
+
+  - name: Deployment & Infrastructure
+    description: >
+      Production deployment, scaling, monitoring, and health checks.
+    rails_tools:
+      - Kamal 2 (deployment)
+      - Thruster (HTTP/2 proxy)
+      - Rails credentials (secrets)
+    guidance:
+      - Expose /health or /up endpoint for load balancer checks
+      - Use Kamal for rolling deploys with health check gates
+      - Plan horizontal scaling strategy (stateless controllers)
+      - Monitor API response times and error rates from day one

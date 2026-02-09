@@ -1,0 +1,149 @@
+name: Bot / Agent
+type: bot_agent
+keywords:
+  - bot
+  - chatbot
+  - agent
+  - discord
+  - slack
+  - telegram
+  - assistant
+  - automation
+  - ai agent
+  - conversational
+  - webhook
+  - integration
+description: >
+  Conversational bot or automated agent with a Rails 8+ backend.
+  Rails handles webhook ingestion, conversation state, user
+  management, AI/LLM integration, and business logic. The bot
+  connects to one or more platforms (Discord, Slack, Telegram,
+  web chat) via their APIs and webhooks.
+
+framework:
+  primary: Rails 8+ (full or API mode)
+  bot_adapters: Platform SDKs (discordrb, slack-ruby-client, telegram-bot-ruby)
+  ai_integration: ruby-openai, anthropic gem, or HTTP client to LLM APIs
+  realtime: Action Cable (for web-based chat widget)
+  deployment: Kamal 2
+
+sections:
+  - name: Platform Integration
+    description: >
+      Connecting to messaging platforms via webhooks, WebSockets,
+      or polling. Handling platform-specific message formats and
+      API constraints.
+    rails_tools:
+      - ActionController (webhook endpoints)
+      - ActiveJob / Solid Queue (async message processing)
+    guidance:
+      - Accept platform webhooks at dedicated controller endpoints
+      - Verify webhook signatures for security (each platform has its own method)
+      - Normalize incoming messages to a common internal format immediately
+      - Handle platform rate limits and retry policies
+      - Support multiple platforms via adapter pattern (normalize early)
+      - For Discord/Slack bots requiring persistent WebSocket, run adapter as a separate process alongside Rails
+
+  - name: Conversation Management
+    description: >
+      Message handling, conversation state, context tracking,
+      and multi-turn interactions.
+    rails_tools:
+      - ActiveRecord (Conversation, Message, User models)
+      - Callbacks or state machine gem (aasm) for conversation flow
+    guidance:
+      - Store all messages in a conversations/messages table for context
+      - Track conversation state (active, waiting_for_input, completed)
+      - Define clear conversation flows as state machines for structured bots
+      - For AI-powered bots, maintain a sliding context window of recent messages
+      - Handle conversation timeouts and stale session cleanup
+      - Support conversation handoff to human operators when needed
+
+  - name: Command & Intent Handling
+    description: >
+      Parsing user input into actionable intents, routing to
+      handlers, and executing commands.
+    guidance:
+      - For command-based bots, parse !command or /command prefixes
+      - For AI-powered bots, use LLM to extract intent and entities
+      - Route intents to handler classes (one class per intent/command)
+      - Define a fallback handler for unrecognized input
+      - Support help/info commands that list available capabilities
+      - Log all command invocations for analytics and debugging
+
+  - name: AI / LLM Integration
+    description: >
+      Connecting to language models for natural language understanding,
+      generation, and tool use.
+    rails_tools:
+      - ruby-openai or anthropic gem (API clients)
+      - Solid Queue (async LLM calls to avoid blocking)
+      - Solid Cache (cache repeated query responses)
+    guidance:
+      - Wrap LLM calls in a service object with timeout and retry logic
+      - Stream responses when the platform supports it (better UX)
+      - Cache responses for common or repeated queries to reduce cost
+      - Implement token counting and budget limits per user or conversation
+      - Store prompt templates in the database or config for easy iteration
+      - Use background jobs for LLM calls; respond with "thinking..." indicator
+      - Implement tool/function calling if the bot needs to take actions
+
+  - name: Actions & Side Effects
+    description: >
+      Things the bot can do beyond responding: creating records,
+      calling APIs, scheduling tasks, sending notifications.
+    rails_tools:
+      - ActiveRecord (CRUD operations)
+      - ActiveJob / Solid Queue (async action execution)
+      - ActionMailer (email notifications)
+      - HTTP clients (Faraday) for external API calls
+    guidance:
+      - Define each action as a discrete service object
+      - Confirm destructive actions before executing ("Are you sure?")
+      - Log all actions with the triggering user and conversation context
+      - Handle external API failures gracefully; report back to user
+      - Rate limit actions per user to prevent abuse
+
+  - name: Web Chat Widget
+    description: >
+      Optional browser-based chat interface embedded on a website,
+      powered by Action Cable.
+    rails_tools:
+      - Action Cable / Solid Cable (WebSocket)
+      - Turbo Streams (real-time message rendering)
+      - Stimulus (chat UI controller)
+    guidance:
+      - Build as an embeddable widget (iframe or JS snippet)
+      - Use Action Cable for real-time message delivery
+      - Support typing indicators and read receipts
+      - Handle reconnection gracefully when WebSocket drops
+      - Style to match the host website (configurable colors/branding)
+
+  - name: Testing
+    description: >
+      Testing conversation flows, command handling, and platform
+      integration.
+    rails_tools:
+      - Minitest or RSpec
+      - WebMock or VCR (mock platform APIs and LLM calls)
+      - Fixtures or FactoryBot
+    guidance:
+      - Mock platform webhook payloads for controller tests
+      - Test conversation state transitions end-to-end
+      - Mock LLM responses with VCR or WebMock (don't call real APIs in tests)
+      - Test edge cases (empty input, very long messages, special characters)
+      - Test rate limiting and abuse prevention
+
+  - name: Deployment & Operations
+    description: >
+      Running the bot reliably with monitoring and uptime.
+    rails_tools:
+      - Kamal 2 (deploy Rails app)
+      - Solid Queue (reliable job processing)
+      - Procfile or kamal accessories (for persistent bot processes)
+    guidance:
+      - Deploy Rails with Kamal; run bot adapter processes as Kamal accessories
+      - Monitor webhook delivery failures (platforms stop sending if you're down)
+      - Set up health checks and uptime monitoring
+      - Log conversation metrics (messages/day, response times, error rates)
+      - Plan for graceful restarts (don't drop in-flight conversations)

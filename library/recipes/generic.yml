@@ -9,17 +9,86 @@ keywords:
   - create
   - make
 description: >
-  A general-purpose recipe for applications that don't fit neatly into
-  other categories. Provides a balanced structure covering common concerns.
-  Used as fallback when no specialized recipe matches.
+  General-purpose fallback recipe for applications that don't clearly
+  match a specialized recipe. Provides a balanced structure using
+  Rails 8+ conventions where applicable. When a project's delivery
+  form is unclear, this recipe provides safe defaults while the domain
+  type supplies the problem-space guidance.
+
+framework:
+  primary: Rails 8+ (full stack, default assumption)
+  fallback: Ruby standalone (if no web component)
+  frontend: Hotwire (Turbo + Stimulus)
+  deployment: Kamal 2
+
 sections:
   - name: Core Features
-    description: Primary functionality and user-facing features
+    description: >
+      Primary functionality and user-facing features. Define the
+      happy-path workflows and key interactions.
+    guidance:
+      - List features as user-facing capabilities, not technical tasks
+      - Prioritize ruthlessly; mark must-have vs nice-to-have
+      - Define the single most important user flow first
+      - Identify which Rails conventions (resources, scaffold) apply
+
   - name: Data Model
-    description: Data structures, storage, and relationships
+    description: >
+      Data structures, storage, relationships, and integrity rules.
+    rails_tools:
+      - ActiveRecord (models, migrations, associations)
+      - ActiveStorage (file uploads)
+      - ActionText (rich text)
+    guidance:
+      - Start with an entity-relationship sketch before writing migrations
+      - Use database-level constraints alongside ActiveRecord validations
+      - Plan for soft deletes if data has audit or recovery value
+      - Identify which models need versioning or history tracking
+
+  - name: User Interface
+    description: >
+      Screens, navigation, layouts, and interaction patterns.
+    rails_tools:
+      - ActionView (ERB templates, partials)
+      - Hotwire (Turbo Frames, Turbo Streams, Stimulus)
+      - Tailwind CSS via tailwindcss-rails
+    guidance:
+      - Start with server-rendered HTML; add Turbo interactivity as needed
+      - Design for mobile-first if end users may access on phones
+      - Use Turbo Frames for in-page updates without full reloads
+      - Keep JavaScript minimal and Stimulus-driven
+
   - name: Integration
-    description: External services, APIs, and third-party dependencies
+    description: >
+      External services, APIs, and third-party dependencies.
+    guidance:
+      - List all external service dependencies explicitly
+      - Plan for service outages with fallbacks and circuit breakers
+      - Use ActiveJob for async external calls that can be retried
+      - Store API keys in Rails encrypted credentials
+
   - name: Testing
-    description: Test strategy, coverage targets, and test data
-  - name: Configuration
-    description: Settings, environment variables, and customization options
+    description: >
+      Test strategy, coverage targets, and test data.
+    rails_tools:
+      - Minitest (default) or RSpec
+      - Capybara (system tests)
+      - Fixtures or FactoryBot
+    guidance:
+      - Test critical business logic in model tests
+      - Test core user flows with system tests
+      - Aim for confidence in deploy safety, not arbitrary coverage numbers
+      - Keep test suite fast enough to run on every commit
+
+  - name: Configuration & Deployment
+    description: >
+      Settings, environment management, and production infrastructure.
+    rails_tools:
+      - Rails credentials (encrypted secrets)
+      - Kamal 2 (deployment)
+      - Thruster (HTTP/2 proxy)
+    guidance:
+      - Use Rails environments (development, test, production) properly
+      - Store all secrets in encrypted credentials
+      - Plan deployment strategy early, even for MVP
+      - Set up basic error tracking and logging from the start
