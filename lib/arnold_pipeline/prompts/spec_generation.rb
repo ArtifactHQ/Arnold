@@ -1,7 +1,7 @@
 module ArnoldPipeline
   module Prompts
     module SpecGeneration
-      def self.system_prompt(persona:, recipe:, domain_type:)
+      def self.system_prompt(persona:, recipe:, supporting_recipes: [], domain_type:)
         <<~PROMPT
           #{persona.system_prompt}
 
@@ -42,13 +42,17 @@ module ArnoldPipeline
 
           # Recipe Scaffold
 
-          Use this recipe as secondary technical guidance for structuring implementation concerns:
-
           Recipe: #{recipe.name}
-          #{recipe.sections.map { |s| "- #{s['name']}: #{s['description']}" }.join("\n")}
+          #{recipe.description}
 
-          Tech stack recommendations from the recipe are lightweight guidance, not primary structure.
-          Focus on WHAT the application does, not HOW it is built.
+          #{framework_section(recipe)}
+
+          #{sections_detail(recipe)}
+
+          #{supporting_recipes_section(supporting_recipes)}
+
+          Use the recipe's framework, tools, and guidance to inform your technology choices
+          and implementation approach. Reflect these in the tech_stack of your JSON metadata.
 
           # Document Structure
 
@@ -184,7 +188,8 @@ module ArnoldPipeline
             "features": ["feature1", "feature2", ...],
             "tech_stack": {"frontend": "...", "backend": "...", "database": "..."},
             "data_models": [{"name": "...", "attributes": [...]}],
-            "recipe_type": "#{recipe.type}"
+            "recipe_type": "#{recipe.type}",
+            "supporting_recipe_types": #{supporting_recipes.map(&:type).inspect}
           }
         PROMPT
       end
@@ -207,7 +212,60 @@ module ArnoldPipeline
         SECTION
       end
 
-      private_class_method :terminology_section
+      def self.framework_section(recipe)
+        return "" if recipe.framework.nil? || recipe.framework.empty?
+
+        items = recipe.framework.map { |key, value| "- #{key}: #{value}" }.join("\n")
+        <<~SECTION.strip
+          Framework stack:
+          #{items}
+        SECTION
+      end
+
+      def self.sections_detail(recipe)
+        return "" if recipe.sections.empty?
+
+        recipe.sections.map { |s| format_section(s) }.join("\n\n")
+      end
+
+      def self.format_section(section)
+        parts = ["### #{section['name']}"]
+        parts << section["description"].strip if section["description"]
+
+        tools = section["rails_tools"] || section["tools"]
+        if tools && !tools.empty?
+          parts << ""
+          parts << "Tools:"
+          tools.each { |t| parts << "- #{t}" }
+        end
+
+        guidance = section["guidance"]
+        if guidance && !guidance.empty?
+          parts << ""
+          parts << "Implementation guidance:"
+          guidance.each { |g| parts << "- #{g}" }
+        end
+
+        parts.join("\n")
+      end
+
+      def self.supporting_recipes_section(recipes)
+        return "" if recipes.nil? || recipes.empty?
+
+        parts = ["## Supporting recipes"]
+        parts << "These additional recipes may be relevant. Consider their section concerns where applicable:"
+
+        recipes.each do |r|
+          section_names = r.sections.map { |s| s["name"] }.join(", ")
+          parts << ""
+          parts << "**#{r.name}** — #{r.description&.strip}"
+          parts << "Sections: #{section_names}"
+        end
+
+        parts.join("\n")
+      end
+
+      private_class_method :terminology_section, :framework_section, :sections_detail, :format_section, :supporting_recipes_section
     end
   end
 end

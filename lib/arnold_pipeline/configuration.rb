@@ -8,17 +8,16 @@ module ArnoldPipeline
       openai:    { env_key: "OPENAI_API_KEY",    model: "gpt-4o" }
     }.freeze
 
-    attr_accessor :llm_provider,
-                  :execution_provider, :github_token, :github_repo,
+    attr_accessor :execution_provider, :github_token, :github_repo,
                   :github_issue_mention,
                   :max_iterations, :library_path,
                   :polling_interval, :polling_timeout, :polling_max_interval,
                   :tier_gate_enabled, :context_propagation_enabled, :max_tier_retries,
                   :workflow_status_enabled, :workflow_branch_pattern
-    attr_writer   :llm_api_key, :llm_model
+    attr_writer   :llm_provider, :llm_api_key, :llm_model
 
     def initialize
-      @llm_provider       = :anthropic
+      @llm_provider       = nil
       @llm_api_key        = nil
       @llm_model          = nil
       @execution_provider = :github
@@ -37,19 +36,23 @@ module ArnoldPipeline
       @workflow_branch_pattern     = /issue[-_]?\d+/i
     end
 
+    def llm_provider
+      @llm_provider || detect_provider
+    end
+
     def llm_api_key
-      @llm_api_key || ENV[PROVIDER_DEFAULTS.dig(@llm_provider, :env_key).to_s]
+      @llm_api_key || ENV[PROVIDER_DEFAULTS.dig(llm_provider, :env_key).to_s]
     end
 
     def llm_model
-      @llm_model || PROVIDER_DEFAULTS.dig(@llm_provider, :model)
+      @llm_model || PROVIDER_DEFAULTS.dig(llm_provider, :model)
     end
 
-    def validate!
+    def validate!(stop_after: nil)
       validate_llm_provider!
       validate_llm_api_key!
       validate_execution_provider!
-      validate_github_config!
+      validate_github_config! unless %i[spec tasks].include?(stop_after)
       validate_max_iterations!
       validate_polling_config!
       validate_max_tier_retries!
@@ -59,17 +62,27 @@ module ArnoldPipeline
 
     private
 
-    def validate_llm_provider!
-      return if VALID_LLM_PROVIDERS.include?(@llm_provider)
+    def detect_provider
+      if ENV["ANTHROPIC_API_KEY"] && !ENV["ANTHROPIC_API_KEY"].empty?
+        :anthropic
+      elsif ENV["OPENAI_API_KEY"] && !ENV["OPENAI_API_KEY"].empty?
+        :openai
+      else
+        :anthropic
+      end
+    end
 
-      raise ConfigurationError, "Invalid LLM provider: #{@llm_provider}. Must be one of: #{VALID_LLM_PROVIDERS.join(', ')}"
+    def validate_llm_provider!
+      return if VALID_LLM_PROVIDERS.include?(llm_provider)
+
+      raise ConfigurationError, "Invalid LLM provider: #{llm_provider}. Must be one of: #{VALID_LLM_PROVIDERS.join(', ')}"
     end
 
     def validate_llm_api_key!
       key = llm_api_key
       return if key && !key.empty?
 
-      env_var = PROVIDER_DEFAULTS.dig(@llm_provider, :env_key) || "ANTHROPIC_API_KEY"
+      env_var = PROVIDER_DEFAULTS.dig(llm_provider, :env_key) || "ANTHROPIC_API_KEY"
       raise ConfigurationError, "LLM API key is required. Set llm_api_key or #{env_var} environment variable."
     end
 

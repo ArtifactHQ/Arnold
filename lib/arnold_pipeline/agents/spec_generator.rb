@@ -4,11 +4,11 @@ require "arnold_pipeline/prompts/spec_generation"
 module ArnoldPipeline
   module Agents
     class SpecGenerator < BaseAgent
-      def call(nl_input:, persona:, recipe:, domain_type:)
+      def call(nl_input:, persona:, recipe:, supporting_recipes: [], domain_type:)
         logger.info { "Generating spec for: #{nl_input.truncate(80)}" }
         logger.info { "Domain type: #{domain_type.code} — #{domain_type.name}" }
 
-        system = Prompts::SpecGeneration.system_prompt(persona:, recipe:, domain_type:)
+        system = Prompts::SpecGeneration.system_prompt(persona:, recipe:, supporting_recipes:, domain_type:)
         user = Prompts::SpecGeneration.user_prompt(nl_input:)
 
         response = chat(

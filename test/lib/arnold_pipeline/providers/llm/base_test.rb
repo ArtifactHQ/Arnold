@@ -29,6 +29,27 @@ module ArnoldPipeline
           end
         end
 
+        test "build raises ConfigurationError when api_key is nil" do
+          original = ENV["ANTHROPIC_API_KEY"]
+          ENV.delete("ANTHROPIC_API_KEY")
+          ArnoldPipeline.configure { |c| c.llm_api_key = nil }
+
+          error = assert_raises(ConfigurationError) do
+            Llm.build(provider: :anthropic, model: "claude-sonnet-4-20250514")
+          end
+          assert_match(/LLM API key is required/, error.message)
+        ensure
+          ENV["ANTHROPIC_API_KEY"] = original
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "build raises ConfigurationError when api_key is empty" do
+          error = assert_raises(ConfigurationError) do
+            Llm.build(provider: :openai, api_key: "", model: "gpt-4o")
+          end
+          assert_match(/LLM API key is required/, error.message)
+        end
+
         test "base class raises NotImplementedError" do
           assert_raises(NotImplementedError) do
             Base.new.chat(messages: [])

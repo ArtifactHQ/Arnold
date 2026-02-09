@@ -13,6 +13,12 @@ module ArnoldPipeline
         api_key  ||= config.llm_api_key
         model    ||= config.llm_model
 
+        if api_key.nil? || api_key.to_s.empty?
+          env_var = Configuration::PROVIDER_DEFAULTS.dig(provider, :env_key)
+          raise ConfigurationError,
+            "LLM API key is required. Set #{env_var} environment variable or use --provider to select a different provider."
+        end
+
         case provider
         when :anthropic
           require_relative "anthropic"

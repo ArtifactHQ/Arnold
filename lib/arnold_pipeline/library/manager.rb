@@ -33,7 +33,26 @@ module ArnoldPipeline
         unless best
           @logger.warn { "Library: No recipe matched input '#{nl_input.truncate(50)}', falling back to generic" }
         end
-        best || @recipes[FALLBACK_RECIPE] || @recipes.values.first
+        best || fallback_recipe
+      end
+
+      def find_recipes(nl_input)
+        input_words = tokenize(nl_input)
+        return { primary: fallback_recipe, supporting: [] } if input_words.empty?
+
+        scored = @recipes.values.map do |recipe|
+          score = recipe.keywords.count { |kw| input_words.include?(kw.downcase) }
+          [recipe, score]
+        end.select { |_, score| score > 0 }
+          .sort_by { |_, score| -score }
+
+        return { primary: fallback_recipe, supporting: [] } if scored.empty?
+
+        primary = scored.first.first
+        threshold = (scored.first.last / 2.0).ceil
+        supporting = scored[1..].select { |_, score| score >= threshold }.map(&:first)
+
+        { primary:, supporting: }
       end
 
       def find_domain_type(nl_input)
@@ -91,6 +110,7 @@ module ArnoldPipeline
             type: data["type"],
             keywords: data["keywords"] || [],
             description: data["description"]&.strip,
+            framework: data["framework"] || {},
             sections: data["sections"] || []
           )
         end
@@ -112,6 +132,10 @@ module ArnoldPipeline
             terminology: data["terminology"] || {}
           )
         end
+      end
+
+      def fallback_recipe
+        @recipes[FALLBACK_RECIPE] || @recipes.values.first
       end
 
       def best_match(items, nl_input)

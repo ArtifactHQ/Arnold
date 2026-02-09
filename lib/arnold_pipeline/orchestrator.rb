@@ -37,13 +37,13 @@ module ArnoldPipeline
     end
 
     def call(nl_input:, stop_after: nil, pipeline_run: nil)
-      ArnoldPipeline.configuration.validate!
+      ArnoldPipeline.configuration.validate!(stop_after:)
       pipeline_run ||= PipelineRun.create!(nl_input:, status: :pending)
       run_pipeline!(pipeline_run, from: :generate_spec, stop_after:)
     end
 
     def resume(pipeline_run:, stop_after: nil)
-      ArnoldPipeline.configuration.validate!
+      ArnoldPipeline.configuration.validate!(stop_after:)
       unless pipeline_run.paused? || pipeline_run.failed?
         raise ArgumentError, "Cannot resume a #{pipeline_run.status} pipeline run"
       end
@@ -86,7 +86,9 @@ module ArnoldPipeline
       logger.info { "[Arnold] Generating specification..." }
 
       persona = library_manager.find_persona(pipeline_run.nl_input)
-      recipe = library_manager.find_recipe(pipeline_run.nl_input)
+      recipes = library_manager.find_recipes(pipeline_run.nl_input)
+      recipe = recipes[:primary]
+      supporting_recipes = recipes[:supporting]
       domain_type = library_manager.find_domain_type(pipeline_run.nl_input)
       logger.info { "[Arnold] Selected domain type: #{domain_type.code} — #{domain_type.name}" }
 
@@ -94,6 +96,7 @@ module ArnoldPipeline
         nl_input: pipeline_run.nl_input,
         persona:,
         recipe:,
+        supporting_recipes:,
         domain_type:
       )
 

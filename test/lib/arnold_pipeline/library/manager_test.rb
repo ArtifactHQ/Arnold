@@ -20,12 +20,15 @@ module ArnoldPipeline
 
       test "loads all recipes" do
         recipes = @manager.all_recipes
-        assert_equal 4, recipes.size
+        assert_equal 7, recipes.size
         names = recipes.map(&:name)
         assert_includes names, "Web App"
         assert_includes names, "API Service"
         assert_includes names, "CLI Tool"
         assert_includes names, "Generic"
+        assert_includes names, "Bot / Agent"
+        assert_includes names, "Landing Page"
+        assert_includes names, "Mobile App"
       end
 
       test "personas are Persona data objects" do
@@ -43,7 +46,14 @@ module ArnoldPipeline
         assert_respond_to recipe, :name
         assert_respond_to recipe, :type
         assert_respond_to recipe, :keywords
+        assert_respond_to recipe, :framework
         assert_respond_to recipe, :sections
+      end
+
+      test "recipe framework loaded as Hash with expected keys" do
+        recipe = @manager.find_recipe("Build a responsive web dashboard")
+        assert_kind_of Hash, recipe.framework
+        assert recipe.framework.key?("primary"), "Expected framework to have 'primary' key"
       end
 
       test "find_persona matches software architect keywords" do
@@ -81,9 +91,53 @@ module ArnoldPipeline
         assert_equal "CLI Tool", recipe.name
       end
 
+      test "find_recipe matches bot agent keywords" do
+        recipe = @manager.find_recipe("Build a Discord chatbot assistant")
+        assert_equal "Bot / Agent", recipe.name
+      end
+
+      test "find_recipe matches landing page keywords" do
+        recipe = @manager.find_recipe("Create a marketing landing page")
+        assert_equal "Landing Page", recipe.name
+      end
+
+      test "find_recipe matches mobile app keywords" do
+        recipe = @manager.find_recipe("Build a native mobile app for iOS and Android")
+        assert_equal "Mobile App", recipe.name
+      end
+
       test "find_recipe falls back to generic" do
         recipe = @manager.find_recipe("something completely unrelated xyzzy")
         assert_equal "Generic", recipe.name
+      end
+
+      # find_recipes tests
+
+      test "find_recipes returns primary with empty supporting for single match" do
+        result = @manager.find_recipes("Build a command line utility tool")
+        assert_equal "CLI Tool", result[:primary].name
+        assert_empty result[:supporting]
+      end
+
+      test "find_recipes returns primary and supporting within 50% threshold" do
+        result = @manager.find_recipes("Build a web dashboard with JSON API endpoints")
+        primary_name = result[:primary].name
+        supporting_names = result[:supporting].map(&:name)
+        all_names = [primary_name] + supporting_names
+        assert_includes all_names, "Web App"
+        assert_includes all_names, "API Service"
+      end
+
+      test "find_recipes falls back to generic with empty supporting when no match" do
+        result = @manager.find_recipes("xyzzy completely unrelated nonsense")
+        assert_equal "Generic", result[:primary].name
+        assert_empty result[:supporting]
+      end
+
+      test "find_recipes returns fallback for empty input" do
+        result = @manager.find_recipes("")
+        assert_equal "Generic", result[:primary].name
+        assert_empty result[:supporting]
       end
 
       test "loads all domain types" do
@@ -173,6 +227,8 @@ module ArnoldPipeline
           type: custom
           keywords: [custom]
           description: A custom recipe
+          framework:
+            primary: Custom Framework
           sections: []
         YAML
 

@@ -7,8 +7,8 @@ module ArnoldPipeline
     end
 
     test "has sensible defaults" do
-      assert_equal :anthropic, @config.llm_provider
-      assert_equal "claude-sonnet-4-20250514", @config.llm_model
+      assert_includes Configuration::VALID_LLM_PROVIDERS, @config.llm_provider
+      assert_includes ["claude-sonnet-4-20250514", "gpt-4o"], @config.llm_model
       assert_equal :github, @config.execution_provider
       assert_equal 3, @config.max_iterations
       assert_nil @config.github_issue_mention
@@ -107,6 +107,7 @@ module ArnoldPipeline
     end
 
     test "llm_model defaults based on provider" do
+      @config.llm_provider = :anthropic
       assert_equal "claude-sonnet-4-20250514", @config.llm_model
 
       @config.llm_provider = :openai
@@ -136,10 +137,10 @@ module ArnoldPipeline
     end
 
     test "reset_configuration! restores defaults" do
-      ArnoldPipeline.configure { |c| c.llm_provider = :openai }
+      ArnoldPipeline.configure { |c| c.llm_model = "custom-model" }
       ArnoldPipeline.reset_configuration!
 
-      assert_equal :anthropic, ArnoldPipeline.configuration.llm_provider
+      assert_includes ["claude-sonnet-4-20250514", "gpt-4o"], ArnoldPipeline.configuration.llm_model
     end
 
     test "validate! raises on invalid polling_interval" do
@@ -239,6 +240,103 @@ module ArnoldPipeline
 
       error = assert_raises(ConfigurationError) { @config.validate! }
       assert_match(/workflow_branch_pattern must be a Regexp/, error.message)
+    end
+
+    # --- Auto-detection tests ---
+
+    test "auto-detects anthropic when ANTHROPIC_API_KEY is set" do
+      original_anthropic = ENV["ANTHROPIC_API_KEY"]
+      original_openai = ENV["OPENAI_API_KEY"]
+      ENV["ANTHROPIC_API_KEY"] = "sk-ant-test"
+      ENV.delete("OPENAI_API_KEY")
+
+      config = Configuration.new
+      assert_equal :anthropic, config.llm_provider
+    ensure
+      ENV["ANTHROPIC_API_KEY"] = original_anthropic
+      ENV["OPENAI_API_KEY"] = original_openai
+    end
+
+    test "auto-detects openai when only OPENAI_API_KEY is set" do
+      original_anthropic = ENV["ANTHROPIC_API_KEY"]
+      original_openai = ENV["OPENAI_API_KEY"]
+      ENV.delete("ANTHROPIC_API_KEY")
+      ENV["OPENAI_API_KEY"] = "sk-openai-test"
+
+      config = Configuration.new
+      assert_equal :openai, config.llm_provider
+    ensure
+      ENV["ANTHROPIC_API_KEY"] = original_anthropic
+      ENV["OPENAI_API_KEY"] = original_openai
+    end
+
+    test "auto-detects anthropic when neither key is set" do
+      original_anthropic = ENV["ANTHROPIC_API_KEY"]
+      original_openai = ENV["OPENAI_API_KEY"]
+      ENV.delete("ANTHROPIC_API_KEY")
+      ENV.delete("OPENAI_API_KEY")
+
+      config = Configuration.new
+      assert_equal :anthropic, config.llm_provider
+    ensure
+      ENV["ANTHROPIC_API_KEY"] = original_anthropic
+      ENV["OPENAI_API_KEY"] = original_openai
+    end
+
+    test "auto-detects anthropic when both keys are set" do
+      original_anthropic = ENV["ANTHROPIC_API_KEY"]
+      original_openai = ENV["OPENAI_API_KEY"]
+      ENV["ANTHROPIC_API_KEY"] = "sk-ant-test"
+      ENV["OPENAI_API_KEY"] = "sk-openai-test"
+
+      config = Configuration.new
+      assert_equal :anthropic, config.llm_provider
+    ensure
+      ENV["ANTHROPIC_API_KEY"] = original_anthropic
+      ENV["OPENAI_API_KEY"] = original_openai
+    end
+
+    test "explicit llm_provider overrides auto-detection" do
+      original_openai = ENV["OPENAI_API_KEY"]
+      ENV["OPENAI_API_KEY"] = "sk-openai-test"
+
+      config = Configuration.new
+      config.llm_provider = :openai
+      assert_equal :openai, config.llm_provider
+    ensure
+      ENV["OPENAI_API_KEY"] = original_openai
+    end
+
+    # --- stop_after validation tests ---
+
+    test "validate! with stop_after: :spec skips GitHub validation" do
+      @config.llm_api_key = "sk-test"
+      # No github_token or github_repo set
+      assert @config.validate!(stop_after: :spec)
+    end
+
+    test "validate! with stop_after: :tasks skips GitHub validation" do
+      @config.llm_api_key = "sk-test"
+      # No github_token or github_repo set
+      assert @config.validate!(stop_after: :tasks)
+    end
+
+    test "validate! with stop_after: :executed requires GitHub config" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = nil
+      @config.github_repo = nil
+
+      error = assert_raises(ConfigurationError) { @config.validate!(stop_after: :executed) }
+      assert_match(/GitHub token is required/, error.message)
+    end
+
+    test "validate! with stop_after: nil requires GitHub config" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = nil
+      @config.github_repo = nil
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/GitHub token is required/, error.message)
     end
   end
 end

@@ -8,7 +8,7 @@ module ArnoldPipeline
       setup do
         @manager = Library::Manager.new
         @persona = @manager.find_persona("web app")
-        @recipe = @manager.find_recipe("web app")
+        @recipe = @manager.find_recipe("Build a responsive web dashboard")
         @domain_type = @manager.find_domain_type("build a multiplayer game")
       end
 
@@ -75,10 +75,66 @@ module ArnoldPipeline
         end
       end
 
-      test "system_prompt includes recipe as secondary guidance" do
+      test "system_prompt includes recipe name and description" do
         prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, domain_type: @domain_type)
         assert_includes prompt, "Recipe: #{@recipe.name}"
-        assert_includes prompt, "secondary technical guidance"
+        assert_includes prompt, @recipe.description.strip
+      end
+
+      test "system_prompt does not include secondary technical guidance framing" do
+        prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, domain_type: @domain_type)
+        refute_includes prompt, "secondary technical guidance"
+        refute_includes prompt, "lightweight guidance"
+      end
+
+      test "system_prompt includes framework stack" do
+        prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, domain_type: @domain_type)
+        assert_includes prompt, "Framework stack:"
+        assert_includes prompt, "Rails 8+"
+      end
+
+      test "system_prompt includes section tools" do
+        prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, domain_type: @domain_type)
+        assert_includes prompt, "Tools:"
+        assert_includes prompt, "ActiveRecord (models, migrations, associations)"
+      end
+
+      test "system_prompt includes implementation guidance" do
+        prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, domain_type: @domain_type)
+        assert_includes prompt, "Implementation guidance:"
+        assert_includes prompt, "Define all models with explicit validations"
+      end
+
+      test "system_prompt renders tools key for cli recipe" do
+        cli_recipe = @manager.find_recipe("Build a command line utility tool")
+        prompt = SpecGeneration.system_prompt(persona: @persona, recipe: cli_recipe, domain_type: @domain_type)
+        assert_includes prompt, "Tools:"
+        assert_includes prompt, "Thor (command DSL, argument parsing, help generation)"
+      end
+
+      test "system_prompt includes supporting recipes when present" do
+        supporting = [@manager.find_recipe("Create a REST API with JSON endpoints")]
+        prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, supporting_recipes: supporting, domain_type: @domain_type)
+        assert_includes prompt, "Supporting recipes"
+        assert_includes prompt, "API Service"
+      end
+
+      test "system_prompt omits supporting recipes section when empty" do
+        prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, supporting_recipes: [], domain_type: @domain_type)
+        refute_includes prompt, "Supporting recipes"
+      end
+
+      test "system_prompt includes supporting_recipe_types in JSON metadata" do
+        supporting = [@manager.find_recipe("Create a REST API with JSON endpoints")]
+        prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, supporting_recipes: supporting, domain_type: @domain_type)
+        assert_includes prompt, "supporting_recipe_types"
+      end
+
+      test "system_prompt handles recipe with empty framework" do
+        recipe = Library::Recipe.new(name: "Test", type: "test", keywords: [], description: "A test", framework: {}, sections: [])
+        prompt = SpecGeneration.system_prompt(persona: @persona, recipe: recipe, domain_type: @domain_type)
+        refute_includes prompt, "Framework stack:"
+        assert_includes prompt, "Recipe: Test"
       end
 
       test "system_prompt includes domain terminology" do
