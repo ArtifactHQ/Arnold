@@ -21,8 +21,9 @@ The system MUST retrieve and apply relevant agent personas and application recip
 - THEN the system SHOULD default to a generic persona (e.g., General Analyst) and recipe, logging the mismatch for human review.
 
 ### Requirement: Task Breakdown
-The system SHALL break the generated specification into granular, actionable tasks suitable for AI coding agents.  
+The system SHALL break the generated specification into granular, actionable tasks suitable for AI coding agents.
 The system MUST prioritize tasks based on dependencies and label them (e.g., "frontend", "backend").
+The first task (position 0) SHOULD be a bootstrap task that sets up the project foundation (project skeleton, dependencies, database configuration). This is an LLM-enforced convention via prompt instructions rather than a hard code constraint.
 
 #### Scenario: Spec to Tasks Conversion
 - GIVEN a structured spec from the previous requirement.  
@@ -52,14 +53,14 @@ GitHub Issues serve as tasks, GitHub Actions or Copilot handle execution, and PR
 ### Requirement: Feedback Loop for Alignment
 The system SHALL implement a post-execution feedback loop using an Analysis Agent to evaluate code outputs against the original specification.
 The system MUST decide whether to iterate on tasks (for implementation fixes) or the specification (for clarifications), with a maximum of 3 iterations to prevent infinite loops.
-The system SHOULD use confidence scores (0-100%) to flag low-confidence decisions for human review.
+The system SHOULD use confidence scores (0-100%) as a reporting guideline to flag low-confidence decisions (below 70%) for human review. Confidence does not gate execution -- all decisions are acted on regardless of score.
 The loop SHALL use GitHub API polling for PR/issue events.
 
 #### Scenario: Task Iteration Due to Misalignment
 - GIVEN code diffs from GitHub PRs that deviate from the spec (e.g., missing edge case handling).
 - AND an Analysis Agent prompted with diffs, spec, and a Quality Assurance Analyst persona.
 - WHEN analysis is performed.
-- THEN if "iterate_tasks" is decided (with reasoning and confidence > 70%), new corrective tasks are generated and pushed via the GitHub API for re-execution.
+- THEN if "iterate_tasks" is decided (with reasoning and confidence score), new corrective tasks are generated and pushed via the GitHub API for re-execution. Decisions with confidence below 70% are flagged for human review.
 
 #### Scenario: Spec Iteration for Ambiguity
 - GIVEN analysis revealing spec vagueness (e.g., unclear user flow).
@@ -72,17 +73,17 @@ The loop SHALL use GitHub API polling for PR/issue events.
 - THEN changes are merged via GitHub API (e.g., PR merge), and the loop ends.
 
 ### Requirement: Library Management
-The system SHALL maintain a library of agent personas and application recipes, stored as JSON/YAML files or in a vector database for semantic retrieval.  
-The system SHOULD support dynamic selection based on NL input similarity.
+The system SHALL maintain a library of agent personas and application recipes, stored as YAML files with keyword-based retrieval.
+The system SHOULD support dynamic selection based on NL input keyword matching. Vector database semantic retrieval is a future consideration. [PLANNED]
 
 #### Scenario: Persona and Recipe Selection
-- GIVEN an NL input.  
-- WHEN semantic search is performed on the library.  
+- GIVEN an NL input.
+- WHEN keyword matching is performed against the library's persona and recipe keywords.
 - THEN the most relevant persona (e.g., Domain Expert for fintech) and recipe (e.g., API Service) are retrieved and injected into prompts.
 
 ### Requirement: Extensibility and Automation
 The system is implemented as a Ruby gem (Rails engine) for orchestration, using the GitHub API for task management and execution.
-The system MAY integrate with external tools like GitHub webhooks for triggering feedback loops.
+The system MAY integrate with external tools like GitHub webhooks for triggering feedback loops. [PLANNED]
 
 #### Scenario: Full End-to-End Run
 - GIVEN an NL input through all stages including feedback.

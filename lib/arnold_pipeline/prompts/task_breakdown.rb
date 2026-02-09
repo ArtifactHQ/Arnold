@@ -22,7 +22,7 @@ module ArnoldPipeline
 
           # Rules
 
-          - Generate between 5 and 20 tasks
+          - Aim for 5 to 20 tasks
           - Each task must be independently executable by a coding agent
           - Tasks MUST be ordered by dependencies (e.g., database setup before API endpoints)
           - Each task should have clear acceptance criteria in its description

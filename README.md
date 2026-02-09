@@ -33,6 +33,8 @@ That's it. Arnold will:
 
 You can stop the pipeline at any stage and resume later — see [Partial Execution & Resume](#partial-execution--resume).
 
+The CLI stores pipeline runs in a standalone SQLite database at `~/.arnold_pipeline/pipeline.sqlite3`. This is created automatically on first use and migrations are applied each time the CLI starts.
+
 ## Rails Integration
 
 Add to your Gemfile:
@@ -155,6 +157,8 @@ arnold spec 1 --json -o spec.json  # Write JSON to file
 | `tier_gate_enabled` | `true` | — | LLM validates each tier's output before next tier |
 | `context_propagation_enabled` | `true` | — | Prepend tier summaries to next tier's issue bodies |
 | `max_tier_retries` | `2` | — | Corrective retries per tier before pausing (0-5) |
+| `workflow_status_enabled` | `true` | — | Check GitHub Actions workflow status before resolving tasks |
+| `workflow_branch_pattern` | `/issue[-_]?\d+/i` | — | Regex to match branch names when checking workflow runs |
 | `library_path` | built-in | — | Custom personas/recipes dir |
 
 ## Architecture
