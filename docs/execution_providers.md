@@ -25,7 +25,7 @@ Publishes tasks to the execution backend.
 { external_id: String, external_url: String?, title: String }
 ```
 
-The Executor matches results to Task records via `find_by(title: result[:title])` (`executor.rb:25`) and saves `external_id`/`external_url`. The `title` must exactly match the input — a mismatch silently skips the update.
+**Call chain:** Providers are never called directly by the engine. The engine calls `executor.call()`, which filters unpublished tasks, calls `provider.create_tasks(tasks: unpublished, ...)`, then matches results to Task records via `find_by(title: result[:title])` (`executor.rb:25`) and saves `external_id`/`external_url`. The `title` must exactly match the input — a mismatch silently skips the update.
 
 **Required:** Yes — `Base` raises `NotImplementedError`.
 
@@ -89,7 +89,7 @@ Only applies to `merge_all_results!` and `merge_tier_results!`. Errors from `cre
 
 ### `self.validate_configuration!(config)`
 
-Class method. Receives the `Configuration` object. Raise `ConfigurationError` on invalid config, return anything on success.
+Class method. Receives the `Configuration` object. Raise `ConfigurationError` on invalid config, return anything on success. `ConfigurationError` is defined in the `ArnoldPipeline` module and is available after requiring `base.rb`.
 
 **Default:** No-op. Called during `Configuration#validate!` unless `stop_after` is `:spec` or `:tasks`.
 
@@ -122,6 +122,8 @@ end
 ```
 
 **Async polling** (`agents/executor.rb:61-103`): Calls `fetch_results` repeatedly with exponential backoff (`polling_interval` doubling to `polling_max_interval`). Exits when all tasks are resolved or `polling_timeout` exceeded. A task is resolved when `workflow_active == false` AND at least one of: non-empty `result_diff`, `failed?` status, or substantive comments.
+
+**Sync stale-object caveat:** In the sync path, `executor.call()` updates task records in the database (sets `external_id`) via a separate `find_by` query. The in-memory task objects passed to `fetch_results` are **stale** — their `external_id` is still `nil`. Sync providers should call `tasks.map(&:reload)` at the start of `fetch_results` to pick up the updated `external_id`. (Async providers avoid this because `await_results` reloads tasks internally.)
 
 **State machine** (`pipeline_run.rb:20`): `executing` can transition to both `awaiting_results` (async) and `analyzing` (sync). Both paths reach `analyzing`.
 
@@ -158,7 +160,7 @@ To add provider-specific keys: add `attr_accessor` to `Configuration`, set defau
 ArnoldPipeline::Providers::Execution.register(:my_provider, MyProvider)
 ```
 
-Built-in providers (`:github`, `:null`) are auto-loaded on demand. Custom providers must register before use — in a Rails initializer or gem require path.
+Built-in providers (`:github`, `:null`) are auto-loaded on demand. Custom providers must register before use — in a Rails initializer or gem require path. Registration must happen **before** `Configuration#validate!` runs, because validation checks the registry dynamically via `Providers::Execution.registered_providers`. There is no need to modify the `VALID_EXECUTION_PROVIDERS` constant — the registry lookup is sufficient.
 
 `Execution.build` resolves the provider via registry:
 
@@ -196,14 +198,19 @@ module ArnoldPipeline
 
         def create_tasks(tasks:, pipeline_run:, prior_context: nil)
           tasks.each_with_index.map do |task, i|
+            # Tasks can be ActiveRecord objects or Hashes — use dual-access pattern
             title = task.respond_to?(:title) ? task.title : task["title"]
-            # TODO: execute the task locally
+            description = task.respond_to?(:description) ? task.description : task["description"]
+            labels = task.respond_to?(:labels) ? task.labels : (task["labels"] || [])
+            # TODO: execute the task locally using title, description, labels
             { external_id: "local-#{pipeline_run.id}-#{i}", external_url: nil, title: title }
           end
         end
 
         def fetch_results(pipeline_run:, tasks: nil)
-          (tasks || pipeline_run.tasks).filter_map do |task|
+          # Sync providers: reload tasks to pick up external_id set by Executor#call
+          target_tasks = tasks ? tasks.map(&:reload) : pipeline_run.tasks
+          target_tasks.filter_map do |task|
             next unless task.external_id
             # TODO: collect real diffs/status
             { task_id: task.id, external_id: task.external_id, diffs: [],
@@ -319,6 +326,8 @@ Run: `bundle exec rails test test/lib/arnold_pipeline/providers/execution/local_
 
 **Sync providers skip `awaiting_results`.** State goes `executing -> analyzing` directly. Polling config is irrelevant.
 
+**Sync providers receive stale task objects.** In the sync path, `TierExecutionEngine` passes the same task array to both `executor.call()` and `executor.fetch_results()`. After `call()` updates `external_id` in the DB, the in-memory objects are stale. Your `fetch_results` must reload tasks (`tasks.map(&:reload)`) or it will see `external_id: nil` and skip all tasks silently.
+
 **`recoverable_errors` only covers merge.** Errors from `create_tasks`/`fetch_results` always propagate regardless of this list.
 
 **Diffs are opaque.** Downstream LLM consumers receive diffs as concatenated plain text — they never parse the structure. Any human-readable format works, but `diffs` must be an `Array` (`.to_json` and `.size` are called on it).
@@ -355,3 +364,44 @@ Source: `test/lib/arnold_pipeline/providers/execution/shared_provider_tests.rb`
 7. `Execution.build(provider: :your_name)` end-to-end factory test
 
 Run: `bundle exec rails test`
+
+## 10. Integration Testing
+
+To verify your provider works through the full engine pipeline (not just unit tests), write an integration test that exercises `TierExecutionEngine`.
+
+### Setup
+
+```ruby
+require "arnold_pipeline/agents/executor"
+require "arnold_pipeline/tier_execution_engine"
+
+# Build your provider
+provider = Providers::Execution.build
+
+# Wrap in an Executor
+executor = Agents::Executor.new(provider:, logger: Logger.new(File::NULL))
+
+# TierExecutionEngine requires three constructor args:
+engine = TierExecutionEngine.new(
+  executor: executor,
+  tier_gate_check: stub(call: nil),  # stub to avoid LLM calls
+  logger: Logger.new(File::NULL)
+)
+```
+
+### Recommended config for integration tests
+
+```ruby
+ArnoldPipeline.configure do |c|
+  c.execution_provider = :your_provider
+  # ... your provider-specific config ...
+  c.tier_gate_enabled = false            # avoid LLM stub routing conflicts
+  c.context_propagation_enabled = false  # simplify test scope
+end
+```
+
+### Key assertions for sync providers
+
+- `provider.async?` returns `false`
+- After `engine.execute_tiers!(pipeline_run)`, all tasks have `external_id` and `result_diff`
+- `pipeline_run.status` is never `"awaiting_results"`
