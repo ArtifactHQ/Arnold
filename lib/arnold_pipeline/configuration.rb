@@ -1,3 +1,5 @@
+require "arnold_pipeline/providers/execution/base"
+
 module ArnoldPipeline
   class Configuration
     VALID_LLM_PROVIDERS = %i[anthropic openai].freeze
@@ -52,7 +54,7 @@ module ArnoldPipeline
       validate_llm_provider!
       validate_llm_api_key!
       validate_execution_provider!
-      validate_github_config! unless %i[spec tasks].include?(stop_after)
+      validate_execution_config! unless %i[spec tasks].include?(stop_after)
       validate_max_iterations!
       validate_polling_config!
       validate_max_tier_retries!
@@ -87,21 +89,14 @@ module ArnoldPipeline
     end
 
     def validate_execution_provider!
-      return if VALID_EXECUTION_PROVIDERS.include?(@execution_provider)
+      valid = VALID_EXECUTION_PROVIDERS | Providers::Execution.registered_providers
+      return if valid.include?(@execution_provider)
 
-      raise ConfigurationError, "Invalid execution provider: #{@execution_provider}. Must be one of: #{VALID_EXECUTION_PROVIDERS.join(', ')}"
+      raise ConfigurationError, "Invalid execution provider: #{@execution_provider}. Must be one of: #{valid.join(', ')}"
     end
 
-    def validate_github_config!
-      return unless @execution_provider == :github
-
-      if @github_token.nil? || @github_token.empty?
-        raise ConfigurationError, "GitHub token is required when using GitHub execution provider. Set github_token or GITHUB_TOKEN env var."
-      end
-
-      if @github_repo.nil? || @github_repo.empty?
-        raise ConfigurationError, "GitHub repo is required when using GitHub execution provider (e.g., 'owner/repo')."
-      end
+    def validate_execution_config!
+      Providers::Execution.provider_class_for(@execution_provider).validate_configuration!(self)
     end
 
     def validate_max_iterations!

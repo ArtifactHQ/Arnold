@@ -12,6 +12,32 @@ module ArnoldPipeline
           @issue_mention = issue_mention
         end
 
+        def async?
+          true
+        end
+
+        def recoverable_errors
+          [Octokit::Error, Faraday::Error]
+        end
+
+        def self.validate_configuration!(config)
+          if config.github_token.nil? || config.github_token.empty?
+            raise ConfigurationError, "GitHub token is required when using GitHub execution provider. Set github_token or GITHUB_TOKEN env var."
+          end
+
+          if config.github_repo.nil? || config.github_repo.empty?
+            raise ConfigurationError, "GitHub repo is required when using GitHub execution provider (e.g., 'owner/repo')."
+          end
+        end
+
+        def self.build_from_config(config, **options)
+          new(
+            token: options[:token] || config.github_token,
+            repo: options[:repo] || config.github_repo,
+            issue_mention: options[:issue_mention] || config.github_issue_mention
+          )
+        end
+
         def create_tasks(tasks:, pipeline_run:, prior_context: nil)
           position_to_issue = {}
 
@@ -175,6 +201,8 @@ module ArnoldPipeline
           :in_progress
         end
       end
+
+      register(:github, Github)
     end
   end
 end

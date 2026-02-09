@@ -1,11 +1,18 @@
 require "test_helper"
 require "webmock/minitest"
 require "arnold_pipeline/providers/execution/github"
+require_relative "shared_provider_tests"
 
 module ArnoldPipeline
   module Providers
     module Execution
       class GithubTest < ActiveSupport::TestCase
+        include SharedProviderTests
+
+        def provider_instance
+          @provider
+        end
+
         setup do
           @provider = Github.new(token: "ghp_test", repo: "owner/repo")
           @pipeline_run = ArnoldPipeline::PipelineRun.create!(nl_input: "Build an app")
@@ -664,6 +671,70 @@ module ArnoldPipeline
           provider = Github.new(token: "test-token", repo: "owner/repo")
           client = provider.instance_variable_get(:@client)
           assert client.auto_paginate
+        end
+
+        # --- capability methods ---
+
+        test "async? returns true" do
+          assert @provider.async?
+        end
+
+        test "recoverable_errors includes Octokit::Error and Faraday::Error" do
+          errors = @provider.recoverable_errors
+          assert_includes errors, Octokit::Error
+          assert_includes errors, Faraday::Error
+        end
+
+        # --- validate_configuration! ---
+
+        test "validate_configuration! passes with valid config" do
+          config = stub(github_token: "ghp_test", github_repo: "owner/repo")
+          assert_nil Github.validate_configuration!(config)
+        end
+
+        test "validate_configuration! raises on missing github_token" do
+          config = stub(github_token: nil, github_repo: "owner/repo")
+          error = assert_raises(ConfigurationError) { Github.validate_configuration!(config) }
+          assert_match(/GitHub token is required/, error.message)
+        end
+
+        test "validate_configuration! raises on empty github_token" do
+          config = stub(github_token: "", github_repo: "owner/repo")
+          error = assert_raises(ConfigurationError) { Github.validate_configuration!(config) }
+          assert_match(/GitHub token is required/, error.message)
+        end
+
+        test "validate_configuration! raises on missing github_repo" do
+          config = stub(github_token: "ghp_test", github_repo: nil)
+          error = assert_raises(ConfigurationError) { Github.validate_configuration!(config) }
+          assert_match(/GitHub repo is required/, error.message)
+        end
+
+        # --- build_from_config ---
+
+        test "build_from_config creates Github provider from config" do
+          config = stub(github_token: "ghp_test", github_repo: "owner/repo", github_issue_mention: "@claude")
+          provider = Github.build_from_config(config)
+          assert_kind_of Github, provider
+          assert_equal "@claude", provider.instance_variable_get(:@issue_mention)
+        end
+
+        # --- registry ---
+
+        test "provider_class_for :github returns Github" do
+          assert_equal Github, Execution.provider_class_for(:github)
+        end
+
+        test "provider_class_for :unknown raises ConfigurationError" do
+          assert_raises(ConfigurationError) { Execution.provider_class_for(:unknown) }
+        end
+
+        test "register adds custom provider" do
+          custom_class = Class.new(Base)
+          Execution.register(:custom_test, custom_class)
+          assert_equal custom_class, Execution.provider_class_for(:custom_test)
+        ensure
+          Execution::REGISTRY.delete(:custom_test)
         end
       end
     end

@@ -22,7 +22,7 @@ module ArnoldPipeline
     option :polling_interval, type: :numeric, desc: "Polling interval in seconds (default: 30)"
     option :polling_timeout, type: :numeric, desc: "Polling timeout in seconds (default: 1800)"
     option :stop_after, type: :string, desc: "Stop after stage: spec, tasks, executed"
-    option :preview, type: :boolean, default: false, aliases: ["--dry-run"], desc: "Generate spec and tasks without publishing to GitHub. Note: makes LLM API calls and creates local database records."
+    option :preview, type: :boolean, default: false, aliases: ["--dry-run"], desc: "Generate spec and tasks without publishing to execution provider. Note: makes LLM API calls and creates local database records."
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
     def run_pipeline(description)
       if description == "--help" || description == "-h"
@@ -44,7 +44,7 @@ module ArnoldPipeline
 
           result = orchestrator.call(nl_input: description, stop_after: :tasks)
 
-          say "DRY RUN — spec and tasks generated locally (no GitHub issues will be created)", :yellow
+          say "DRY RUN — spec and tasks generated locally (not published to execution provider)", :yellow
           say "  Repository: #{ArnoldPipeline.configuration.github_repo || '(not configured)'}"
           say "  Description: \"#{description}\""
           say "  Tasks to create: #{result.tasks.count}"
@@ -399,7 +399,7 @@ module ArnoldPipeline
       lines << "Tier: #{task.tier} | Priority: #{task.priority} | Status: #{task.status}"
       lines << "Labels: #{task.labels.join(', ')}" if task.labels.any?
       lines << "Depends on: #{task.depends_on.join(', ')}" if task.depends_on.any?
-      lines << "GitHub: #{task.external_url}" if task.external_url
+      lines << "Link: #{task.external_url}" if task.external_url
       lines << ""
       lines << task.description if task.description.present?
       lines.join("\n")

@@ -15,6 +15,11 @@ module ArnoldPipeline
         "corrective_tasks" => []
       })
 
+      @provider = stub("execution_provider")
+      @provider.stubs(:recoverable_errors).returns([Octokit::Error, Faraday::Error])
+      @provider.stubs(:async?).returns(true)
+      @executor.stubs(:provider).returns(@provider)
+
       @engine = TierExecutionEngine.new(
         executor: @executor,
         tier_gate_check: @tier_gate_check,
@@ -198,6 +203,29 @@ module ArnoldPipeline
     end
 
     # --- handle_tier_gate_failure! iterative (not recursive) ---
+
+    test "merge_all_results! re-raises non-recoverable errors" do
+      pipeline_run = PipelineRun.create!(nl_input: "test")
+      @provider.stubs(:recoverable_errors).returns([])
+      @executor.stubs(:merge_results).raises(Faraday::Error, "connection refused")
+
+      assert_raises(Faraday::Error) do
+        @engine.merge_all_results!(pipeline_run)
+      end
+    end
+
+    test "execute_tiers! calls fetch_results instead of await_results for sync provider" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      @provider.stubs(:async?).returns(false)
+      @executor.stubs(:call).returns([])
+      @executor.expects(:fetch_results).once
+      @executor.expects(:await_results).never
+      @executor.stubs(:merge_results).returns([])
+
+      @engine.execute_tiers!(pipeline_run)
+    end
 
     test "handle_tier_gate_failure! retries up to max_tier_retries then pauses" do
       ArnoldPipeline.configure do |c|

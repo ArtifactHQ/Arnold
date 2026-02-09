@@ -8,6 +8,7 @@ module ArnoldPipeline
       @spec_generator = stub("spec_generator")
       @task_breaker = stub("task_breaker")
       @executor = stub("executor")
+      @executor.stubs(:provider).returns(stub(recoverable_errors: [], async?: true))
       @analyzer = stub("analyzer")
 
       @tier_gate_check = stub("tier_gate_check")

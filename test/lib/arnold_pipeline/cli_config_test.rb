@@ -50,7 +50,7 @@ module ArnoldPipeline
       refute ArnoldPipeline.configuration.tier_gate_enabled
     end
 
-    test "run --dry-run shows accurate message about GitHub issues" do
+    test "run --dry-run shows accurate message about execution provider" do
       mock_run = PipelineRun.create!(nl_input: "Build an app", status: :paused)
       mock_run.tasks.create!(title: "Setup", tier: 0, position: 0, status: :pending)
 
@@ -61,7 +61,7 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["run", "--dry-run", "Build an app"]) }
       assert_match(/DRY RUN/, output)
-      assert_match(/no GitHub issues will be created/, output)
+      assert_match(/not published to execution provider/, output)
       refute_match(/no changes will be made/, output)
     end
 
