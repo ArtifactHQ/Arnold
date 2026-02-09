@@ -301,16 +301,42 @@ module ArnoldPipeline
 
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
 
-      ArnoldPipeline.configure { |c| c.github_repo = "test/repo" }
-
       output = capture_output { Cli.start(["run", "--dry-run", "Build a recipe app"]) }
 
       assert_match(/DRY RUN/, output)
-      assert_match(/Repository: test\/repo/, output)
+      assert_match(/Execution provider: github/, output)
+      assert_match(/Repository:.*not configured/, output)
       assert_match(/Tasks to create: 3/, output)
       assert_match(/Tier 0: 1 task/, output)
       assert_match(/Tier 1: 2 tasks/, output)
       assert_match(/Run without --preview to execute/, output)
+    end
+
+    test "run --preview shows configured execution provider name" do
+      mock_run = PipelineRun.create!(nl_input: "Build an app", status: :paused)
+      mock_run.tasks.create!(title: "Setup", tier: 0, position: 0, status: :pending)
+
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:call).returns(mock_run)
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+
+      output = capture_output { Cli.start(["run", "--preview", "--execution-provider", "claude_code", "Build an app"]) }
+      assert_match(/Execution provider: claude_code/, output)
+      assert_match(/Repo path:.*not configured/, output)
+    ensure
+      ArnoldPipeline.reset_configuration!
+    end
+
+    test "resume applies CLI flags without --config" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:resume).with(pipeline_run: run_record, stop_after: nil).returns(run_record)
+
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+
+      capture_output { Cli.start(["resume", run_record.id.to_s, "--execution-provider", "claude_code", "--repo", "owner/repo"]) }
+      assert_equal :claude_code, ArnoldPipeline.configuration.execution_provider
+      assert_equal "owner/repo", ArnoldPipeline.configuration.github_repo
     ensure
       ArnoldPipeline.reset_configuration!
     end

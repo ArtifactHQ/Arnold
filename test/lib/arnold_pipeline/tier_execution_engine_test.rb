@@ -227,6 +227,34 @@ module ArnoldPipeline
       @engine.execute_tiers!(pipeline_run)
     end
 
+    test "execute_tiers! reloads tasks after publish for sync providers" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      @provider.stubs(:async?).returns(false)
+
+      # Simulate what executor.call does: sets external_id in DB via find_by,
+      # but the in-memory task object still has nil external_id.
+      @executor.stubs(:call).with { |tasks:, **|
+        Task.find(tasks.first.id).update!(external_id: "ext-1", status: :in_progress)
+        true
+      }.returns([])
+
+      # Capture the tasks passed to fetch_results to verify they were reloaded
+      fetched_tasks = nil
+      @executor.stubs(:fetch_results).with { |pipeline_run:, tasks:|
+        fetched_tasks = tasks
+        true
+      }.returns([])
+      @executor.stubs(:merge_results).returns([])
+
+      @engine.execute_tiers!(pipeline_run)
+
+      assert_not_nil fetched_tasks, "fetch_results should have been called with tasks"
+      assert_equal "ext-1", fetched_tasks.first.external_id,
+        "Engine should reload tasks before fetch_results so external_id is present"
+    end
+
     test "handle_tier_gate_failure! retries up to max_tier_retries then pauses" do
       ArnoldPipeline.configure do |c|
         c.max_iterations = 3

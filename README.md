@@ -1,8 +1,10 @@
 # Arnold Pipeline
 
-Agentic workflow system that transforms natural language descriptions into executable code. Describe an app, get working code — Arnold orchestrates AI agents through spec generation, task breakdown, GitHub-based execution, and iterative analysis.
+Agentic workflow system that transforms natural language descriptions into executable code. Describe an app, get working code — Arnold orchestrates AI agents through spec generation, task breakdown, execution via [GitHub](#execution-via-github) or [Claude Code](#execution-via-claude-code), and iterative analysis.
 
 ## Quick Start (Standalone CLI)
+
+**With GitHub (default):**
 
 ```bash
 gem install arnold_pipeline
@@ -15,25 +17,76 @@ arnold run "Build a todo list app with user auth and real-time updates" --repo o
 arnold run "Build a todo list app" --repo owner/repo --issue-mention "@claude"
 # Using OpenAI instead:
 arnold run "Build a todo list app" --provider openai --repo owner/repo
+```
 
-# Run only part of the pipeline (see Partial Execution below):
-arnold run "Build a todo list app" --repo owner/repo --stop-after tasks
-arnold resume 1                     # Continue from where you left off
-arnold resume 1 --stop-after executed   # Resume and pause again at a later stage
+**With Claude Code (local execution):**
+
+```bash
+gem install arnold_pipeline
+npm install -g @anthropic-ai/claude-code
+
+export ANTHROPIC_API_KEY=sk-ant-...
+
+mkdir my-app && cd my-app && git init
+arnold run "Build a todo list app with user auth and real-time updates" \
+  --execution-provider claude_code \
+  --claude-code-repo-path .
+```
+
+**Partial execution (either provider):**
+
+```bash
+arnold run "Build a todo list app" --stop-after tasks
+arnold resume 1                        # Continue from where you left off
+arnold resume 1 --stop-after executed  # Resume and pause again at a later stage
 ```
 
 That's it. Arnold will:
 1. Match your description to the best persona and recipe from its library
 2. Generate a structured specification
 3. Break it into 5-20 dependency-ordered tasks
-4. Create GitHub Issues and trigger execution
-5. Poll for PR results with exponential backoff
+4. Dispatch tasks to the execution provider (GitHub Issues or Claude Code CLI)
+5. Collect results (poll for PRs on GitHub, or capture diffs immediately with Claude Code)
 6. Analyze results against the spec
 7. Iterate up to 3 times until aligned (or flag for human review)
 
 You can stop the pipeline at any stage and resume later — see [Partial Execution & Resume](#partial-execution--resume).
 
 The CLI stores pipeline runs in a standalone SQLite database at `~/.arnold_pipeline/pipeline.sqlite3`. This is created automatically on first use and migrations are applied each time the CLI starts.
+
+## Execution Providers
+
+Arnold supports multiple execution backends. The execution provider controls how tasks are dispatched, how results are collected, and how code is merged. Everything else — spec generation, task breakdown, analysis, tier gating — is the same regardless of provider.
+
+| | GitHub (default) | Claude Code |
+|---|---|---|
+| Execution model | Async (polling) | Sync (immediate) |
+| Where code runs | GitHub-hosted (Actions/Copilot) | Local machine |
+| Task format | GitHub Issues with Markdown | CLI prompt with context |
+| Result capture | PR diffs + comment parsing | Git diff from worktree |
+| Merge strategy | PR merge via API | Git merge locally |
+| Requires | GitHub token, repo, coding agent | Claude Code CLI, local repo |
+| Best for | Team workflows, CI integration | Solo development, rapid iteration |
+
+### Execution via GitHub
+
+The default. Arnold creates GitHub Issues for each task and waits for a coding agent (GitHub Actions, Copilot, etc.) to pick them up, work on branches, and open PRs. Results are collected by polling for PRs that reference the issue number. See [Setting Up a Coding Agent](#setting-up-a-coding-agent) for details.
+
+**Prerequisites:**
+- GitHub personal access token with repo scope (`GITHUB_TOKEN`)
+- Target repository
+- A coding agent configured on the repo (see [Setting Up a Coding Agent](#setting-up-a-coding-agent))
+
+### Execution via Claude Code
+
+Arnold dispatches tasks directly to the Claude Code CLI on your local machine. Each task runs in a git worktree, so work is isolated per task. File changes are captured as diffs immediately — no polling, no GitHub infrastructure needed.
+
+**Prerequisites:**
+- Claude Code CLI installed (`npm install -g @anthropic-ai/claude-code`)
+- `ANTHROPIC_API_KEY` set in environment (used by both Arnold's LLM calls and Claude Code's own execution)
+- A local git repository to operate on
+
+**Note:** The `llm_provider` / `llm_api_key` configuration is still required regardless of execution provider — it's used for spec generation, task breakdown, analysis, and tier gate checks. The execution provider only controls how tasks are dispatched and results collected.
 
 ## Rails Integration
 
@@ -77,6 +130,22 @@ ArnoldPipeline.configure do |config|
 end
 ```
 
+To use Claude Code instead of GitHub, replace the GitHub-specific config:
+
+```ruby
+ArnoldPipeline.configure do |config|
+  config.llm_provider   = :anthropic
+  config.llm_api_key    = ENV["ANTHROPIC_API_KEY"]
+
+  # Execution via Claude Code
+  config.execution_provider        = :claude_code
+  config.claude_code_repo_path     = "/path/to/your/project"
+  config.claude_code_model         = "sonnet"  # default
+  config.claude_code_max_turns     = nil       # use Claude Code default
+  config.claude_code_permission_mode = "auto"  # non-interactive pipeline use
+end
+```
+
 Use programmatically:
 
 ```ruby
@@ -117,13 +186,18 @@ arnold tree                          # Print command tree
 #   --model NAME               Model name
 #   --repo OWNER/REPO          GitHub repository
 #   --issue-mention MENTION    Include in issue body (e.g. @claude)
+#   --execution-provider NAME  Execution provider (github/claude_code/null)
+#   --claude-code-repo-path PATH   Local repo path for Claude Code provider
+#   --claude-code-model NAME       Claude Code model (default: sonnet)
+#   --claude-code-max-turns N      Max turns for Claude Code execution
+#   --claude-code-permission-mode MODE  Permission mode (default: auto)
 #   --stop-after STAGE         Pause after stage: spec, tasks, executed
-#   --preview, --dry-run       Generate spec and tasks without publishing to GitHub (still makes LLM API calls)
+#   --preview, --dry-run       Generate spec and tasks without publishing to execution provider (still makes LLM API calls)
 #   --polling-interval SECS    Polling interval (default: 30)
 #   --polling-timeout SECS     Max polling wait (default: 1800)
 #   --verbose                  Debug logging
 
-# Options for `resume`:
+# Options for `resume` (accepts all `run` config flags):
 #   --stop-after STAGE         Pause again at a later stage
 
 # Options for `spec`:
@@ -166,16 +240,20 @@ Each task includes position, title, tier, priority, status, labels, dependencies
 | `llm_provider` | `:anthropic` | — | `:anthropic` or `:openai` |
 | `llm_api_key` | — | `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` | Auto-detected from provider |
 | `llm_model` | per-provider | — | `claude-sonnet-4-20250514` (anthropic) / `gpt-4o` (openai) |
-| `execution_provider` | `:github` | — | `:github` |
+| `execution_provider` | `:github` | — | `:github`, `:claude_code`, or `:null` |
 | `github_token` | — | `GITHUB_TOKEN` | GitHub personal access token |
 | `github_repo` | — | — | Target repo (`owner/repo`) |
 | `github_issue_mention` | `nil` | — | Mention added to issue body (e.g. `@claude`) |
+| `claude_code_repo_path` | `nil` | — | Local repo path for Claude Code provider |
+| `claude_code_model` | `"sonnet"` | — | Model for Claude Code CLI |
+| `claude_code_max_turns` | `nil` | — | Max turns per task (nil = Claude Code default) |
+| `claude_code_permission_mode` | `"auto"` | — | Permission mode for Claude Code CLI |
 | `max_iterations` | `3` | — | Feedback loop cap (1-10) |
-| `polling_interval` | `30` | — | Seconds between PR polling checks |
-| `polling_timeout` | `1800` | — | Max seconds to wait for PRs (30 min) |
-| `polling_max_interval` | `300` | — | Backoff cap in seconds (5 min) |
+| `polling_interval` | `30` | — | Seconds between polling checks (async providers) |
+| `polling_timeout` | `1800` | — | Max seconds to wait for results (30 min, async providers) |
+| `polling_max_interval` | `300` | — | Backoff cap in seconds (5 min, async providers) |
 | `tier_gate_enabled` | `true` | — | LLM validates each tier's output before next tier |
-| `context_propagation_enabled` | `true` | — | Prepend tier summaries to next tier's issue bodies |
+| `context_propagation_enabled` | `true` | — | Prepend tier summaries to next tier's task bodies |
 | `max_tier_retries` | `2` | — | Corrective retries per tier before pausing (0-5) |
 | `workflow_status_enabled` | `true` | — | Check GitHub Actions workflow status before resolving tasks |
 | `workflow_branch_pattern` | `/issue[-_]?\d+/i` | — | Regex to match branch names when checking workflow runs |
@@ -196,8 +274,10 @@ Spec Generator ── NL + persona + recipe --> structured Markdown spec
 Task Breaker ── spec --> 5-20 ordered tasks (JSON)
   |
   v
-Executor ── tasks --> GitHub Issues, poll for PR diffs (exponential backoff)
-  |                     (receives prior tier context when context_propagation_enabled)
+Executor ── tasks --> execution provider
+  |            GitHub: create Issues, poll for PR diffs (exponential backoff)
+  |            Claude Code: run CLI in worktrees, capture diffs immediately
+  |            (receives prior tier context when context_propagation_enabled)
   v
 Tier Gate Check ── diffs --> pass/fail + context summary (per tier)
   |                          fail --> corrective tasks + retry (up to max_tier_retries)
@@ -205,7 +285,7 @@ Tier Gate Check ── diffs --> pass/fail + context summary (per tier)
   v
 Analyzer ── diffs + spec --> decision + confidence
   |
-  |-- "done" (>=70% confidence) --> merge PRs, complete
+  |-- "done" (>=70% confidence) --> merge results, complete
   |-- "iterate_tasks" --> replace tasks, re-execute
   |-- "iterate_spec" --> refine spec, re-break, re-execute
   |
@@ -215,9 +295,11 @@ Max 3 iterations, then stop. <70% confidence flags for human review.
 
 **Agents** are stateless service objects — input in, output out. The **Orchestrator** owns state, persistence, and the feedback loop.
 
-### Result Polling
+### Result Collection
 
-After creating GitHub Issues, the Executor waits for external agents (GitHub Actions, Copilot, etc.) to produce PRs. It uses exponential backoff polling:
+How results are collected depends on the execution provider:
+
+**GitHub (async):** After creating Issues, the Executor waits for external agents (GitHub Actions, Copilot, etc.) to produce PRs. It uses exponential backoff polling:
 
 1. Check for PR diffs every `polling_interval` seconds (default: 30s)
 2. Double the interval each cycle, capped at `polling_max_interval` (default: 5 min)
@@ -225,9 +307,11 @@ After creating GitHub Issues, the Executor waits for external agents (GitHub Act
 
 The pipeline transitions through `executing` -> `awaiting_results` -> `analyzing` as it waits. Tasks without an `external_id` (e.g. not submitted to GitHub) are skipped and don't block polling.
 
+**Claude Code (sync):** Each task is dispatched to the Claude Code CLI in its own git worktree. Diffs are captured immediately after execution — no polling, no `awaiting_results` state. The pipeline transitions directly from `executing` to `analyzing`.
+
 ### Tier Gating & Context Propagation
 
-Tasks are executed tier-by-tier (tier 0 first, then tier 1, etc.). After each tier's PRs are merged, two optional features kick in:
+Tasks are executed tier-by-tier (tier 0 first, then tier 1, etc.). After each tier's results are merged, two optional features kick in:
 
 **Tier Gate Check** (`tier_gate_enabled`) — An LLM reviews the tier's diffs and decides pass/fail. If the tier fails:
 1. Corrective tasks are created at the same tier and executed
@@ -236,7 +320,7 @@ Tasks are executed tier-by-tier (tier 0 first, then tier 1, etc.). After each ti
 
 Gate checks are lenient by default — only critical, build-breaking issues cause a failure. Minor issues are noted but don't block.
 
-**Context Propagation** (`context_propagation_enabled`) — The gate check also produces a 2-3 sentence summary of what was built. This summary is accumulated across tiers and prepended to the next tier's GitHub issue bodies, giving coding agents explicit context about what already exists in the repo.
+**Context Propagation** (`context_propagation_enabled`) — The gate check also produces a 2-3 sentence summary of what was built. This summary is accumulated across tiers and prepended to the next tier's task bodies, giving coding agents explicit context about what already exists in the repo.
 
 Both features use a single LLM call per tier. If the gate check errors (e.g. LLM timeout), it's treated as non-fatal and the pipeline continues.
 
@@ -254,6 +338,8 @@ config.max_tier_retries = 0
 ```
 
 ## Setting Up a Coding Agent
+
+This section applies to the **GitHub execution provider**. When using Claude Code as the execution provider, Arnold dispatches tasks directly to the Claude Code CLI — no coding agent setup is needed.
 
 Arnold creates GitHub Issues but doesn't write code itself — it expects a coding agent on your repo to pick up those issues, do the work on a branch, and open a PR. Without this, Arnold will create issues and then time out waiting for results.
 
@@ -426,7 +512,7 @@ The pipeline can be paused at any stage and resumed later. This is useful for re
 |--------------|------------|------------------------|
 | `:spec` | Spec generation | Specification (markdown + structured data) |
 | `:tasks` | Task breakdown | Specification + 5-20 ordered tasks |
-| `:executed` | Execution (issue creation + result polling) | Tasks with GitHub Issue numbers, PR diffs, and comments |
+| `:executed` | Task dispatch + result collection | Tasks with external IDs, diffs, and comments |
 | `nil` | Full pipeline | Everything including analysis iterations |
 
 ### Partial Execution
@@ -446,7 +532,7 @@ puts run.specification.content  # Review the generated spec
 run = orchestrator.call(nl_input: "Build a todo app", stop_after: :tasks)
 run.tasks.each { |t| puts "#{t.position}: #{t.title}" }
 
-# Execute (create issues and poll for results) but don't run analysis
+# Execute (dispatch tasks and collect results) but don't run analysis
 run = orchestrator.call(nl_input: "Build a todo app", stop_after: :executed)
 run.tasks.each { |t| puts "#{t.title} -> #{t.external_url}" }
 ```
@@ -485,11 +571,11 @@ The orchestrator inspects the pipeline run's existing data to determine where to
 |-------|-------------|
 | No specification | Spec generation |
 | Specification exists, no tasks | Task breakdown |
-| Tasks exist, no GitHub issue numbers | Issue publication |
-| Tasks have issue numbers, incomplete results | Result polling |
+| Tasks exist, no external IDs | Task dispatch |
+| Tasks have external IDs, incomplete results | Result collection |
 | All tasks have results | Analysis |
 
-If some tasks were published before a pause/failure and others weren't, resume will only publish the remaining tasks — already-published issues are not duplicated.
+If some tasks were published before a pause/failure and others weren't, resume will only publish the remaining tasks — already-published tasks are not duplicated.
 
 ## Extending
 
@@ -526,6 +612,10 @@ sections:
   - name: API Integration
     description: Backend API calls and data sync
 ```
+
+### Custom Execution Providers
+
+See [docs/execution_providers.md](docs/execution_providers.md) for the provider development guide and [docs/provider_conformance_checklist.md](docs/provider_conformance_checklist.md) for the conformance checklist.
 
 ## License
 

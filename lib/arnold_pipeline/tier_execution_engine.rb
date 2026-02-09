@@ -36,7 +36,10 @@ module ArnoldPipeline
           pipeline_run.update!(status: :awaiting_results)
           executor.await_results(pipeline_run:, tasks: tier_tasks)
         else
-          # Sync providers: results available immediately after publish
+          # Sync providers: results available immediately after publish.
+          # Reload tasks to pick up external_id set by executor.call (which
+          # updates via a separate find_by query, leaving these objects stale).
+          tier_tasks.each(&:reload)
           executor.fetch_results(pipeline_run:, tasks: tier_tasks)
         end
 
@@ -178,6 +181,7 @@ module ArnoldPipeline
           pipeline_run.update!(status: :awaiting_results)
           executor.await_results(pipeline_run:, tasks: created_tasks)
         else
+          created_tasks.each(&:reload)
           executor.fetch_results(pipeline_run:, tasks: created_tasks)
         end
 

@@ -12,6 +12,8 @@ module ArnoldPipeline
 
     attr_accessor :execution_provider, :github_token, :github_repo,
                   :github_issue_mention,
+                  :claude_code_repo_path, :claude_code_model,
+                  :claude_code_max_turns, :claude_code_permission_mode,
                   :max_iterations, :library_path,
                   :polling_interval, :polling_timeout, :polling_max_interval,
                   :tier_gate_enabled, :context_propagation_enabled, :max_tier_retries,
@@ -26,6 +28,10 @@ module ArnoldPipeline
       @github_token       = ENV["GITHUB_TOKEN"]
       @github_repo        = nil
       @github_issue_mention = nil
+      @claude_code_repo_path      = nil
+      @claude_code_model          = "sonnet"
+      @claude_code_max_turns      = nil
+      @claude_code_permission_mode = "auto"
       @max_iterations     = 3
       @library_path       = nil
       @polling_interval     = 30
