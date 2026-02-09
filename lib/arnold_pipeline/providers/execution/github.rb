@@ -7,6 +7,7 @@ module ArnoldPipeline
       class Github < Base
         def initialize(token:, repo:, issue_mention: nil)
           @client = Octokit::Client.new(access_token: token)
+          @client.auto_paginate = true
           @repo = repo
           @issue_mention = issue_mention
         end
@@ -49,7 +50,7 @@ module ArnoldPipeline
             issue = @client.issue(@repo, issue_number)
             issue_state = issue.state
 
-            pulls = @client.pull_requests(@repo, state: "all").select do |pr|
+            pulls = @client.pull_requests(@repo, state: "all", per_page: 100).select do |pr|
               pr.body&.include?("##{task.external_id}") ||
                 pr.title&.include?("##{task.external_id}")
             end
@@ -85,7 +86,7 @@ module ArnoldPipeline
           (tasks || pipeline_run.tasks).each do |task|
             next unless task.external_id
 
-            pulls = @client.pull_requests(@repo, state: "open").select do |pr|
+            pulls = @client.pull_requests(@repo, state: "open", per_page: 100).select do |pr|
               pr.body&.include?("##{task.external_id}") ||
                 pr.title&.include?("##{task.external_id}")
             end

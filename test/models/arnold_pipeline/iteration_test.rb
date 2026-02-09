@@ -12,11 +12,20 @@ module ArnoldPipeline
       assert_includes iteration.errors[:number], "can't be blank"
     end
 
-    test "number must be between 1 and 3" do
+    test "number must be greater than 0 and within configured max" do
       assert_not @run.iterations.build(number: 0).valid?
       assert @run.iterations.build(number: 1).valid?
       assert @run.iterations.build(number: 3).valid?
       assert_not @run.iterations.build(number: 4).valid?
+    end
+
+    test "number respects configured max_iterations" do
+      ArnoldPipeline.configure { |c| c.max_iterations = 5 }
+      assert @run.iterations.build(number: 4).valid?
+      assert @run.iterations.build(number: 5).valid?
+      assert_not @run.iterations.build(number: 6).valid?
+    ensure
+      ArnoldPipeline.reset_configuration!
     end
 
     test "decision must be valid if present" do

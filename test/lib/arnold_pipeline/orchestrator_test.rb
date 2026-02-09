@@ -132,6 +132,25 @@ module ArnoldPipeline
       assert_equal "LLM is down", run_record.metadata["error"]
     end
 
+    test "call validates configuration before running" do
+      ArnoldPipeline.configure { |c| c.llm_provider = :invalid }
+      assert_raises(ArnoldPipeline::ConfigurationError) do
+        @orchestrator.call(nl_input: "test")
+      end
+    ensure
+      ArnoldPipeline.reset_configuration!
+    end
+
+    test "resume validates configuration before running" do
+      run = PipelineRun.create!(nl_input: "test", status: :paused)
+      ArnoldPipeline.configure { |c| c.llm_provider = :invalid }
+      assert_raises(ArnoldPipeline::ConfigurationError) do
+        @orchestrator.resume(pipeline_run: run)
+      end
+    ensure
+      ArnoldPipeline.reset_configuration!
+    end
+
     test "analyze passes task comments to analyzer" do
       stub_spec_generation!
       stub_task_breakdown!(times: 1)

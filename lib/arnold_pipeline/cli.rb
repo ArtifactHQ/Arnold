@@ -20,9 +20,13 @@ module ArnoldPipeline
     option :polling_interval, type: :numeric, desc: "Polling interval in seconds (default: 30)"
     option :polling_timeout, type: :numeric, desc: "Polling timeout in seconds (default: 1800)"
     option :stop_after, type: :string, desc: "Stop after stage: spec, tasks, executed"
-    option :dry_run, type: :boolean, default: false, desc: "Show what would happen without executing"
+    option :dry_run, type: :boolean, default: false, desc: "Generate spec and tasks without publishing to GitHub (still makes LLM API calls)"
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
     def run_pipeline(description)
+      if description == "--help" || description == "-h"
+        invoke :help, ["run"]
+        return
+      end
       with_error_handling do
         setup_standalone!
         load_config!(options)
@@ -34,7 +38,7 @@ module ArnoldPipeline
 
           result = orchestrator.call(nl_input: description, stop_after: :tasks)
 
-          say "DRY RUN - no changes will be made", :yellow
+          say "DRY RUN — spec and tasks generated locally (no GitHub issues will be created)", :yellow
           say "  Repository: #{ArnoldPipeline.configuration.github_repo || '(not configured)'}"
           say "  Description: \"#{description}\""
           say "  Tasks to create: #{result.tasks.count}"
@@ -73,6 +77,10 @@ module ArnoldPipeline
     option :stop_after, type: :string, desc: "Stop after stage: spec, tasks, executed"
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
     def resume(id)
+      if id == "--help" || id == "-h"
+        invoke :help, ["resume"]
+        return
+      end
       with_error_handling do
         setup_standalone!
         load_config!(options) if options[:config]
@@ -109,8 +117,8 @@ module ArnoldPipeline
 
       run_record = PipelineRun.find_by(id:)
       unless run_record
-        say "Pipeline run ##{id} not found", :red
-        return
+        say_error "Pipeline run ##{id} not found", :red
+        raise SystemExit.new(1)
       end
 
       if options[:json]
@@ -187,14 +195,14 @@ module ArnoldPipeline
 
       run_record = PipelineRun.find_by(id:)
       unless run_record
-        say "Pipeline run ##{id} not found", :red
-        return
+        say_error "Pipeline run ##{id} not found", :red
+        raise SystemExit.new(1)
       end
 
       spec = run_record.specification
       unless spec
-        say "No specification found for pipeline run ##{id}", :yellow
-        return
+        say_error "No specification found for pipeline run ##{id}", :yellow
+        raise SystemExit.new(1)
       end
 
       content = if options[:json]
@@ -277,6 +285,11 @@ module ArnoldPipeline
         c.polling_interval = yaml_config[:polling_interval] if yaml_config[:polling_interval]
         c.polling_timeout = yaml_config[:polling_timeout] if yaml_config[:polling_timeout]
         c.polling_max_interval = yaml_config[:polling_max_interval] if yaml_config[:polling_max_interval]
+        c.tier_gate_enabled = yaml_config[:tier_gate_enabled] unless yaml_config[:tier_gate_enabled].nil?
+        c.context_propagation_enabled = yaml_config[:context_propagation_enabled] unless yaml_config[:context_propagation_enabled].nil?
+        c.max_tier_retries = yaml_config[:max_tier_retries] if yaml_config[:max_tier_retries]
+        c.workflow_status_enabled = yaml_config[:workflow_status_enabled] unless yaml_config[:workflow_status_enabled].nil?
+        c.workflow_branch_pattern = Regexp.new(yaml_config[:workflow_branch_pattern]) if yaml_config[:workflow_branch_pattern]
       end
     end
 
@@ -303,10 +316,16 @@ module ArnoldPipeline
       say_error "Configuration error: #{e.message}", :red
       raise SystemExit.new(1)
     rescue Errno::ENOENT => e
-      say_error "File not found: #{e.message}", :red
+      say_error "File not found: #{e.message.sub(/ @ rb_sysopen/, '')}", :red
       raise SystemExit.new(1)
     rescue Psych::SyntaxError => e
       say_error "Invalid YAML in config file: #{e.message}", :red
+      raise SystemExit.new(1)
+    rescue StandardError => e
+      say_error "Error: #{e.message}", :red
+      if options[:verbose]
+        say_error e.backtrace&.first(10)&.join("\n"), :red
+      end
       raise SystemExit.new(1)
     end
 

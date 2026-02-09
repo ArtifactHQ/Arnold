@@ -164,7 +164,7 @@ module ArnoldPipeline
               body: { number: 42, state: "open" }.to_json
             )
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments").with(query: { per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -172,7 +172,7 @@ module ArnoldPipeline
             )
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
-            .with(query: { state: "all" })
+            .with(query: { state: "all", per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -200,7 +200,7 @@ module ArnoldPipeline
               body: { number: 42, state: "closed" }.to_json
             )
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments").with(query: { per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -208,7 +208,7 @@ module ArnoldPipeline
             )
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
-            .with(query: { state: "all" })
+            .with(query: { state: "all", per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -230,7 +230,7 @@ module ArnoldPipeline
               body: { number: 42, state: "open" }.to_json
             )
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments").with(query: { per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -238,7 +238,7 @@ module ArnoldPipeline
             )
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
-            .with(query: { state: "all" })
+            .with(query: { state: "all", per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -260,7 +260,7 @@ module ArnoldPipeline
               body: { number: 42, state: "open" }.to_json
             )
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments").with(query: { per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -268,21 +268,21 @@ module ArnoldPipeline
             )
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
-            .with(query: { state: "all" })
+            .with(query: { state: "all", per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
               body: [{ number: 10, title: "Fix #42", body: "Closes #42", state: "open", merged_at: nil }].to_json
             )
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/files")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/files").with(query: { per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
               body: [{ filename: "app.rb", patch: "+code", status: "added" }].to_json
             )
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/comments")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/comments").with(query: { per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -308,7 +308,7 @@ module ArnoldPipeline
               body: { number: 42, state: "open" }.to_json
             )
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments").with(query: { per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -316,7 +316,7 @@ module ArnoldPipeline
             )
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
-            .with(query: { state: "all" })
+            .with(query: { state: "all", per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -335,7 +335,7 @@ module ArnoldPipeline
           task2 = @pipeline_run.tasks.create!(title: "Task 2", position: 1, external_id: "43")
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
-            .with(query: { state: "open" })
+            .with(query: { state: "open", per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -374,11 +374,11 @@ module ArnoldPipeline
               body: { number: 42, state: "open" }.to_json
             )
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments").with(query: { per_page: "100" })
             .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
-            .with(query: { state: "all" })
+            .with(query: { state: "all", per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -388,13 +388,13 @@ module ArnoldPipeline
               }].to_json
             )
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/files")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/files").with(query: { per_page: "100" })
             .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/comments")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/comments").with(query: { per_page: "100" })
             .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/commits/abc123/check-runs")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/commits/abc123/check-runs").with(query: { per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -425,11 +425,11 @@ module ArnoldPipeline
               body: { number: 42, state: "open" }.to_json
             )
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments").with(query: { per_page: "100" })
             .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
-            .with(query: { state: "all" })
+            .with(query: { state: "all", per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -439,13 +439,13 @@ module ArnoldPipeline
               }].to_json
             )
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/files")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/files").with(query: { per_page: "100" })
             .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/comments")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/comments").with(query: { per_page: "100" })
             .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/commits/abc123/check-runs")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/commits/abc123/check-runs").with(query: { per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -454,7 +454,7 @@ module ArnoldPipeline
 
           # No active workflow runs by branch either
           stub_request(:get, "https://api.github.com/repos/owner/repo/actions/runs")
-            .with(query: { status: "in_progress" })
+            .with(query: { status: "in_progress", per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -462,7 +462,7 @@ module ArnoldPipeline
             )
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/actions/runs")
-            .with(query: { status: "queued" })
+            .with(query: { status: "queued", per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -493,16 +493,16 @@ module ArnoldPipeline
               body: { number: 42, state: "open" }.to_json
             )
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments").with(query: { per_page: "100" })
             .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
 
           # No PRs — fall through to branch-based check
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
-            .with(query: { state: "all" })
+            .with(query: { state: "all", per_page: "100" })
             .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/actions/runs")
-            .with(query: { status: "in_progress" })
+            .with(query: { status: "in_progress", per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
@@ -534,16 +534,16 @@ module ArnoldPipeline
               body: { number: 42, state: "open" }.to_json
             )
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments").with(query: { per_page: "100" })
             .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
-            .with(query: { state: "all" })
+            .with(query: { state: "all", per_page: "100" })
             .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
 
           # Workflow runs API returns an error
           stub_request(:get, "https://api.github.com/repos/owner/repo/actions/runs")
-            .with(query: { status: "in_progress" })
+            .with(query: { status: "in_progress", per_page: "100" })
             .to_return(status: 500, headers: { "Content-Type" => "application/json" }, body: { message: "Internal Server Error" }.to_json)
 
           results = @provider.fetch_results(pipeline_run: @pipeline_run)
@@ -570,11 +570,11 @@ module ArnoldPipeline
               body: { number: 42, state: "open" }.to_json
             )
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments").with(query: { per_page: "100" })
             .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
-            .with(query: { state: "all" })
+            .with(query: { state: "all", per_page: "100" })
             .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
 
           results = @provider.fetch_results(pipeline_run: @pipeline_run)
@@ -601,11 +601,11 @@ module ArnoldPipeline
               body: { number: 42, state: "open" }.to_json
             )
 
-          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments")
+          stub_request(:get, "https://api.github.com/repos/owner/repo/issues/42/comments").with(query: { per_page: "100" })
             .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
-            .with(query: { state: "all" })
+            .with(query: { state: "all", per_page: "100" })
             .to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: [].to_json)
 
           # Stub the workflow runs call to raise a programming error
@@ -658,6 +658,12 @@ module ArnoldPipeline
           assert_raises(NotImplementedError) { base.create_tasks(tasks: [], pipeline_run: nil) }
           assert_raises(NotImplementedError) { base.fetch_results(pipeline_run: nil, tasks: nil) }
           assert_raises(NotImplementedError) { base.merge_results(pipeline_run: nil, tasks: nil) }
+        end
+
+        test "client has auto_paginate enabled" do
+          provider = Github.new(token: "test-token", repo: "owner/repo")
+          client = provider.instance_variable_get(:@client)
+          assert client.auto_paginate
         end
       end
     end

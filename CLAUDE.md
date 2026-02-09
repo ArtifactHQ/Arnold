@@ -20,16 +20,16 @@ NL Input → Spec Generation Agent → Task Breakdown Agent → Execution (GitHu
 
 **Task Breakdown Agent** — Converts a structured spec into 5–20 granular tasks with title, description, priority, labels, and dependency ordering. Output format: JSON array.
 
-**Analysis Agent** — Post-execution feedback loop. Compares code diffs against the spec using a QA Analyst persona. Decides `iterate_tasks` (implementation fixes) or `iterate_spec` (clarify ambiguities). Uses confidence scores (0–100%); flags low-confidence decisions (<70%) for human review. Hard cap of 3 iterations.
+**Analysis Agent** — Post-execution feedback loop. Compares code diffs against the spec using a QA Analyst persona. Decides `iterate_tasks` (implementation fixes) or `iterate_spec` (clarify ambiguities). Uses confidence scores (0–100%); flags low-confidence decisions (<70%) for human review. Configurable iteration limit (1-10, default 3).
 
-**Library Manager** — Maintains agent personas (Software Architect, Domain Expert, General Analyst, QA Analyst) and application recipes (Web App, API Service, etc.) as JSON/YAML files or in a vector database. Supports semantic retrieval based on NL input similarity. Falls back to a generic persona on mismatch.
+**Library Manager** — Maintains agent personas (Software Architect, Domain Expert, General Analyst, QA Analyst) and application recipes (Web App, API Service, etc.) as YAML files. Supports keyword-based retrieval from YAML files. Falls back to a generic persona on mismatch.
 
 ## Key Design Constraints
 
 - Tasks MUST be ordered by dependencies (e.g., database setup before API endpoints)
-- The feedback loop MUST terminate after max 3 iterations
+- The feedback loop MUST terminate after the configured max iterations (1-10, default 3)
 - The system should default to a generic persona when library retrieval fails
-- Bypass mode uses GitHub webhooks or API polling for PR/issue events in the feedback loop
+- Bypass mode uses GitHub API polling for PR/issue events in the feedback loop
 - Implementation language: Ruby 4+ / Rails 8+
 
 ## Technology Stack
@@ -50,4 +50,12 @@ NL Input → Spec Generation Agent → Task Breakdown Agent → Execution (GitHu
 
 ## Current Status
 
-This project is in the **specification phase** — see `specification.md` for the full requirements document using Given-When-Then scenarios. No implementation code exists yet.
+Active development. The pipeline is fully implemented with:
+- 7 CLI commands (run, resume, status, list, spec, version, plus --help)
+- 300+ tests (Minitest, 833 assertions, 0 failures)
+- Anthropic and OpenAI LLM providers
+- GitHub execution provider with tiered task management
+- Tier gate checking with context propagation
+- Workflow status monitoring
+- Pause/resume with stage checkpoints
+- Configurable iteration limits (1-10, default 3)

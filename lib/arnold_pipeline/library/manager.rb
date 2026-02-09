@@ -1,4 +1,5 @@
 require "yaml"
+require "logger"
 require_relative "persona"
 require_relative "recipe"
 require_relative "domain_type"
@@ -10,8 +11,9 @@ module ArnoldPipeline
       FALLBACK_RECIPE = "generic"
       FALLBACK_DOMAIN_TYPE = "generic"
 
-      def initialize(library_path: nil)
+      def initialize(library_path: nil, logger: nil)
         @library_path = library_path || default_library_path
+        @logger = logger || Logger.new($stdout, level: Logger::WARN)
         @personas = {}
         @recipes = {}
         @domain_types = {}
@@ -20,16 +22,25 @@ module ArnoldPipeline
 
       def find_persona(nl_input)
         best = best_match(@personas.values, nl_input)
+        unless best
+          @logger.warn { "Library: No persona matched input '#{nl_input.truncate(50)}', falling back to generic" }
+        end
         best || @personas[FALLBACK_PERSONA] || @personas.values.first
       end
 
       def find_recipe(nl_input)
         best = best_match(@recipes.values, nl_input)
+        unless best
+          @logger.warn { "Library: No recipe matched input '#{nl_input.truncate(50)}', falling back to generic" }
+        end
         best || @recipes[FALLBACK_RECIPE] || @recipes.values.first
       end
 
       def find_domain_type(nl_input)
         best = best_match(@domain_types.values, nl_input)
+        unless best
+          @logger.warn { "Library: No domain type matched input '#{nl_input.truncate(50)}', falling back to generic" }
+        end
         best || @domain_types[FALLBACK_DOMAIN_TYPE] || @domain_types.values.first
       end
 

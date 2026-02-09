@@ -38,7 +38,7 @@ module ArnoldPipeline
 
     scope :in_tier, ->(tier) { where(tier: tier) }
 
-    default_scope { order(:position) }
+    scope :ordered, -> { order(:position) }
 
     def has_substantive_comments?
       return false if result_comments.blank?

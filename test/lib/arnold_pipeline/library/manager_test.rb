@@ -127,6 +127,34 @@ module ArnoldPipeline
         assert_equal "GENERIC", dt.code
       end
 
+      test "logs warning when falling back to generic persona" do
+        logger = mock("logger")
+        logger.expects(:warn).at_least_once
+        manager = Manager.new(logger: logger)
+        manager.find_persona("xyzzy completely unrelated nonsense")
+      end
+
+      test "logs warning when falling back to generic recipe" do
+        logger = mock("logger")
+        logger.expects(:warn).at_least_once
+        manager = Manager.new(logger: logger)
+        manager.find_recipe("xyzzy completely unrelated nonsense")
+      end
+
+      test "logs warning when falling back to generic domain type" do
+        logger = mock("logger")
+        logger.expects(:warn).at_least_once
+        manager = Manager.new(logger: logger)
+        manager.find_domain_type("xyzzy completely unrelated nonsense")
+      end
+
+      test "does not log when persona matches" do
+        logger = mock("logger")
+        logger.expects(:warn).never
+        manager = Manager.new(logger: logger)
+        manager.find_persona("Design a scalable microservices architecture")
+      end
+
       test "supports custom library path" do
         custom_path = File.join(Dir.tmpdir, "arnold_test_library_#{Process.pid}")
         FileUtils.mkdir_p(File.join(custom_path, "personas"))

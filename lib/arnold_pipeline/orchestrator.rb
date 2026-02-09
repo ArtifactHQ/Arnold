@@ -35,12 +35,14 @@ module ArnoldPipeline
       @tier_execution_engine = TierExecutionEngine.new(executor: @executor, tier_gate_check: @tier_gate_check, logger: @logger)
     end
 
-    def call(nl_input:, stop_after: nil)
-      pipeline_run = PipelineRun.create!(nl_input:, status: :pending)
+    def call(nl_input:, stop_after: nil, pipeline_run: nil)
+      ArnoldPipeline.configuration.validate!
+      pipeline_run ||= PipelineRun.create!(nl_input:, status: :pending)
       run_pipeline!(pipeline_run, from: :generate_spec, stop_after:)
     end
 
     def resume(pipeline_run:, stop_after: nil)
+      ArnoldPipeline.configuration.validate!
       unless pipeline_run.paused? || pipeline_run.failed?
         raise ArgumentError, "Cannot resume a #{pipeline_run.status} pipeline run"
       end

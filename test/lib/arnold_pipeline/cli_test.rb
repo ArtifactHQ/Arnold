@@ -33,9 +33,10 @@ module ArnoldPipeline
       assert_match(/done.*95%/, output)
     end
 
-    test "status shows not found for invalid ID" do
-      output = capture_output { Cli.start(["status", "99999"]) }
-      assert_match(/not found/, output)
+    test "status with non-existent ID exits with error" do
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start(["status", "99999"]) }
+      end
     end
 
     test "spec outputs specification content" do
@@ -76,16 +77,18 @@ module ArnoldPipeline
       File.delete(outfile) if outfile && File.exist?(outfile)
     end
 
-    test "spec shows not found for invalid ID" do
-      output = capture_output { Cli.start(["spec", "99999"]) }
-      assert_match(/not found/, output)
+    test "spec with non-existent ID exits with error" do
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start(["spec", "99999"]) }
+      end
     end
 
-    test "spec shows message when no specification exists" do
+    test "spec with no specification exits with error" do
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :pending)
 
-      output = capture_output { Cli.start(["spec", run_record.id.to_s]) }
-      assert_match(/No specification found/, output)
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start(["spec", run_record.id.to_s]) }
+      end
     end
 
     test "version shows version string" do
@@ -207,6 +210,21 @@ module ArnoldPipeline
       File.delete(bad_yaml) if bad_yaml && File.exist?(bad_yaml)
     end
 
+    test "run with unexpected error shows clean message" do
+      ArnoldPipeline::Orchestrator.stubs(:new).raises(RuntimeError, "something went wrong")
+
+      stderr_output = capture_stderr_through_exit { Cli.start(["run", "Build an app"]) }
+      assert_match(/Error:.*something went wrong/, stderr_output)
+    end
+
+    test "run with unexpected error and --verbose shows backtrace" do
+      ArnoldPipeline::Orchestrator.stubs(:new).raises(RuntimeError, "something went wrong")
+
+      stderr_output = capture_stderr_through_exit { Cli.start(["run", "Build an app", "--verbose"]) }
+      assert_match(/Error:.*something went wrong/, stderr_output)
+      assert_match(/\.rb/, stderr_output) # backtrace includes file references
+    end
+
     test "resume shows friendly message for ConfigurationError" do
       run_record = PipelineRun.create!(nl_input: "Build an app", status: :paused)
       ArnoldPipeline::Orchestrator.stubs(:new).raises(ArnoldPipeline::ConfigurationError, "GitHub token is required")
@@ -252,6 +270,16 @@ module ArnoldPipeline
       assert_equal 2, parsed["spec_version"]
       assert parsed.key?("created_at")
       assert_kind_of Array, parsed["iterations"]
+    end
+
+    test "run --help shows usage without crashing" do
+      output = capture_output { Cli.start(["run", "--help"]) }
+      assert_match(/DESCRIPTION/, output)
+    end
+
+    test "resume --help shows usage without crashing" do
+      output = capture_output { Cli.start(["resume", "--help"]) }
+      assert_match(/ID/, output)
     end
 
     test "run --dry-run shows summary without executing" do

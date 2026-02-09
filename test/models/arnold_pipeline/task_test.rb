@@ -33,12 +33,12 @@ module ArnoldPipeline
       assert_equal expected, Task.statuses.keys
     end
 
-    test "orders by position by default" do
+    test "ordered scope sorts by position" do
       @run.tasks.create!(title: "Third", position: 2)
       @run.tasks.create!(title: "First", position: 0)
       @run.tasks.create!(title: "Second", position: 1)
 
-      assert_equal %w[First Second Third], @run.tasks.reload.map(&:title)
+      assert_equal %w[First Second Third], @run.tasks.ordered.map(&:title)
     end
 
     test "belongs to pipeline_run" do

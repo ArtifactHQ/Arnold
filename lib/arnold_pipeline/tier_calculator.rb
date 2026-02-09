@@ -1,6 +1,6 @@
 module ArnoldPipeline
   class TierCalculator
-    class CycleError < StandardError; end
+    class CycleError < ArnoldPipeline::Error; end
 
     def self.call(tasks)
       new(tasks).call
