@@ -1,7 +1,7 @@
 module ArnoldPipeline
   module Prompts
     module TaskBreakdown
-      def self.system_prompt
+      def self.system_prompt(recipe: nil, supporting_recipes: [])
         <<~PROMPT
           You are a technical project manager breaking down a software specification into
           granular, actionable tasks for AI coding agents.
@@ -20,6 +20,8 @@ module ArnoldPipeline
           9. Security & Privacy (roles, permissions, data protection, compliance)
           10. Future Considerations (deferred items — do NOT create tasks for these)
 
+          #{technology_context(recipe, supporting_recipes)}
+
           # Rules
 
           - Aim for 5 to 20 tasks
@@ -33,6 +35,16 @@ module ArnoldPipeline
             foundational structure (project skeleton, dependencies, database configuration).
             ALL other tasks MUST depend on position 0, either directly or transitively
             through other dependencies. This ensures a single foundation task runs first.
+          - Task descriptions MUST reference specific tools, gems, generators, and commands
+            from the spec and recipe context. Be prescriptive, not generic.
+            WRONG: "Set up the project with a database and CSS framework"
+            RIGHT: "Run `rails new` with PostgreSQL (`--database=postgresql`), install Tailwind CSS via `tailwindcss-rails`, configure Propshaft asset pipeline"
+            WRONG: "Implement authentication"
+            RIGHT: "Implement authentication using Rails 8 authentication generator (`bin/rails generate authentication`), configure `has_secure_password`, add `bcrypt` gem"
+          - The bootstrap task (position 0) MUST name the specific framework, database,
+            CSS framework, and asset pipeline from the recipe context
+          - For each spec section, name the specific tools and libraries that apply to
+            that section's tasks (e.g., ActiveRecord for models, Turbo Streams for real-time)
 
           # Output Format
 
@@ -60,6 +72,83 @@ module ArnoldPipeline
           #{spec_content}
         PROMPT
       end
+
+      def self.technology_context(recipe, supporting_recipes)
+        return "" if recipe.nil?
+
+        parts = ["# Technology Context"]
+        parts << ""
+        parts << "Recipe: #{recipe.name} (#{recipe.type})"
+        parts << recipe.description.strip if recipe.description
+
+        fw = framework_section(recipe)
+        parts << "" << fw unless fw.empty?
+
+        sd = sections_detail(recipe)
+        parts << "" << sd unless sd.empty?
+
+        sr = supporting_recipes_brief(supporting_recipes)
+        parts << "" << sr unless sr.empty?
+
+        parts << ""
+        parts << "Use these tools, gems, generators, and framework patterns when writing task descriptions."
+        parts.join("\n")
+      end
+
+      def self.framework_section(recipe)
+        return "" if recipe.framework.nil? || recipe.framework.empty?
+
+        items = recipe.framework.map { |key, value| "- #{key}: #{value}" }.join("\n")
+        <<~SECTION.strip
+          Framework stack:
+          #{items}
+        SECTION
+      end
+
+      def self.sections_detail(recipe)
+        return "" if recipe.sections.empty?
+
+        recipe.sections.map { |s| format_section(s) }.join("\n\n")
+      end
+
+      def self.format_section(section)
+        parts = ["### #{section['name']}"]
+        parts << section["description"].strip if section["description"]
+
+        tools = section["rails_tools"] || section["tools"]
+        if tools && !tools.empty?
+          parts << ""
+          parts << "Tools:"
+          tools.each { |t| parts << "- #{t}" }
+        end
+
+        guidance = section["guidance"]
+        if guidance && !guidance.empty?
+          parts << ""
+          parts << "Implementation guidance:"
+          guidance.each { |g| parts << "- #{g}" }
+        end
+
+        parts.join("\n")
+      end
+
+      def self.supporting_recipes_brief(recipes)
+        return "" if recipes.nil? || recipes.empty?
+
+        parts = ["## Supporting recipes"]
+        parts << "Consider these additional recipe concerns when creating tasks:"
+
+        recipes.each do |r|
+          section_names = r.sections.map { |s| s["name"] }.join(", ")
+          parts << ""
+          parts << "**#{r.name}** — #{r.description&.strip}"
+          parts << "Sections: #{section_names}"
+        end
+
+        parts.join("\n")
+      end
+
+      private_class_method :technology_context, :framework_section, :sections_detail, :format_section, :supporting_recipes_brief
     end
   end
 end

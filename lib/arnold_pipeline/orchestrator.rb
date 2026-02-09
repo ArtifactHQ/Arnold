@@ -122,7 +122,8 @@ module ArnoldPipeline
 
       pipeline_run.tasks.destroy_all
 
-      task_data = task_breaker.call(spec_content: pipeline_run.specification.content)
+      recipe, supporting_recipes = resolve_recipes(pipeline_run)
+      task_data = task_breaker.call(spec_content: pipeline_run.specification.content, recipe:, supporting_recipes:)
 
       task_data.each do |td|
         pipeline_run.tasks.create!(
@@ -159,6 +160,18 @@ module ArnoldPipeline
         metadata: (pipeline_run.metadata || {}).merge("paused_at" => checkpoint.to_s)
       )
       pipeline_run.reload
+    end
+
+    def resolve_recipes(pipeline_run)
+      structured_data = pipeline_run.specification&.structured_data || {}
+      recipe_type = structured_data["recipe_type"]
+      supporting_types = structured_data["supporting_recipe_types"] || []
+
+      all_recipes = library_manager.all_recipes
+      recipe = all_recipes.find { |r| r.type == recipe_type }
+      supporting = supporting_types.filter_map { |t| all_recipes.find { |r| r.type == t } }
+
+      [recipe, supporting]
     end
 
   end

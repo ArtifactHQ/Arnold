@@ -1,5 +1,6 @@
 require "test_helper"
 require "arnold_pipeline/agents/task_breaker"
+require "arnold_pipeline/library/manager"
 
 module ArnoldPipeline
   module Agents
@@ -7,6 +8,7 @@ module ArnoldPipeline
       setup do
         @llm = stub("llm")
         @agent = TaskBreaker.new(llm: @llm, logger: Logger.new(File::NULL))
+        @manager = Library::Manager.new
       end
 
       test "parses tasks from LLM response" do
@@ -48,6 +50,48 @@ module ArnoldPipeline
         @llm.expects(:chat).returns("```json\n#{JSON.generate(tasks)}\n```")
 
         assert_raises(ArnoldPipeline::Error) { @agent.call(spec_content: "spec") }
+      end
+
+      test "passes recipe context to system prompt" do
+        recipe = @manager.find_recipe("Build a responsive web dashboard")
+        tasks = [
+          { "title" => "Bootstrap project", "description" => "Setup Rails 8", "priority" => 0, "labels" => ["setup"], "position" => 0, "depends_on" => [] }
+        ]
+
+        @llm.expects(:chat).with { |kwargs|
+          kwargs[:system].include?("Technology Context") &&
+            kwargs[:system].include?(recipe.name) &&
+            kwargs[:system].include?("Rails 8+")
+        }.returns("```json\n#{JSON.generate(tasks)}\n```")
+
+        @agent.call(spec_content: "# A spec", recipe: recipe)
+      end
+
+      test "works without recipe (backward compatibility)" do
+        tasks = [
+          { "title" => "Bootstrap", "description" => "Setup", "priority" => 0, "labels" => ["setup"], "position" => 0, "depends_on" => [] }
+        ]
+
+        @llm.expects(:chat).with { |kwargs|
+          !kwargs[:system].include?("Technology Context")
+        }.returns("```json\n#{JSON.generate(tasks)}\n```")
+
+        @agent.call(spec_content: "# A spec")
+      end
+
+      test "includes supporting recipes in system prompt" do
+        recipe = @manager.find_recipe("Build a responsive web dashboard")
+        supporting = [@manager.find_recipe("Create a REST API with JSON endpoints")]
+        tasks = [
+          { "title" => "Bootstrap", "description" => "Setup", "priority" => 0, "labels" => ["setup"], "position" => 0, "depends_on" => [] }
+        ]
+
+        @llm.expects(:chat).with { |kwargs|
+          kwargs[:system].include?("Supporting recipes") &&
+            kwargs[:system].include?("API Service")
+        }.returns("```json\n#{JSON.generate(tasks)}\n```")
+
+        @agent.call(spec_content: "# A spec", recipe: recipe, supporting_recipes: supporting)
       end
     end
   end

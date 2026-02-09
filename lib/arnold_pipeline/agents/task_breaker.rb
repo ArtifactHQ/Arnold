@@ -7,10 +7,14 @@ module ArnoldPipeline
       MIN_TASKS = 5
       MAX_TASKS = 20
 
-      def call(spec_content:)
-        logger.info { "Breaking spec into tasks" }
+      def call(spec_content:, recipe: nil, supporting_recipes: [])
+        if recipe
+          logger.info { "Breaking spec into tasks (recipe: #{recipe.name})" }
+        else
+          logger.info { "Breaking spec into tasks" }
+        end
 
-        system = Prompts::TaskBreakdown.system_prompt
+        system = Prompts::TaskBreakdown.system_prompt(recipe:, supporting_recipes:)
         user = Prompts::TaskBreakdown.user_prompt(spec_content:)
 
         response = chat(

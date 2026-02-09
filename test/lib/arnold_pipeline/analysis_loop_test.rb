@@ -150,15 +150,60 @@ module ArnoldPipeline
       assert_equal 3, pipeline_run.iterations.order(:number).last.number
     end
 
+    test "iterate_spec passes recipe context to task_breaker" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!(
+        structured_data: {
+          "features" => ["auth"],
+          "recipe_type" => "web_app",
+          "supporting_recipe_types" => ["api_service"]
+        }
+      )
+
+      @task_breaker.expects(:call).with { |kwargs|
+        kwargs[:recipe]&.type == "web_app" &&
+          kwargs[:supporting_recipes].any? { |r| r.type == "api_service" }
+      }.returns(sample_tasks)
+
+      call_count = sequence("analysis_calls")
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("iterate_spec", 60, { "spec_changes" => "Clarify auth flow" }))
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("done", 90))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal "completed", pipeline_run.reload.status
+    end
+
+    test "iterate_spec works without recipe in structured_data" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      @task_breaker.expects(:call).with { |kwargs|
+        kwargs[:recipe].nil? && kwargs[:supporting_recipes] == []
+      }.returns(sample_tasks)
+
+      call_count = sequence("analysis_calls")
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("iterate_spec", 60, { "spec_changes" => "Clarify auth" }))
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("done", 90))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal "completed", pipeline_run.reload.status
+    end
+
     private
 
-    def create_pipeline_run_with_spec_and_tasks!
+    def create_pipeline_run_with_spec_and_tasks!(structured_data: nil)
       pipeline_run = PipelineRun.create!(nl_input: "Build a todo app", status: :pending)
       pipeline_run.update!(status: :generating_spec)
       pipeline_run.update!(status: :breaking_tasks)
       pipeline_run.update!(status: :executing)
       pipeline_run.update!(status: :awaiting_results)
-      pipeline_run.create_specification!(content: "# Todo App Spec\n\nA todo app with CRUD operations", version: 1)
+      spec_attrs = { content: "# Todo App Spec\n\nA todo app with CRUD operations", version: 1 }
+      spec_attrs[:structured_data] = structured_data if structured_data
+      pipeline_run.create_specification!(**spec_attrs)
       pipeline_run.tasks.create!(title: "Setup database", description: "Create schema", position: 0, tier: 0)
       pipeline_run
     end

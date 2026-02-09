@@ -227,12 +227,38 @@ module ArnoldPipeline
       assert_equal :execute, stage, "Should infer execute stage when tasks have active workflows"
     end
 
+    test "break_tasks passes recipe context from structured_data" do
+      stub_spec_generation!(recipe_type: "web_app", supporting_recipe_types: ["api_service"])
+
+      @task_breaker.expects(:call).with { |kwargs|
+        kwargs[:spec_content].is_a?(String) &&
+          kwargs[:recipe]&.type == "web_app" &&
+          kwargs[:supporting_recipes].any? { |r| r.type == "api_service" }
+      }.returns(sample_tasks)
+
+      @orchestrator.call(nl_input: "Build a todo app", stop_after: :tasks)
+    end
+
+    test "break_tasks works without recipe in structured_data" do
+      stub_spec_generation!
+
+      @task_breaker.expects(:call).with { |kwargs|
+        kwargs[:recipe].nil? && kwargs[:supporting_recipes] == []
+      }.returns(sample_tasks)
+
+      @orchestrator.call(nl_input: "Build a todo app", stop_after: :tasks)
+    end
+
     private
 
-    def stub_spec_generation!
+    def stub_spec_generation!(recipe_type: nil, supporting_recipe_types: nil)
+      structured_data = { "features" => ["create", "read", "update", "delete"] }
+      structured_data["recipe_type"] = recipe_type if recipe_type
+      structured_data["supporting_recipe_types"] = supporting_recipe_types if supporting_recipe_types
+
       @spec_generator.stubs(:call).returns({
         content: "# Todo App Spec\n\nA todo app with CRUD operations",
-        structured_data: { "features" => ["create", "read", "update", "delete"] }
+        structured_data: structured_data
       })
     end
 
