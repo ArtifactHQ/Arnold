@@ -105,6 +105,7 @@ ArnoldPipeline::PipelineJob.perform_later(run.id)
 arnold run "description" [options]   # Run the full pipeline
 arnold resume ID [options]           # Resume a paused or failed run
 arnold spec ID [options]             # Export a run's specification
+arnold tasks ID [options]            # Export a run's tasks
 arnold status ID                     # Check a pipeline run
 arnold list                          # List all runs
 arnold version                       # Show version
@@ -128,6 +129,10 @@ arnold tree                          # Print command tree
 # Options for `spec`:
 #   -o, --output FILE  Write to file instead of stdout
 #   --json             Output structured JSON data instead of markdown
+
+# Options for `tasks`:
+#   -o, --output FILE  Write to file instead of stdout
+#   --json             Output as JSON
 ```
 
 ### Exporting Specifications
@@ -140,6 +145,19 @@ arnold spec 1 --json             # Print structured JSON instead
 arnold spec 1 -o spec.md         # Write markdown to file
 arnold spec 1 --json -o spec.json  # Write JSON to file
 ```
+
+### Exporting Tasks
+
+After a pipeline run, export the generated tasks:
+
+```bash
+arnold tasks 1                      # Print tasks as markdown to stdout
+arnold tasks 1 --json               # Print as JSON array instead
+arnold tasks 1 -o tasks.md          # Write markdown to file
+arnold tasks 1 --json -o tasks.json # Write JSON to file
+```
+
+Each task includes position, title, tier, priority, status, labels, dependencies, and description. JSON output additionally includes `id`, `external_id`, and `external_url`.
 
 ## Configuration Reference
 
