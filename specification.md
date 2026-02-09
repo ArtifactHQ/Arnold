@@ -48,7 +48,7 @@ GitHub Issues serve as tasks, GitHub Actions or Copilot handle execution, and PR
 #### Scenario: Multi-Agent Routing
 - GIVEN tasks with labels.
 - WHEN executed via GitHub.
-- THEN the system SHOULD route tasks to appropriate agents based on strengths (e.g., frontend to a GitHub Actions job), monitoring progress via logs and status updates.
+- THEN the system SHOULD route tasks to appropriate agents. Current implementation uses @mention (via `github_issue_mention` config) and labels on GitHub Issues. Active routing by agent strength (e.g., assigning frontend tasks to specialized agents) is a future enhancement. [PLANNED]
 
 ### Requirement: Feedback Loop for Alignment
 The system SHALL implement a post-execution feedback loop using an Analysis Agent to evaluate code outputs against the original specification.
@@ -71,6 +71,40 @@ The loop SHALL use GitHub API polling for PR/issue events.
 - GIVEN alignment achieved after iterations or max iterations reached.
 - WHEN final validation occurs.
 - THEN changes are merged via GitHub API (e.g., PR merge), and the loop ends.
+
+### Analysis Evaluation Methodology
+
+The Analysis Agent applies three completeness tests and checks for seven anti-patterns when evaluating implementation against the specification.
+
+#### Completeness Tests
+
+Each test is scored 0-100 and included in the analysis output as `completeness_scores`:
+
+1. **New Reader Test** (`new_reader_test`) -- Could someone who has never spoken to the user read the spec and fully understand what exists, why it exists, how it behaves in normal and edge conditions, and how to know if it is working correctly?
+
+2. **Coding Agent Test** (`coding_agent_test`) -- Could a coding agent implement the spec without making assumptions about undefined behavior, guessing at data types, inventing UI elements not specified, or creating logic not documented?
+
+3. **Change Request Test** (`change_request_test`) -- If someone wanted to change something, could they find where it is defined, understand what else would be affected, and trace the change through all connected sections?
+
+#### Anti-Pattern Detection
+
+The Analysis Agent checks the specification for these anti-patterns and reports any found:
+
+- **Orphaned Reference** -- A concept referenced but never defined elsewhere.
+- **Contradictory Specification** -- Conflicting numbers, rules, or behaviors in different sections.
+- **Vague Quantity** -- Imprecise amounts like "more points" or "appears higher" without formulas.
+- **Missing Negative** -- Features that describe what CAN happen but not limits, restrictions, or error states.
+- **Lazy Idea Drop** -- Ideas mentioned casually without full treatment or explicit deferral.
+- **Assumed Understanding** -- Phrases like "works as expected" or "standard flow".
+- **Technical Leak** -- Implementation details (SQL types, API formats) instead of behavioral descriptions.
+
+#### Human Review Flag
+
+Confidence scores from the analysis drive the `needs_human_review` boolean on the Iteration model. When the overall confidence score is below 70%, the Iteration's `needs_human_review` field is automatically set to `true` via a `before_save` callback. This flag is queryable via `arnold_pipeline status ID --json`. Confidence does not gate execution -- all decisions are acted on regardless of score.
+
+#### Spec Versioning
+
+When an `iterate_spec` decision is made, the Specification model's `version` field is incremented (e.g., version 1 becomes version 2). This enables tracking how many times the spec has been refined through the feedback loop.
 
 ### Requirement: Library Management
 The system SHALL maintain a library of agent personas and application recipes, stored as YAML files with keyword-based retrieval.
@@ -167,6 +201,19 @@ This prevents premature task resolution when code changes are still being valida
 - WHEN the system polls for results.
 - THEN workflow_active is set to false and the task is eligible for result resolution.
 
+### Comment Classification Heuristics
+
+During GitHub polling, the system classifies issue comments using pattern-based heuristics to determine task progress and resolution status.
+
+**WIP Patterns** -- Comments matching any of these patterns indicate work is still in progress:
+- "is working", "get back to you", "working on", "in progress", "starting work", "I'll analyze", "picking up", "looking into"
+
+**Resolution Patterns** -- Comments matching any of these patterns indicate a task has reached a resolution (success or failure):
+- Completion signals: "finished", "completed", "created pr" / "create pr"
+- Failure/blocker signals: "can't", "unable to", "failed", "error"
+
+A comment is considered "substantive" if it matches at least one resolution pattern. The `has_substantive_comments?` method on the Task model uses these patterns to determine whether a task's comments indicate resolution. Tasks with only WIP-pattern comments are classified as `wip_comments_only` in the resolution summary.
+
 ### Requirement: Pause and Resume
 The system SHALL support pausing execution at configurable stage checkpoints and resuming from the last completed stage.
 Resume SHALL be idempotent: re-publishing already-published tasks is safely skipped.
@@ -201,7 +248,7 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 #### Command: run
 - GIVEN a natural language description as argument.
 - WHEN `arnold_pipeline run DESCRIPTION` is executed.
-- THEN the full pipeline runs with options: --config (YAML path), --provider (anthropic|openai), --model (name), --repo (owner/repo), --issue-mention (@handle), --polling-interval (seconds), --polling-timeout (seconds), --stop-after (spec|tasks|executed), --dry-run (boolean), --verbose (boolean).
+- THEN the full pipeline runs with options: --config (YAML path), --provider (anthropic|openai), --model (name), --repo (owner/repo), --issue-mention (@handle), --polling-interval (seconds), --polling-timeout (seconds), --stop-after (spec|tasks|executed), --preview/--dry-run (boolean, generate spec and tasks without publishing to GitHub), --verbose (boolean).
 - Exit code 0 on success, 1 on error.
 
 #### Command: resume
@@ -232,6 +279,10 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 - WHEN `arnold_pipeline version` or `arnold_pipeline --version` is executed.
 - THEN the gem version is printed.
 
+#### Command: tree
+- WHEN `arnold_pipeline tree` is executed.
+- THEN a tree of all available commands is printed.
+
 ### Requirement: Configuration
 The system SHALL be configurable via a Ruby block (`ArnoldPipeline.configure`) or YAML config file.
 All configuration keys SHALL be validated before pipeline execution via `validate!`.
@@ -255,3 +306,37 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | max_tier_retries | Integer | 2 | 0-5 |
 | workflow_status_enabled | Boolean | true | None |
 | workflow_branch_pattern | Regexp | /issue[-_]?\d+/i | None |
+
+### PipelineRun State Machine
+
+The PipelineRun model uses a status enum with the following values and valid transitions:
+
+| Status | Enum Value | Description |
+|---|---|---|
+| pending | 0 | Initial state, pipeline not yet started |
+| generating_spec | 1 | Spec Generation Agent is running |
+| breaking_tasks | 2 | Task Breakdown Agent is running |
+| executing | 3 | Tasks are being published to GitHub |
+| awaiting_results | 8 | Polling GitHub for task results |
+| analyzing | 4 | Analysis Agent is evaluating results |
+| completed | 5 | Pipeline finished successfully (terminal) |
+| max_iterations_reached | 6 | Iteration limit hit (terminal) |
+| failed | 7 | Pipeline encountered an error |
+| paused | 9 | Pipeline paused at a checkpoint |
+
+#### Valid State Transitions
+
+```
+pending -> generating_spec
+generating_spec -> breaking_tasks | failed | paused
+breaking_tasks -> executing | failed | paused
+executing -> awaiting_results | failed | paused
+awaiting_results -> analyzing | failed | paused
+analyzing -> completed | max_iterations_reached | executing (iterate_tasks) | generating_spec (iterate_spec) | failed | paused
+paused -> (resume to inferred stage)
+failed -> (resume to inferred stage)
+completed -> (terminal, no transitions)
+max_iterations_reached -> (terminal, no transitions)
+```
+
+The `analyzing` state has branching transitions: `completed` and `max_iterations_reached` are terminal states; `executing` is reached via an `iterate_tasks` decision (new corrective tasks); `generating_spec` is reached via an `iterate_spec` decision (spec refinement). Any active stage may transition to `failed` on error or `paused` at a `stop_after` checkpoint.

@@ -1,0 +1,182 @@
+require "test_helper"
+require "arnold_pipeline/orchestrator"
+
+module ArnoldPipeline
+  class AnalysisLoopTest < ActiveSupport::TestCase
+    setup do
+      @library_manager = Library::Manager.new
+      @analyzer = stub("analyzer")
+      @task_breaker = stub("task_breaker")
+      @executor = stub("executor")
+      @tier_gate_check = stub("tier_gate_check")
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      @tier_execution_engine = TierExecutionEngine.new(
+        executor: @executor,
+        tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL)
+      )
+
+      @analysis_loop = AnalysisLoop.new(
+        analyzer: @analyzer,
+        task_breaker: @task_breaker,
+        library_manager: @library_manager,
+        tier_execution_engine: @tier_execution_engine,
+        logger: Logger.new(File::NULL)
+      )
+
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.tier_gate_enabled = false
+        c.context_propagation_enabled = false
+        c.workflow_status_enabled = false
+      end
+    end
+
+    teardown do
+      ArnoldPipeline.reset_configuration!
+    end
+
+    test "completes on done decision" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal "completed", pipeline_run.reload.status
+      assert_equal 1, pipeline_run.iterations.count
+      assert_equal "done", pipeline_run.iterations.first.decision
+    end
+
+    test "handles iterate_tasks decision" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      corrective = {
+        "tasks" => [
+          { "title" => "Fix error handling", "description" => "Add try/catch", "position" => 0 }
+        ]
+      }
+
+      call_count = sequence("analysis_calls")
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("iterate_tasks", 80, corrective))
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("done", 92))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal "completed", pipeline_run.reload.status
+      assert_equal 2, pipeline_run.iterations.count
+    end
+
+    test "handles iterate_spec decision" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      @task_breaker.stubs(:call).returns(sample_tasks)
+
+      call_count = sequence("analysis_calls")
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("iterate_spec", 60, { "spec_changes" => "Clarify auth flow" }))
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("done", 90))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal "completed", pipeline_run.reload.status
+      assert_equal 2, pipeline_run.iterations.count
+      assert_includes pipeline_run.specification.content, "Clarify auth flow"
+    end
+
+    test "stops after max iterations" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      corrective = {
+        "tasks" => [{ "title" => "Fix", "description" => "Fix it", "position" => 0 }]
+      }
+
+      @analyzer.stubs(:call).returns(analysis_result("iterate_tasks", 75, corrective))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal "max_iterations_reached", pipeline_run.reload.status
+      assert_equal 3, pipeline_run.iterations.count
+    end
+
+    test "creates iteration records with correct data" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      @analyzer.expects(:call).once.returns(analysis_result("done", 88))
+
+      @analysis_loop.run!(pipeline_run)
+
+      iteration = pipeline_run.iterations.first
+      assert_equal 1, iteration.number
+      assert_equal "done", iteration.decision
+      assert_equal 88, iteration.confidence
+      assert_equal "Analysis reasoning for done", iteration.reasoning
+    end
+
+    test "flags low confidence iterations for human review" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      @analyzer.expects(:call).once.returns(analysis_result("done", 50))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert pipeline_run.iterations.first.needs_human_review
+    end
+
+    test "resumes from existing iteration count" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+      # Simulate 2 existing iterations
+      pipeline_run.iterations.create!(number: 1, decision: "iterate_tasks", confidence: 80, reasoning: "First pass")
+      pipeline_run.iterations.create!(number: 2, decision: "iterate_tasks", confidence: 85, reasoning: "Second pass")
+
+      ArnoldPipeline.configuration.max_iterations = 3
+
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal "completed", pipeline_run.reload.status
+      assert_equal 3, pipeline_run.iterations.count
+      assert_equal 3, pipeline_run.iterations.order(:number).last.number
+    end
+
+    private
+
+    def create_pipeline_run_with_spec_and_tasks!
+      pipeline_run = PipelineRun.create!(nl_input: "Build a todo app", status: :pending)
+      pipeline_run.update!(status: :generating_spec)
+      pipeline_run.update!(status: :breaking_tasks)
+      pipeline_run.update!(status: :executing)
+      pipeline_run.update!(status: :awaiting_results)
+      pipeline_run.create_specification!(content: "# Todo App Spec\n\nA todo app with CRUD operations", version: 1)
+      pipeline_run.tasks.create!(title: "Setup database", description: "Create schema", position: 0, tier: 0)
+      pipeline_run
+    end
+
+    def sample_tasks
+      [
+        { "title" => "Setup database", "description" => "Create schema", "priority" => 0, "labels" => ["database"], "position" => 0, "depends_on" => [] },
+        { "title" => "Create models", "description" => "Define models", "priority" => 0, "labels" => ["backend"], "position" => 1, "depends_on" => [0] }
+      ]
+    end
+
+    def analysis_result(decision, confidence, corrective_data = {})
+      {
+        "decision" => decision,
+        "confidence" => confidence,
+        "reasoning" => "Analysis reasoning for #{decision}",
+        "corrective_data" => corrective_data
+      }
+    end
+  end
+end

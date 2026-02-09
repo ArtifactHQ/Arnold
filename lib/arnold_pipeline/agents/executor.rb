@@ -16,7 +16,7 @@ module ArnoldPipeline
           t.respond_to?(:external_id) ? t.external_id.present? : t["external_id"].present?
         end
 
-        logger.info { "Executing #{unpublished.size} tasks via #{provider.class.name}" }
+        logger.info { "[Arnold] Publishing #{unpublished.size} tasks to GitHub..." }
         return [] if unpublished.empty?
 
         results = provider.create_tasks(tasks: unpublished, pipeline_run:, prior_context:)
@@ -36,7 +36,7 @@ module ArnoldPipeline
       end
 
       def fetch_results(pipeline_run:, tasks: nil)
-        logger.info { "Fetching results for pipeline run ##{pipeline_run.id}" }
+        logger.info { "[Arnold] Fetching results for pipeline run ##{pipeline_run.id}" }
         results = provider.fetch_results(pipeline_run:, tasks:)
 
         results.each do |result|
@@ -82,19 +82,19 @@ module ArnoldPipeline
           }
 
           if resolved >= total
-            logger.info { "All #{total} tasks resolved." }
+            logger.info { "[Arnold] All #{total} tasks resolved." }
             break
           end
 
           if elapsed >= timeout
-            logger.warn { "Polling timed out after #{elapsed}s. #{resolved}/#{total} tasks resolved." }
+            logger.warn { "[Arnold] Polling timed out after #{elapsed}s. #{resolved}/#{total} tasks resolved." }
             break
           end
 
           remaining = timeout - elapsed
           sleep_time = [interval, remaining].min
 
-          logger.info { "Waiting for results... #{resolved}/#{total} tasks resolved. Next check in #{sleep_time}s" }
+          logger.info { "[Arnold] Polling... elapsed: #{elapsed}s, resolved: #{resolved}/#{total} tasks. Next check in #{sleep_time}s" }
 
           sleep_func.call(sleep_time)
           elapsed += sleep_time
@@ -103,7 +103,7 @@ module ArnoldPipeline
       end
 
       def merge_results(pipeline_run:, tasks: nil)
-        logger.info { "Merging results for pipeline run ##{pipeline_run.id}" }
+        logger.info { "[Arnold] Merging results for pipeline run ##{pipeline_run.id}" }
         provider.merge_results(pipeline_run:, tasks:)
       end
 

@@ -13,7 +13,7 @@ module ArnoldPipeline
 
     def execute_tiers!(pipeline_run)
       pipeline_run.update!(status: :executing)
-      logger.info { "Executing tasks..." }
+      logger.info { "[Arnold] Publishing tasks to GitHub..." }
 
       max_tier = pipeline_run.tasks.maximum(:tier) || 0
       accumulated_context = load_accumulated_context(pipeline_run)
@@ -23,11 +23,11 @@ module ArnoldPipeline
 
         # Resume: skip fully resolved tiers
         if tier_tasks.all? { |t| tier_task_resolved?(t) }
-          logger.info { "Tier #{tier_num}: skipping (all #{tier_tasks.size} tasks already resolved)" }
+          logger.info { "[Arnold] Executing tier #{tier_num + 1}/#{max_tier + 1}: skipping (all #{tier_tasks.size} tasks already resolved)" }
           next
         end
 
-        logger.info { "Tier #{tier_num}: executing #{tier_tasks.size} tasks" }
+        logger.info { "[Arnold] Executing tier #{tier_num + 1}/#{max_tier + 1} (#{tier_tasks.size} tasks)..." }
 
         prior_context = build_prior_context(accumulated_context)
 
@@ -40,6 +40,7 @@ module ArnoldPipeline
 
         # Merge this tier before next tier starts
         merge_tier_results!(pipeline_run, tier_tasks)
+        logger.info { "[Arnold] Tier #{tier_num + 1}/#{max_tier + 1} complete. Running gate check..." }
 
         # Gate check + context (when either feature is enabled)
         if gate_check_needed?
@@ -60,10 +61,10 @@ module ArnoldPipeline
     end
 
     def merge_all_results!(pipeline_run)
-      logger.info { "Merging results..." }
+      logger.info { "[Arnold] Merging results..." }
       executor.merge_results(pipeline_run:)
     rescue Octokit::Error, Faraday::Error => e
-      logger.warn { "Merge failed (non-fatal): #{e.message}" }
+      logger.warn { "[Arnold] Merge failed (non-fatal): #{e.message}" }
     end
 
     def tier_task_resolved?(task)
@@ -89,10 +90,10 @@ module ArnoldPipeline
     private
 
     def merge_tier_results!(pipeline_run, tier_tasks)
-      logger.info { "Merging tier results..." }
+      logger.info { "[Arnold] Merging tier results..." }
       executor.merge_results(pipeline_run:, tasks: tier_tasks)
     rescue Octokit::Error, Faraday::Error => e
-      logger.warn { "Tier merge failed (non-fatal): #{e.message}" }
+      logger.warn { "[Arnold] Tier merge failed (non-fatal): #{e.message}" }
     end
 
     def gate_check_needed?
@@ -116,12 +117,12 @@ module ArnoldPipeline
       if result
         status = result["pass"] ? "PASSED" : "FAILED"
         issues = result["issues"]&.join("; ") || "none"
-        logger.info { "Tier #{tier_num} gate: #{status} — issues: #{issues}" }
+        logger.info { "[Arnold] Tier #{tier_num} gate: #{status} — issues: #{issues}" }
       end
 
       result
     rescue => e
-      logger.warn { "Tier gate check failed (non-fatal): #{e.class}: #{e.message}\n#{e.backtrace&.first(5)&.join("\n")}" }
+      logger.warn { "[Arnold] Tier gate check failed (non-fatal): #{e.class}: #{e.message}\n#{e.backtrace&.first(5)&.join("\n")}" }
       nil
     end
 
@@ -137,7 +138,7 @@ module ArnoldPipeline
         tier_retries[tier_num.to_s] = retry_count
         pipeline_run.update!(metadata: metadata.merge("tier_retries" => tier_retries))
 
-        logger.info { "Tier #{tier_num} gate failed (retry #{retry_count}/#{max_retries}), creating corrective tasks" }
+        logger.info { "[Arnold] Tier #{tier_num} gate failed (retry #{retry_count}/#{max_retries}), creating corrective tasks" }
 
         # Create corrective tasks at the same tier
         corrective_tasks = gate_result["corrective_tasks"] || []
@@ -155,7 +156,7 @@ module ArnoldPipeline
 
         if created_tasks.any?
           titles = created_tasks.map(&:title).join(", ")
-          logger.info { "Created #{created_tasks.size} corrective tasks for tier #{tier_num}: #{titles}" }
+          logger.info { "[Arnold] Created #{created_tasks.size} corrective tasks for tier #{tier_num}: #{titles}" }
         end
 
         return if created_tasks.empty?

@@ -69,9 +69,17 @@ module ArnoldPipeline
 
       outfile = File.join(Dir.tmpdir, "arnold_spec_test_#{SecureRandom.hex(4)}.md")
 
-      output = capture_output { Cli.start(["spec", run_record.id.to_s, "--output", outfile]) }
+      stderr_output = nil
+      original_stderr = $stderr
+      $stderr = StringIO.new
+      begin
+        capture_output { Cli.start(["spec", run_record.id.to_s, "--output", outfile]) }
+        stderr_output = $stderr.string
+      ensure
+        $stderr = original_stderr
+      end
 
-      assert_match(/written to/, output)
+      assert_match(/written to/, stderr_output)
       assert_equal "# Spec content", File.read(outfile)
     ensure
       File.delete(outfile) if outfile && File.exist?(outfile)
@@ -302,9 +310,38 @@ module ArnoldPipeline
       assert_match(/Tasks to create: 3/, output)
       assert_match(/Tier 0: 1 task/, output)
       assert_match(/Tier 1: 2 tasks/, output)
-      assert_match(/Run without --dry-run to execute/, output)
+      assert_match(/Run without --preview to execute/, output)
     ensure
       ArnoldPipeline.reset_configuration!
+    end
+
+    test "run with empty description exits with error" do
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start(["run", ""]) }
+      end
+    end
+
+    test "run with whitespace-only description exits with error" do
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start(["run", "   "]) }
+      end
+    end
+
+    test "run with empty description shows error message on stderr" do
+      stderr_output = capture_stderr_through_exit { Cli.start(["run", ""]) }
+      assert_match(/Description cannot be empty/, stderr_output)
+    end
+
+    test "run --quiet suppresses informational output" do
+      mock_run = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:call).with(nl_input: "Build a todo app", stop_after: nil).returns(mock_run)
+
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+
+      output = capture_output { Cli.start(["run", "Build a todo app", "--quiet"]) }
+      assert_equal "", output
     end
 
     private

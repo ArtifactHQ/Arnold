@@ -53,6 +53,7 @@ module ArnoldPipeline
       validate_max_iterations!
       validate_polling_config!
       validate_max_tier_retries!
+      validate_workflow_branch_pattern!
       true
     end
 
@@ -100,6 +101,12 @@ module ArnoldPipeline
       return if @max_tier_retries.is_a?(Integer) && @max_tier_retries.between?(0, 5)
 
       raise ConfigurationError, "max_tier_retries must be an integer between 0 and 5."
+    end
+
+    def validate_workflow_branch_pattern!
+      return if @workflow_branch_pattern.is_a?(Regexp)
+
+      raise ConfigurationError, "workflow_branch_pattern must be a Regexp"
     end
 
     def validate_polling_config!

@@ -108,6 +108,7 @@ arnold spec ID [options]             # Export a run's specification
 arnold status ID                     # Check a pipeline run
 arnold list                          # List all runs
 arnold version                       # Show version
+arnold tree                          # Print command tree
 
 # Options for `run`:
 #   --config FILE              YAML config file
@@ -116,6 +117,7 @@ arnold version                       # Show version
 #   --repo OWNER/REPO          GitHub repository
 #   --issue-mention MENTION    Include in issue body (e.g. @claude)
 #   --stop-after STAGE         Pause after stage: spec, tasks, executed
+#   --preview, --dry-run       Generate spec and tasks without publishing to GitHub (still makes LLM API calls)
 #   --polling-interval SECS    Polling interval (default: 30)
 #   --polling-timeout SECS     Max polling wait (default: 1800)
 #   --verbose                  Debug logging

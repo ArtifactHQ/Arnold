@@ -230,5 +230,15 @@ module ArnoldPipeline
 
       assert @config.validate!
     end
+
+    test "validate! raises on non-Regexp workflow_branch_pattern" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.workflow_branch_pattern = "not-a-regexp"
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/workflow_branch_pattern must be a Regexp/, error.message)
+    end
   end
 end

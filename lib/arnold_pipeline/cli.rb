@@ -6,6 +6,8 @@ require "fileutils"
 
 module ArnoldPipeline
   class Cli < Thor
+    package_name "arnold"
+    class_option :quiet, type: :boolean, default: false, desc: "Suppress informational output"
     def self.exit_on_failure? = true
 
     STANDALONE_DB_DIR = File.expand_path("~/.arnold_pipeline")
@@ -20,19 +22,23 @@ module ArnoldPipeline
     option :polling_interval, type: :numeric, desc: "Polling interval in seconds (default: 30)"
     option :polling_timeout, type: :numeric, desc: "Polling timeout in seconds (default: 1800)"
     option :stop_after, type: :string, desc: "Stop after stage: spec, tasks, executed"
-    option :dry_run, type: :boolean, default: false, desc: "Generate spec and tasks without publishing to GitHub (still makes LLM API calls)"
+    option :preview, type: :boolean, default: false, aliases: ["--dry-run"], desc: "Generate spec and tasks without publishing to GitHub. Note: makes LLM API calls and creates local database records."
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
     def run_pipeline(description)
       if description == "--help" || description == "-h"
         invoke :help, ["run"]
         return
       end
+      if description.strip.empty?
+        say_error "Description cannot be empty", :red
+        raise SystemExit.new(1)
+      end
       with_error_handling do
         setup_standalone!
         load_config!(options)
         require "arnold_pipeline/orchestrator"
 
-        if options[:dry_run]
+        if options[:preview]
           logger = build_logger(options[:verbose])
           orchestrator = Orchestrator.new(logger:)
 
@@ -47,7 +53,7 @@ module ArnoldPipeline
             say "    Tier #{tier}: #{tasks.count} #{tasks.count == 1 ? 'task' : 'tasks'}"
           end
 
-          say "\nRun without --dry-run to execute."
+          say "\nRun without --preview to execute."
           return
         end
 
@@ -55,17 +61,17 @@ module ArnoldPipeline
         logger = build_logger(options[:verbose])
         orchestrator = Orchestrator.new(logger:)
 
-        say "Starting pipeline for: #{description}", :green
+        quiet_say "Starting pipeline for: #{description}", :green
         result = orchestrator.call(nl_input: description, stop_after:)
 
-        say "\nPipeline #{result.status}!", status_color(result.status)
-        say "  Run ID: #{result.id}"
-        say "  Tasks: #{result.tasks.count}"
-        say "  Iterations: #{result.iterations.count}"
+        quiet_say "\nPipeline #{result.status}!", status_color(result.status)
+        quiet_say "  Run ID: #{result.id}"
+        quiet_say "  Tasks: #{result.tasks.count}"
+        quiet_say "  Iterations: #{result.iterations.count}"
 
         if result.iterations.any?
           last = result.iterations.order(:number).last
-          say "  Final decision: #{last.decision} (confidence: #{last.confidence}%)"
+          quiet_say "  Final decision: #{last.decision} (confidence: #{last.confidence}%)"
         end
       end
     end
@@ -101,12 +107,12 @@ module ArnoldPipeline
         logger = build_logger(options[:verbose])
         orchestrator = Orchestrator.new(logger:)
 
-        say "Resuming pipeline run ##{id}...", :green
+        quiet_say "Resuming pipeline run ##{id}...", :green
         result = orchestrator.resume(pipeline_run: run_record, stop_after:)
 
-        say "\nPipeline #{result.status}!", status_color(result.status)
-        say "  Run ID: #{result.id}"
-        say "  Tasks: #{result.tasks.count}"
+        quiet_say "\nPipeline #{result.status}!", status_color(result.status)
+        quiet_say "  Run ID: #{result.id}"
+        quiet_say "  Tasks: #{result.tasks.count}"
       end
     end
 
@@ -213,7 +219,7 @@ module ArnoldPipeline
 
       if options[:output]
         File.write(options[:output], content)
-        say "Specification (v#{spec.version}) written to #{options[:output]}", :green
+        $stderr.puts "Specification (v#{spec.version}) written to #{options[:output]}"
       else
         say content
       end
@@ -289,7 +295,13 @@ module ArnoldPipeline
         c.context_propagation_enabled = yaml_config[:context_propagation_enabled] unless yaml_config[:context_propagation_enabled].nil?
         c.max_tier_retries = yaml_config[:max_tier_retries] if yaml_config[:max_tier_retries]
         c.workflow_status_enabled = yaml_config[:workflow_status_enabled] unless yaml_config[:workflow_status_enabled].nil?
-        c.workflow_branch_pattern = Regexp.new(yaml_config[:workflow_branch_pattern]) if yaml_config[:workflow_branch_pattern]
+        if yaml_config[:workflow_branch_pattern]
+          begin
+            c.workflow_branch_pattern = Regexp.new(yaml_config[:workflow_branch_pattern])
+          rescue RegexpError => e
+            raise ArnoldPipeline::ConfigurationError, "Invalid workflow_branch_pattern: #{e.message}"
+          end
+        end
       end
     end
 
@@ -327,6 +339,10 @@ module ArnoldPipeline
         say_error e.backtrace&.first(10)&.join("\n"), :red
       end
       raise SystemExit.new(1)
+    end
+
+    def quiet_say(message, *args)
+      say(message, *args) unless options[:quiet]
     end
 
     def status_color(status)

@@ -49,5 +49,92 @@ module ArnoldPipeline
         run_record.destroy!
       end
     end
+
+    # --- Status transition validation ---
+
+    test "VALID_TRANSITIONS covers all statuses" do
+      assert_equal PipelineRun.statuses.keys.sort, PipelineRun::VALID_TRANSITIONS.keys.sort
+    end
+
+    test "allows valid transition from pending to generating_spec" do
+      run_record = PipelineRun.create!(nl_input: "Build an app")
+      run_record.status = :generating_spec
+      assert run_record.valid?, "Expected pending -> generating_spec to be valid"
+    end
+
+    test "allows valid transition from pending to failed" do
+      run_record = PipelineRun.create!(nl_input: "Build an app")
+      run_record.status = :failed
+      assert run_record.valid?, "Expected pending -> failed to be valid"
+    end
+
+    test "allows valid transition from generating_spec to breaking_tasks" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :generating_spec)
+      run_record.status = :breaking_tasks
+      assert run_record.valid?, "Expected generating_spec -> breaking_tasks to be valid"
+    end
+
+    test "allows valid transition from analyzing to completed" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :analyzing)
+      run_record.status = :completed
+      assert run_record.valid?, "Expected analyzing -> completed to be valid"
+    end
+
+    test "allows valid transition from analyzing to executing (iterate_tasks)" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :analyzing)
+      run_record.status = :executing
+      assert run_record.valid?, "Expected analyzing -> executing to be valid"
+    end
+
+    test "allows valid transition from analyzing to breaking_tasks (iterate_spec)" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :analyzing)
+      run_record.status = :breaking_tasks
+      assert run_record.valid?, "Expected analyzing -> breaking_tasks to be valid"
+    end
+
+    test "allows valid transition from paused to executing (resume)" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :paused)
+      run_record.status = :executing
+      assert run_record.valid?, "Expected paused -> executing to be valid"
+    end
+
+    test "allows valid transition from failed to generating_spec (resume)" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :failed)
+      run_record.status = :generating_spec
+      assert run_record.valid?, "Expected failed -> generating_spec to be valid"
+    end
+
+    test "rejects invalid transition from pending to completed" do
+      run_record = PipelineRun.create!(nl_input: "Build an app")
+      run_record.status = :completed
+      assert_not run_record.valid?
+      assert_includes run_record.errors[:status], "cannot transition from 'pending' to 'completed'"
+    end
+
+    test "rejects invalid transition from pending to analyzing" do
+      run_record = PipelineRun.create!(nl_input: "Build an app")
+      run_record.status = :analyzing
+      assert_not run_record.valid?
+    end
+
+    test "rejects transition from completed (terminal state)" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      run_record.status = :pending
+      assert_not run_record.valid?
+      assert_includes run_record.errors[:status], "cannot transition from 'completed' to 'pending'"
+    end
+
+    test "rejects transition from max_iterations_reached (terminal state)" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :max_iterations_reached)
+      run_record.status = :generating_spec
+      assert_not run_record.valid?
+      assert_includes run_record.errors[:status], "cannot transition from 'max_iterations_reached' to 'generating_spec'"
+    end
+
+    test "allows update without status change" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :executing)
+      run_record.metadata = { "some" => "data" }
+      assert run_record.valid?, "Expected non-status update to be valid"
+    end
   end
 end
