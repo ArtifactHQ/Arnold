@@ -7,7 +7,8 @@ module ArnoldPipeline
       class Anthropic < Base
         DEFAULT_MAX_TOKENS = 4096
 
-        def initialize(api_key:, model:)
+        def initialize(api_key:, model:, logger: nil)
+          super(logger:)
           @client = ::Anthropic::Client.new(access_token: api_key)
           @model = model
         end
@@ -22,6 +23,9 @@ module ArnoldPipeline
 
           response = @client.messages(parameters: params)
           extract_text(response)
+        rescue Faraday::ClientError => e
+          log_api_error("Anthropic", e)
+          raise
         end
 
         private

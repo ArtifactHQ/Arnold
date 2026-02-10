@@ -5,7 +5,8 @@ module ArnoldPipeline
   module Providers
     module Llm
       class OpenAi < Base
-        def initialize(api_key:, model:)
+        def initialize(api_key:, model:, logger: nil)
+          super(logger:)
           @client = ::OpenAI::Client.new(access_token: api_key)
           @model = model
         end
@@ -21,6 +22,9 @@ module ArnoldPipeline
           })
 
           extract_text(response)
+        rescue Faraday::ClientError => e
+          log_api_error("OpenAI", e)
+          raise
         end
 
         private

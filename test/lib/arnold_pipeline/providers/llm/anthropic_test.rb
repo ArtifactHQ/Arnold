@@ -52,6 +52,44 @@ module ArnoldPipeline
           result = @provider.chat(messages: [{ role: :user, content: "Hi" }])
           assert_equal "", result
         end
+
+        test "chat logs response body on 400 error" do
+          log_output = StringIO.new
+          provider = Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-20250514",
+            logger: Logger.new(log_output))
+
+          stub_request(:post, "https://api.anthropic.com/v1/messages")
+            .to_return(
+              status: 400,
+              headers: { "Content-Type" => "application/json" },
+              body: { error: { type: "invalid_request_error", message: "prompt is too long" } }.to_json
+            )
+
+          assert_raises(Faraday::BadRequestError) do
+            provider.chat(messages: [{ role: :user, content: "Hi" }])
+          end
+
+          assert_match(/Anthropic API 400: prompt is too long/, log_output.string)
+        end
+
+        test "chat logs response body on 429 error" do
+          log_output = StringIO.new
+          provider = Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-20250514",
+            logger: Logger.new(log_output))
+
+          stub_request(:post, "https://api.anthropic.com/v1/messages")
+            .to_return(
+              status: 429,
+              headers: { "Content-Type" => "application/json" },
+              body: { error: { type: "rate_limit_error", message: "rate limit exceeded" } }.to_json
+            )
+
+          assert_raises(Faraday::ClientError) do
+            provider.chat(messages: [{ role: :user, content: "Hi" }])
+          end
+
+          assert_match(/Anthropic API 429: rate limit exceeded/, log_output.string)
+        end
       end
     end
   end

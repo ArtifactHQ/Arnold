@@ -1,9 +1,31 @@
+require "logger"
+
 module ArnoldPipeline
   module Providers
     module Llm
       class Base
+        attr_reader :logger
+
+        def initialize(logger: nil)
+          @logger = logger || default_logger
+        end
+
         def chat(messages:, system: nil)
           raise NotImplementedError, "#{self.class}#chat must be implemented"
+        end
+
+        private
+
+        def log_api_error(provider_name, error)
+          body = error.response_body
+          detail = body.is_a?(Hash) ? body.dig("error", "message") : body.to_s
+          logger.error { "#{provider_name} API #{error.response_status}: #{detail}" }
+        rescue => _log_err
+          logger.error { "#{provider_name} API error (could not parse body): #{error.message}" }
+        end
+
+        def default_logger
+          Logger.new($stdout, level: Logger::WARN)
         end
       end
 

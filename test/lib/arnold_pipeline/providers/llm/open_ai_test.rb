@@ -56,6 +56,25 @@ module ArnoldPipeline
           result = @provider.chat(messages: [{ role: :user, content: "Hi" }])
           assert_equal "", result
         end
+
+        test "chat logs response body on 400 error" do
+          log_output = StringIO.new
+          provider = OpenAi.new(api_key: "sk-test-key", model: "gpt-4",
+            logger: Logger.new(log_output))
+
+          stub_request(:post, "https://api.openai.com/v1/chat/completions")
+            .to_return(
+              status: 400,
+              headers: { "Content-Type" => "application/json" },
+              body: { error: { message: "invalid request", type: "invalid_request_error" } }.to_json
+            )
+
+          assert_raises(Faraday::BadRequestError) do
+            provider.chat(messages: [{ role: :user, content: "Hi" }])
+          end
+
+          assert_match(/OpenAI API 400: invalid request/, log_output.string)
+        end
       end
     end
   end
