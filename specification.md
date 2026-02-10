@@ -13,7 +13,7 @@ The system MUST retrieve and apply relevant agent personas and application recip
 - GIVEN an NL input: "Build a todo list app with user authentication, real-time updates, and mobile responsiveness."  
 - AND a library containing personas (e.g., Software Architect) and recipes (e.g., Web App Recipe with sections for frontend, backend, database, auth).  
 - WHEN the Spec Generation Agent processes the input.  
-- THEN a structured specification document is produced in Markdown format with an embedded JSON metadata block, including sections for features, tech stack, data models, user flows, and edge cases, customized by the selected persona and recipe.
+- THEN a structured specification document is produced in Markdown format using OpenSpec conventions: `### Requirement:` headers with `[REQ-{DOMAIN}-{NNN}]` IDs, `#### Scenario:` blocks using GIVEN/WHEN/THEN format, and an embedded JSON metadata block. The document includes sections for features, tech stack, data models, user flows, and edge cases, customized by the selected persona and recipe.
 
 #### Scenario: Library Retrieval Failure
 - GIVEN an NL input that does not match any library items (e.g., highly niche domain).  
@@ -72,7 +72,7 @@ The loop SHALL use the execution provider's polling mechanism (async providers) 
 #### Scenario: Spec Iteration for Ambiguity
 - GIVEN analysis revealing spec vagueness (e.g., unclear user flow).
 - WHEN "iterate_spec" is decided.
-- THEN the spec is refined (e.g., adding clarified sections), re-run through Task Breakdown, and tasks are regenerated from the refined specification, replacing all existing tasks.
+- THEN the Analysis Agent produces structured deltas (added/modified/removed operations targeting specific requirements), the spec is refined via the delta merge chain, a SpecRevision snapshot is created, and the updated spec is re-run through Task Breakdown with tasks regenerated from the refined specification, replacing all existing tasks.
 
 #### Scenario: Loop Termination
 - GIVEN alignment achieved after iterations or max iterations reached.
@@ -109,9 +109,40 @@ The Analysis Agent checks the specification for these anti-patterns and reports 
 
 Confidence scores from the analysis drive the `needs_human_review` boolean on the Iteration model. When the overall confidence score is below 70%, the Iteration's `needs_human_review` field is automatically set to `true` via a `before_save` callback. This flag is queryable via `arnold_pipeline status ID --json`. Confidence does not gate execution -- all decisions are acted on regardless of score.
 
-#### Spec Versioning
+#### Spec Versioning and Delta Tracking [SPEC-DELTA-001]
 
-When an `iterate_spec` decision is made, the Specification model's `version` field is incremented (e.g., version 1 becomes version 2). This enables tracking how many times the spec has been refined through the feedback loop.
+When a specification changes (via initial generation or `iterate_spec` decisions), the Specification model's `version` field is incremented. Each version change is tracked through two models:
+
+**SpecRevision** — Immutable snapshots of the full specification content at each version. [SPEC-DELTA-002]
+- `version`: Integer, matches the Specification's version at time of snapshot (unique per specification).
+- `content`: Full spec Markdown text at this version.
+- `structured_data`: JSON metadata block at this version.
+- `change_source`: One of `"spec_generation"` (initial spec or re-generation) or `"iterate_spec"` (analysis-driven refinement).
+- `delta_summary`: JSON array of human-readable strings summarizing what changed (e.g., `"ADDED: Authentication > Password Reset"`).
+- The Orchestrator creates a SpecRevision after every `generate_spec!` call (change_source: `"spec_generation"`).
+- The AnalysisLoop creates a SpecRevision after every successful delta merge (change_source: `"iterate_spec"`).
+
+**SpecDelta** — Granular, per-requirement change records for `iterate_spec` decisions. [SPEC-DELTA-003]
+- `operation`: One of `"added"`, `"modified"`, or `"removed"`.
+- `section`: The functional area being changed (e.g., "Authentication").
+- `requirement`: The specific requirement name (required for `modified` and `removed` operations).
+- `before_content`: Previous requirement text (required for `modified`).
+- `after_content`: New requirement text (required for `added` and `modified`).
+- `rationale`: Explanation of why the change is needed.
+- Belongs to both a Specification and an Iteration.
+- Scopes: `additions`, `modifications`, `removals`, `by_section(name)`.
+
+The Analysis Agent prompt requests structured deltas in the `corrective_data.deltas` array when making `iterate_spec` decisions. Each delta targets one requirement in one section using the `### Requirement:` / `#### Scenario:` / GIVEN-WHEN-THEN format. If no structured deltas are returned, the system falls back to legacy free-text `spec_changes` appending.
+
+#### Spec Delta Merge Chain [SPEC-DELTA-004]
+
+When structured deltas are available, the system applies them through a three-tier fallback chain:
+
+1. **OpenSpec CLI merge** — If `openspec_enabled` is true and the OpenSpec CLI is available, the OpenspecBridge writes the base spec and delta files into an OpenSpec workspace, runs `openspec validate` and `openspec archive`, and reads back the merged result. This produces the highest-quality merge.
+2. **Structured append** (`append_deltas!`) — If OpenSpec merge fails or is disabled, deltas are formatted into `## ADDED Requirements`, `## MODIFIED Requirements`, and `## REMOVED Requirements` sections and appended to the spec.
+3. **Legacy append** (`legacy_append!`) — If no structured deltas exist (only free-text `spec_changes`), the text is appended under a `## Clarifications (Iteration)` header. This preserves backward compatibility.
+
+Each path increments the spec version and persists SpecDelta records (when structured deltas are available).
 
 ### Requirement: Library Management
 The system SHALL maintain a library of agent personas and application recipes, stored as YAML files with keyword-based retrieval.
@@ -121,6 +152,34 @@ The system SHOULD support dynamic selection based on NL input keyword matching. 
 - GIVEN an NL input.
 - WHEN keyword matching is performed against the library's persona and recipe keywords.
 - THEN the most relevant persona (e.g., Domain Expert for fintech) and recipe (e.g., API Service) are retrieved and injected into prompts.
+
+### Requirement: OpenSpec Integration [SPEC-OPENSPEC-001]
+The system SHALL support integration with the OpenSpec CLI (`@fission-ai/openspec`) for structured spec merging during `iterate_spec` decisions.
+The system MUST gracefully degrade when the OpenSpec CLI is not installed, falling back to the structured append or legacy append merge strategies.
+
+#### Scenario: Successful OpenSpec Merge
+- GIVEN a specification and structured deltas from an `iterate_spec` decision.
+- AND `openspec_enabled` is true and the OpenSpec CLI is installed at `openspec_cli_path`.
+- WHEN the OpenspecBridge processes the deltas.
+- THEN it creates a temporary workspace, writes the base spec and delta files, runs `openspec validate` followed by `openspec archive --yes`, and returns the merged spec content.
+
+#### Scenario: OpenSpec CLI Not Installed
+- GIVEN `openspec_enabled` is true but the CLI binary is not found.
+- WHEN the OpenspecBridge attempts to run the CLI.
+- THEN it logs a warning and returns nil, causing the system to fall back to the structured append strategy.
+
+#### Scenario: OpenSpec Validation Failure
+- GIVEN a delta that fails `openspec validate`.
+- WHEN validation returns a non-zero exit code.
+- THEN the merge is skipped with a warning, and the system falls back to structured append.
+
+#### OpenspecBridge Service
+
+The `OpenspecBridge` manages the lifecycle of a temporary OpenSpec workspace:
+- `with_workspace` class method creates a temp directory, scaffolds the OpenSpec structure (`specs/`, `changes/`, `config.yaml`), yields the bridge instance, and cleans up on completion.
+- `write_spec!` writes the current specification content into the workspace.
+- `write_delta_and_merge!` formats deltas into OpenSpec-compatible Markdown (with `## ADDED Requirements`, `## MODIFIED Requirements`, `## REMOVED Requirements` sections), creates a `proposal.md` (with `## Why` and `## What Changes` sections), validates, and archives.
+- Delta Markdown uses the `### Requirement:` / `#### Scenario:` / GIVEN-WHEN-THEN format matching the spec generation output.
 
 ### Requirement: Extensibility and Automation
 The system is implemented as a Ruby gem (Rails engine) for orchestration, using the GitHub API for task management and execution.
@@ -279,7 +338,9 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 #### Command: spec
 - GIVEN a pipeline run ID.
 - WHEN `arnold_pipeline spec ID` is executed.
-- THEN the specification content is output with options: --output/-o (file path), --json (boolean for structured data).
+- THEN the specification content is output with options: --output/-o (file path), --json (boolean for structured data), --history (boolean, shows revision timeline with delta summaries), --version (number, shows spec content at a specific version).
+- WHEN `--history` is passed, the revision timeline is displayed showing each version's change_source, timestamp, and delta_summary entries.
+- WHEN `--version N` is passed, the spec content from SpecRevision version N is displayed (exit code 1 if version not found).
 - Exit code 0 on success, 1 if not found or no specification exists.
 
 #### Command: version
@@ -318,6 +379,8 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | max_tier_retries | Integer | 2 | 0-5 |
 | workflow_status_enabled | Boolean | true | None |
 | workflow_branch_pattern | Regexp | /issue[-_]?\d+/i | None |
+| openspec_enabled | Boolean | true | None |
+| openspec_cli_path | String | "openspec" | None |
 
 ### PipelineRun State Machine
 
