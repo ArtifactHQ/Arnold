@@ -68,13 +68,40 @@ module ArnoldPipeline
              - Assumptions & Constraints: Taken-as-true conditions and known limitations
 
           2. # Features
-             Organized by functional area. Each feature MUST include:
-             - Context: Why this feature exists
-             - User Story: Who wants what and why (As a..., I want..., So that...)
-             - Functional Requirements: What it does, with specific numbers/limits
-             - Behavioral Specifications: How it behaves in normal conditions
-             - Corner Cases: What happens when things go wrong or edge conditions occur
-             - Acceptance Criteria: Testable checklist of "done" conditions
+             Organized by functional area, using OpenSpec-compatible requirement format.
+
+             Each functional area gets a `## [Area Name]` header. Within each area,
+             each discrete requirement gets a `### Requirement: [Name]` header.
+
+             Requirements use RFC 2119 keywords: SHALL (mandatory), MUST (mandatory),
+             SHOULD (recommended), MAY (optional).
+
+             Each requirement has one or more `#### Scenario: [Name]` blocks using
+             GIVEN/WHEN/THEN/AND format.
+
+             Corner cases and acceptance criteria are expressed AS scenarios, not as
+             separate sections. Every testable condition becomes a scenario.
+
+             Example structure:
+             ```
+             ## Authentication
+
+             ### Requirement: User Registration
+             Users SHALL be able to create a new account using email and password.
+
+             **Context:** Registration is the entry point for all new users.
+
+             #### Scenario: Successful Registration
+             - GIVEN a user on the registration page
+             - WHEN they submit a valid email and password (8+ characters)
+             - THEN a new account is created
+             - AND the user is redirected to the dashboard
+
+             #### Scenario: Duplicate Email
+             - GIVEN a user on the registration page
+             - WHEN they submit an email that is already registered
+             - THEN an error message "email already taken" is displayed
+             ```
 
           3. # Entities & Data Model
              All persistent objects in the system. Each entity includes:
@@ -132,28 +159,36 @@ module ArnoldPipeline
 
           # Per-Feature Template
 
-          When documenting each feature in Section 2, follow this template strictly:
+          When documenting each functional area in Section 2, follow this template strictly:
 
-          ## [Feature Name]
+          ## [Functional Area Name]
 
-          **Context:** [Why this feature exists and what problem it solves]
+          ### Requirement: [Requirement Name] [REQ-{DOMAIN}-{NNN}]
+          [One-sentence statement using RFC 2119 keywords (SHALL/MUST/SHOULD/MAY)
+           describing what the system does.]
 
-          **User Story:** As a [role], I want [capability], so that [benefit].
+          **Context:** [Why this requirement exists and what problem it solves]
 
-          **Functional Requirements:**
-          - [Specific requirement with numbers, limits, and concrete details]
+          #### Scenario: [Descriptive Name]
+          - GIVEN [precondition]
+          - WHEN [action or event]
+          - THEN [expected outcome]
+          - AND [additional outcome, if any]
 
-          **Behavioral Specifications:**
-          - [How it behaves under normal conditions]
-          - [Step-by-step interaction flow]
+          #### Scenario: [Edge Case or Error Name]
+          - GIVEN [precondition]
+          - WHEN [failure or edge condition]
+          - THEN [specific error handling or recovery behavior]
 
-          **Corner Cases:**
-          1. What if [edge condition]? → [Specific behavior]
-          2. What if [failure scenario]? → [Specific recovery]
-
-          **Acceptance Criteria:**
-          1. ✅ [Testable condition]
-          2. ✅ [Testable condition]
+          Rules:
+          - Every functional requirement becomes a `### Requirement:` block
+          - Every behavioral spec, corner case, and acceptance criterion becomes a `#### Scenario:` block
+          - Scenarios MUST use GIVEN/WHEN/THEN format with dash-prefixed lines
+          - Each requirement MUST have at least one scenario
+          - Use specific numbers, limits, and concrete details in scenarios
+          - Assign a unique ID to each requirement: [REQ-{DOMAIN}-{NNN}] where DOMAIN
+            is a short uppercase label for the functional area (e.g., AUTH, PAY, USER)
+            and NNN is a zero-padded sequence number starting from 001
 
           # Callout Annotations
 

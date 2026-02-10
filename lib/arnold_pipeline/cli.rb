@@ -218,6 +218,8 @@ module ArnoldPipeline
     desc "spec ID", "Export the specification for a pipeline run"
     option :output, type: :string, aliases: "-o", desc: "Write to file instead of stdout"
     option :json, type: :boolean, default: false, desc: "Output structured JSON data instead of markdown"
+    option :history, type: :boolean, default: false, desc: "Show revision history with delta summaries"
+    option :version, type: :numeric, desc: "Show spec content at a specific version"
     def spec(id)
       setup_standalone!
 
@@ -231,6 +233,16 @@ module ArnoldPipeline
       unless spec
         say_error "No specification found for pipeline run ##{id}", :yellow
         raise SystemExit.new(1)
+      end
+
+      if options[:history]
+        show_spec_history(spec)
+        return
+      end
+
+      if options[:version]
+        show_spec_version(spec, options[:version])
+        return
       end
 
       content = if options[:json]
@@ -358,6 +370,8 @@ module ArnoldPipeline
         c.claude_code_model = yaml_config[:claude_code_model] if yaml_config[:claude_code_model]
         c.claude_code_max_turns = yaml_config[:claude_code_max_turns] if yaml_config[:claude_code_max_turns]
         c.claude_code_permission_mode = yaml_config[:claude_code_permission_mode] if yaml_config[:claude_code_permission_mode]
+        c.openspec_enabled = yaml_config[:openspec_enabled] unless yaml_config[:openspec_enabled].nil?
+        c.openspec_cli_path = yaml_config[:openspec_cli_path] if yaml_config[:openspec_cli_path]
         if yaml_config[:workflow_branch_pattern]
           begin
             c.workflow_branch_pattern = Regexp.new(yaml_config[:workflow_branch_pattern])
@@ -434,6 +448,38 @@ module ArnoldPipeline
       lines << ""
       lines << task.description if task.description.present?
       lines.join("\n")
+    end
+
+    def show_spec_history(spec)
+      revisions = spec.spec_revisions.ordered
+      if revisions.empty?
+        say "No revision history available for this specification", :yellow
+        say "  Current version: #{spec.version}"
+        return
+      end
+
+      say "Specification Revision History:", :green
+      revisions.each do |rev|
+        say "  v#{rev.version} [#{rev.change_source || 'unknown'}] #{rev.created_at.strftime('%Y-%m-%d %H:%M')}"
+        if rev.delta_summary.present?
+          rev.delta_summary.each { |s| say "    - #{s}" }
+        end
+      end
+    end
+
+    def show_spec_version(spec, version_number)
+      revision = spec.spec_revisions.find_by(version: version_number)
+      unless revision
+        say_error "Version #{version_number} not found. Current version: #{spec.version}", :red
+        raise SystemExit.new(1)
+      end
+
+      if options[:output]
+        File.write(options[:output], revision.content)
+        $stderr.puts "Specification v#{version_number} written to #{options[:output]}"
+      else
+        say revision.content
+      end
     end
 
     def status_color(status)

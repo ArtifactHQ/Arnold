@@ -108,12 +108,19 @@ module ArnoldPipeline
           version: spec.version + 1
         )
       else
-        pipeline_run.create_specification!(
+        spec = pipeline_run.create_specification!(
           content: result[:content],
           structured_data: result[:structured_data],
           version: 1
         )
       end
+
+      spec.spec_revisions.create!(
+        version: spec.version,
+        content: spec.content,
+        structured_data: spec.structured_data,
+        change_source: "spec_generation"
+      )
     end
 
     def break_tasks!(pipeline_run)

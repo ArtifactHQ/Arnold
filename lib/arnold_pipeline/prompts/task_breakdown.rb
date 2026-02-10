@@ -10,7 +10,9 @@ module ArnoldPipeline
 
           The specification follows a 10-section structure:
           1. Overview (classification, vision, goals, target users, boundaries, assumptions)
-          2. Features (with per-feature context, user stories, requirements, behaviors, corner cases, acceptance criteria)
+          2. Features — organized by functional area using `## [Area Name]` headers.
+             Each area contains `### Requirement: [Name]` blocks with `#### Scenario:` blocks
+             in GIVEN/WHEN/THEN format. Map tasks to specific requirements by name.
           3. Entities & Data Model (attributes, relationships, lifecycle states, business rules)
           4. User Journeys (new user, core, edge case, recovery flows)
           5. Views & Interfaces (screens, actions, navigation, responsive variations)
@@ -61,7 +63,10 @@ module ArnoldPipeline
 
           The "position" field determines execution order (0-indexed).
           The "depends_on" field lists positions of tasks that must complete first.
-          The "section_ref" field references which spec section this task implements (optional but recommended for traceability).
+          The "section_ref" field references which spec section and requirement this task
+          implements (e.g., "Authentication > User Registration"). Use the format
+          "[Area Name] > [Requirement Name]" for Features section tasks. This enables
+          traceability between tasks and specific requirements.
         PROMPT
       end
 

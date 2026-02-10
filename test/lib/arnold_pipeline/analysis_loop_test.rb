@@ -194,6 +194,130 @@ module ArnoldPipeline
       assert_equal "completed", pipeline_run.reload.status
     end
 
+    # --- Delta-based iterate_spec tests ---
+
+    test "handles iterate_spec with deltas format (legacy_append fallback)" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      ArnoldPipeline.configure { |c| c.openspec_enabled = false }
+
+      deltas = [
+        { "operation" => "added", "section" => "Auth", "content" => "### Requirement: Password Reset\nNew.", "rationale" => "Missing" },
+        { "operation" => "modified", "section" => "Auth", "requirement" => "Login", "before_content" => "old", "after_content" => "### Requirement: Login\nUpdated.", "rationale" => "Ambiguous" }
+      ]
+
+      @task_breaker.stubs(:call).returns(sample_tasks)
+
+      call_count = sequence("analysis_calls")
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("iterate_spec", 60, { "deltas" => deltas }))
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("done", 90))
+
+      @analysis_loop.run!(pipeline_run)
+
+      spec = pipeline_run.specification.reload
+      assert_includes spec.content, "Spec Iteration"
+      assert_includes spec.content, "Password Reset"
+      assert_includes spec.content, "Updated"
+    end
+
+    test "persists spec_deltas when deltas format is used" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      ArnoldPipeline.configure { |c| c.openspec_enabled = false }
+
+      deltas = [
+        { "operation" => "added", "section" => "Auth", "content" => "### Requirement: New\nShall.", "rationale" => "Missing" }
+      ]
+
+      @task_breaker.stubs(:call).returns(sample_tasks)
+
+      call_count = sequence("analysis_calls")
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("iterate_spec", 60, { "deltas" => deltas }))
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("done", 90))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal 1, pipeline_run.specification.spec_deltas.count
+      delta = pipeline_run.specification.spec_deltas.first
+      assert_equal "added", delta.operation
+      assert_equal "Auth", delta.section
+    end
+
+    test "creates spec_revision on delta-based iterate_spec" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      ArnoldPipeline.configure { |c| c.openspec_enabled = false }
+
+      deltas = [
+        { "operation" => "added", "section" => "Auth", "content" => "### Requirement: New\nShall.", "rationale" => "Missing" }
+      ]
+
+      @task_breaker.stubs(:call).returns(sample_tasks)
+
+      call_count = sequence("analysis_calls")
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("iterate_spec", 60, { "deltas" => deltas }))
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("done", 90))
+
+      @analysis_loop.run!(pipeline_run)
+
+      revisions = pipeline_run.specification.spec_revisions
+      assert_equal 1, revisions.count
+      revision = revisions.first
+      assert_equal "iterate_spec", revision.change_source
+      assert_includes revision.delta_summary, "ADDED: Auth > new requirement"
+    end
+
+    test "legacy_append! still works with old spec_changes format" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      @task_breaker.stubs(:call).returns(sample_tasks)
+
+      call_count = sequence("analysis_calls")
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("iterate_spec", 60, { "spec_changes" => "Add error handling for edge cases" }))
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("done", 90))
+
+      @analysis_loop.run!(pipeline_run)
+
+      spec = pipeline_run.specification.reload
+      assert_includes spec.content, "Clarifications (Iteration)"
+      assert_includes spec.content, "Add error handling for edge cases"
+
+      # Legacy path should not create deltas or revisions
+      assert_equal 0, spec.spec_deltas.count
+      assert_equal 0, spec.spec_revisions.count
+    end
+
+    test "append_deltas! handles removed operations" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      ArnoldPipeline.configure { |c| c.openspec_enabled = false }
+
+      deltas = [
+        { "operation" => "removed", "section" => "Auth", "requirement" => "SMS Verify", "rationale" => "Out of scope" }
+      ]
+
+      @task_breaker.stubs(:call).returns(sample_tasks)
+
+      call_count = sequence("analysis_calls")
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("iterate_spec", 60, { "deltas" => deltas }))
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("done", 90))
+
+      @analysis_loop.run!(pipeline_run)
+
+      spec = pipeline_run.specification.reload
+      assert_includes spec.content, "REMOVED: SMS Verify"
+    end
+
     private
 
     def create_pipeline_run_with_spec_and_tasks!(structured_data: nil)

@@ -431,6 +431,56 @@ module ArnoldPipeline
       end
     end
 
+    test "spec --history shows revision timeline" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      spec = run_record.create_specification!(content: "# Spec v2", version: 2)
+      spec.spec_revisions.create!(version: 1, content: "# Spec v1", change_source: "spec_generation")
+      spec.spec_revisions.create!(
+        version: 2,
+        content: "# Spec v2",
+        change_source: "iterate_spec",
+        delta_summary: ["ADDED: Auth > Password Reset", "MODIFIED: Auth > Login"]
+      )
+
+      output = capture_output { Cli.start(["spec", run_record.id.to_s, "--history"]) }
+
+      assert_match(/Specification Revision History:/, output)
+      assert_match(/v1 \[spec_generation\]/, output)
+      assert_match(/v2 \[iterate_spec\]/, output)
+      assert_match(/ADDED: Auth > Password Reset/, output)
+      assert_match(/MODIFIED: Auth > Login/, output)
+    end
+
+    test "spec --history with no revisions shows message" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.create_specification!(content: "# Spec", version: 1)
+
+      output = capture_output { Cli.start(["spec", run_record.id.to_s, "--history"]) }
+
+      assert_match(/No revision history available/, output)
+    end
+
+    test "spec --version shows specific version content" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      spec = run_record.create_specification!(content: "# Spec v2", version: 2)
+      spec.spec_revisions.create!(version: 1, content: "# Spec version one content")
+      spec.spec_revisions.create!(version: 2, content: "# Spec version two content")
+
+      output = capture_output { Cli.start(["spec", run_record.id.to_s, "--version", "1"]) }
+
+      assert_match(/# Spec version one content/, output)
+      assert_no_match(/version two/, output)
+    end
+
+    test "spec --version with non-existent version exits with error" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.create_specification!(content: "# Spec", version: 1)
+
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start(["spec", run_record.id.to_s, "--version", "99"]) }
+      end
+    end
+
     test "run --quiet suppresses informational output" do
       mock_run = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
 

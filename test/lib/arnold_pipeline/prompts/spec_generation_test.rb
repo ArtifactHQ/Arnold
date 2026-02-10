@@ -39,11 +39,12 @@ module ArnoldPipeline
       test "system_prompt includes per-feature template elements" do
         prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, domain_type: @domain_type)
         assert_includes prompt, "Context:"
-        assert_includes prompt, "User Story:"
-        assert_includes prompt, "Functional Requirements:"
-        assert_includes prompt, "Behavioral Specifications:"
-        assert_includes prompt, "Corner Cases:"
-        assert_includes prompt, "Acceptance Criteria:"
+        assert_includes prompt, "### Requirement:"
+        assert_includes prompt, "#### Scenario:"
+        assert_includes prompt, "GIVEN"
+        assert_includes prompt, "WHEN"
+        assert_includes prompt, "THEN"
+        assert_includes prompt, "REQ-"
       end
 
       test "system_prompt includes domain type lens" do

@@ -17,7 +17,8 @@ module ArnoldPipeline
                   :max_iterations, :library_path,
                   :polling_interval, :polling_timeout, :polling_max_interval,
                   :tier_gate_enabled, :context_propagation_enabled, :max_tier_retries,
-                  :workflow_status_enabled, :workflow_branch_pattern
+                  :workflow_status_enabled, :workflow_branch_pattern,
+                  :openspec_enabled, :openspec_cli_path
     attr_writer   :llm_provider, :llm_api_key, :llm_model
 
     def initialize
@@ -42,6 +43,8 @@ module ArnoldPipeline
       @max_tier_retries           = 2
       @workflow_status_enabled     = true
       @workflow_branch_pattern     = /issue[-_]?\d+/i
+      @openspec_enabled           = true
+      @openspec_cli_path          = "openspec"
     end
 
     def llm_provider

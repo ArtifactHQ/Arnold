@@ -88,6 +88,14 @@ module ArnoldPipeline
         assert_includes prompt, "Use these tools, gems, generators, and framework patterns"
       end
 
+      test "system_prompt references OpenSpec requirement format" do
+        prompt = TaskBreakdown.system_prompt
+        assert_includes prompt, "### Requirement:"
+        assert_includes prompt, "#### Scenario:"
+        assert_includes prompt, "GIVEN/WHEN/THEN"
+        assert_includes prompt, "[Area Name] > [Requirement Name]"
+      end
+
       test "system_prompt renders tools key for cli recipe" do
         cli_recipe = @manager.find_recipe("Build a command line utility tool")
         prompt = TaskBreakdown.system_prompt(recipe: cli_recipe)
