@@ -2,6 +2,38 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Session Start Convention
+
+When returning to a session after any break, run `/spec-recap` before starting
+new work. This takes 30 seconds and prevents building on top of spec drift.
+
+## Specification-Driven Development
+
+This project follows spec-driven development. The source of truth for requirements is:
+- `specification.md` — Primary requirements document (Given-When-Then scenarios)
+- `README.md` — User-facing behavioral documentation
+
+### Rules for ALL changes:
+
+1. Before implementing any feature or fix, check if it's covered by an existing spec item.
+   - If yes, reference the spec item in your plan and commit message.
+   - If no, flag this as a spec gap and suggest whether to add a spec item or proceed without one.
+
+2. Never implement behavior that contradicts `specification.md`. If the spec is wrong,
+   say so and suggest a spec update — do not silently diverge.
+
+3. When completing a feature, check if `specification.md` needs updating to reflect
+   what was actually built. Use the spec-updater agent for this.
+
+4. Commit messages should reference spec items: `fix(cli): guard --help flag [SPEC-CLI-001]`
+
+### Spec Item ID Format:
+SPEC-{DOMAIN}-{NNN} (e.g., SPEC-CONFIG-001, SPEC-CLI-003, SPEC-TIER-002)
+
+Domains: PIPELINE, INPUT, SPECGEN, TASK, EXEC, ANALYSIS, TIER, WORKFLOW,
+         RESUME, CONFIG, CLI, MODEL, GEM, JOB, PROVIDER, ERROR, OUTPUT, LIBRARY
+
+
 ## Project Overview
 
 Arnold Pipeline is an agentic workflow system that transforms natural language descriptions of applications into executable code using AI agents. It operates in two modes:
