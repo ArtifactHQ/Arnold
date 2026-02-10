@@ -35,6 +35,7 @@ module ArnoldPipeline
         end
 
         if iteration_number >= max_iterations
+          pipeline_run.update!(status: :analyzing)
           pipeline_run.update!(status: :max_iterations_reached)
           tier_execution_engine.merge_all_results!(pipeline_run)
           logger.info { "[Arnold] Pipeline complete (max iterations reached)." }
