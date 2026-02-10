@@ -316,7 +316,7 @@ The PipelineRun model uses a status enum with the following values and valid tra
 | pending | 0 | Initial state, pipeline not yet started |
 | generating_spec | 1 | Spec Generation Agent is running |
 | breaking_tasks | 2 | Task Breakdown Agent is running |
-| executing | 3 | Tasks are being published to GitHub |
+| executing | 3 | Tasks are being executed (via GitHub API or local provider) |
 | awaiting_results | 8 | Polling GitHub for task results |
 | analyzing | 4 | Analysis Agent is evaluating results |
 | completed | 5 | Pipeline finished successfully (terminal) |
@@ -327,16 +327,16 @@ The PipelineRun model uses a status enum with the following values and valid tra
 #### Valid State Transitions
 
 ```
-pending -> generating_spec
+pending -> generating_spec | executing | failed
 generating_spec -> breaking_tasks | failed | paused
 breaking_tasks -> executing | failed | paused
-executing -> awaiting_results | failed | paused
-awaiting_results -> analyzing | failed | paused
-analyzing -> completed | max_iterations_reached | executing (iterate_tasks) | generating_spec (iterate_spec) | failed | paused
-paused -> (resume to inferred stage)
-failed -> (resume to inferred stage)
+executing -> awaiting_results | analyzing (sync providers) | failed | paused
+awaiting_results -> analyzing | executing | failed | paused | max_iterations_reached
+analyzing -> completed | max_iterations_reached | executing (iterate_tasks) | breaking_tasks (iterate_spec) | failed
+paused -> generating_spec | breaking_tasks | executing | analyzing | failed
+failed -> generating_spec | breaking_tasks | executing | analyzing
 completed -> (terminal, no transitions)
 max_iterations_reached -> (terminal, no transitions)
 ```
 
-The `analyzing` state has branching transitions: `completed` and `max_iterations_reached` are terminal states; `executing` is reached via an `iterate_tasks` decision (new corrective tasks); `generating_spec` is reached via an `iterate_spec` decision (spec refinement). Any active stage may transition to `failed` on error or `paused` at a `stop_after` checkpoint.
+The `analyzing` state has branching transitions: `completed` and `max_iterations_reached` are terminal states; `executing` is reached via an `iterate_tasks` decision (new corrective tasks); `breaking_tasks` is reached via an `iterate_spec` decision (the spec is updated inline, then tasks are re-broken without a separate `generating_spec` pass). The `executing` → `analyzing` transition supports sync providers (e.g., Claude Code) that skip the `awaiting_results` polling stage. `pending` can transition directly to `executing` or `failed` for resume/restart paths. `paused` and `failed` have explicit transition targets matching the stages they can resume into. Active stages may transition to `failed` on error; stages with a `stop_after` checkpoint may transition to `paused`.
