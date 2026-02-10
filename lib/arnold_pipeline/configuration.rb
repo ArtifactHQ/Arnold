@@ -31,7 +31,7 @@ module ArnoldPipeline
       @claude_code_repo_path      = nil
       @claude_code_model          = "sonnet"
       @claude_code_max_turns      = nil
-      @claude_code_permission_mode = "auto"
+      @claude_code_permission_mode = "bypassPermissions"
       @max_iterations     = 3
       @library_path       = nil
       @polling_interval     = 30

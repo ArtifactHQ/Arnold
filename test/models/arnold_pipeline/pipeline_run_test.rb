@@ -98,6 +98,12 @@ module ArnoldPipeline
       assert run_record.valid?, "Expected executing -> analyzing to be valid"
     end
 
+    test "allows valid transition from executing to paused (tier gate exhaustion)" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :executing)
+      run_record.status = :paused
+      assert run_record.valid?, "Expected executing -> paused to be valid"
+    end
+
     test "allows valid transition from paused to executing (resume)" do
       run_record = PipelineRun.create!(nl_input: "Build an app", status: :paused)
       run_record.status = :executing

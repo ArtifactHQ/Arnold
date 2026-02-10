@@ -41,6 +41,7 @@ module ArnoldPipeline
         output: "Implemented calculator with add, subtract, multiply, divide",
         error: nil
       })
+      provider.stubs(:normalize_worktree)
       provider.stubs(:capture_diff).returns(
         "diff --git a/calculator.rb b/calculator.rb\nnew file mode 100644\n+class Calculator\n+end"
       )
@@ -89,6 +90,7 @@ module ArnoldPipeline
         output: "Done",
         error: nil
       })
+      provider.stubs(:normalize_worktree)
       provider.stubs(:capture_diff).returns(
         "diff --git a/app.rb b/app.rb\nnew file mode 100644\n+class App\n+end"
       )

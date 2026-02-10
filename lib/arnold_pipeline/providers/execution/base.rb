@@ -51,6 +51,9 @@ module ArnoldPipeline
         if provider == :null && !REGISTRY.key?(:null)
           require_relative "null"
         end
+        if provider == :claude_code && !REGISTRY.key?(:claude_code)
+          require_relative "claude_code"
+        end
 
         REGISTRY[provider] || raise(ConfigurationError, "Unknown execution provider: #{provider}")
       end

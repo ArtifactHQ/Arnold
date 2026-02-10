@@ -1,3 +1,4 @@
+require "fileutils"
 require "open3"
 require "shellwords"
 require_relative "base"
@@ -8,9 +9,11 @@ module ArnoldPipeline
       class ClaudeCode < Base
         class MergeError < StandardError; end
 
+        VALID_PERMISSION_MODES = %w[acceptEdits bypassPermissions default delegate dontAsk plan].freeze
+
         attr_reader :repo_path, :model, :max_turns, :permission_mode
 
-        def initialize(repo_path:, model: "sonnet", max_turns: nil, permission_mode: "auto")
+        def initialize(repo_path:, model: "sonnet", max_turns: nil, permission_mode: "bypassPermissions")
           @repo_path = repo_path
           @model = model
           @max_turns = max_turns
@@ -37,6 +40,12 @@ module ArnoldPipeline
             raise ConfigurationError,
               "claude CLI not found — install Claude Code: npm install -g @anthropic-ai/claude-code"
           end
+
+          mode = config.claude_code_permission_mode || "bypassPermissions"
+          unless VALID_PERMISSION_MODES.include?(mode)
+            raise ConfigurationError,
+              "Invalid claude_code_permission_mode '#{mode}'. Must be one of: #{VALID_PERMISSION_MODES.join(', ')}"
+          end
         end
 
         def self.build_from_config(config, **options)
@@ -44,18 +53,19 @@ module ArnoldPipeline
             repo_path: options[:repo_path] || config.claude_code_repo_path,
             model: options[:model] || config.claude_code_model || "sonnet",
             max_turns: options[:max_turns] || config.claude_code_max_turns,
-            permission_mode: options[:permission_mode] || config.claude_code_permission_mode || "auto"
+            permission_mode: options[:permission_mode] || config.claude_code_permission_mode || "bypassPermissions"
           )
         end
 
         def create_tasks(tasks:, pipeline_run:, prior_context: nil)
-          tasks.each_with_index.map do |task, i|
+          tasks.map do |task|
             title = task.respond_to?(:title) ? task.title : task["title"]
             description = task.respond_to?(:description) ? task.description : task["description"]
             labels = task.respond_to?(:labels) ? task.labels : (task["labels"] || [])
 
-            external_id = "cc-#{pipeline_run.id}-#{i}"
-            branch_name = "task-#{pipeline_run.id}-#{i}"
+            task_key = task.respond_to?(:id) && task.id ? task.id : SecureRandom.hex(4)
+            external_id = "cc-#{pipeline_run.id}-#{task_key}"
+            branch_name = "task-#{pipeline_run.id}-#{task_key}"
 
             prompt = build_prompt(
               title: title,
@@ -69,6 +79,11 @@ module ArnoldPipeline
               branch: branch_name,
               external_id: external_id
             )
+
+            if result[:success]
+              worktree_path = File.join(repo_path, ".worktrees", branch_name)
+              normalize_worktree(worktree_path: worktree_path, title: title)
+            end
 
             diff = capture_diff(branch: branch_name)
 
@@ -142,6 +157,12 @@ module ArnoldPipeline
             ## Prior Context
             #{context_section}
 
+            ## Working Directory Rules
+            - You are already inside a git repository worktree. Work in the CURRENT directory — do NOT create a project subdirectory.
+            - Do NOT run `git init` — this directory is already tracked by git.
+            - If you need to scaffold a Rails app, use `rails new . --force` (dot = current dir) instead of `rails new app_name`.
+            - Commit all changes when you are finished.
+
             Implement this task fully. Create or modify all necessary files.
             Do not ask questions — make reasonable decisions and document assumptions in code comments.
           PROMPT
@@ -172,13 +193,15 @@ module ArnoldPipeline
 
           cmd_parts += ["--max-turns", max_turns.to_s] if max_turns
 
-          cmd_parts += ["--prompt", prompt]
+          cmd_parts << prompt
 
           cmd_parts.shelljoin
         end
 
         def setup_worktree(branch)
           worktree_path = File.join(repo_path, ".worktrees", branch)
+
+          cleanup_worktree(branch)
 
           system("git", "-C", repo_path, "worktree", "add", "-b", branch, worktree_path,
             exception: true)
@@ -198,6 +221,24 @@ module ArnoldPipeline
             exception: true)
         rescue => e
           raise MergeError, "Failed to merge branch '#{branch}': #{e.message}"
+        end
+
+        def normalize_worktree(worktree_path:, title:)
+          # Remove nested .git directories that frameworks like Rails create.
+          # The worktree's own .git is a *file* (not a directory), so it's naturally excluded.
+          Dir.glob("**/.git", base: worktree_path).each do |nested_git|
+            full_path = File.join(worktree_path, nested_git)
+            FileUtils.rm_rf(full_path) if File.directory?(full_path)
+          end
+
+          # Stage any unstaged/untracked files
+          system("git", "-C", worktree_path, "add", "-A", exception: true)
+
+          # Commit only if there are staged changes (exit 1 = changes exist)
+          _output, status = Open3.capture2("git", "-C", worktree_path, "diff", "--cached", "--quiet")
+          unless status.success?
+            system("git", "-C", worktree_path, "commit", "-m", "Implement: #{title}", exception: true)
+          end
         end
 
         def cleanup_worktree(branch)

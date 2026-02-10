@@ -290,5 +290,40 @@ module ArnoldPipeline
       assert_equal "paused", pipeline_run.status
       assert_equal 2, (pipeline_run.metadata["tier_retries"] || {})["0"]
     end
+
+    test "handle_tier_gate_failure! pauses from executing with sync provider" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 1
+        c.tier_gate_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      @provider.stubs(:async?).returns(false)
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:fetch_results).returns([])
+      @executor.stubs(:merge_results).returns([])
+
+      gate_result = {
+        "pass" => false,
+        "issues" => ["compile error"],
+        "corrective_tasks" => [{ "title" => "Fix compile", "description" => "fix" }],
+        "context_summary" => "context"
+      }
+      @tier_gate_check.stubs(:call).returns(gate_result)
+
+      assert_raises(TierGateError) do
+        @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [], gate_result, [])
+      end
+
+      pipeline_run.reload
+      assert_equal "paused", pipeline_run.status
+    end
   end
 end
