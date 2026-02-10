@@ -217,7 +217,7 @@ module ArnoldPipeline
         end
 
         def merge_branch(branch)
-          system("git", "-C", repo_path, "merge", "--no-ff", branch,
+          system("git", "-C", repo_path, "merge", "--no-ff", "--no-edit", branch,
             exception: true)
         rescue => e
           raise MergeError, "Failed to merge branch '#{branch}': #{e.message}"

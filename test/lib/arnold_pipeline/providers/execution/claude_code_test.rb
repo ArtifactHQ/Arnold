@@ -452,6 +452,26 @@ module ArnoldPipeline
           assert_equal false, @provider.async?
         end
 
+        test "merge_branch uses --no-edit flag" do
+          branch = "test-merge-no-edit"
+          worktree_path = File.join(@repo_path, ".worktrees", branch)
+          system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
+
+          # Add a commit on the branch so there's something to merge
+          File.write(File.join(worktree_path, "merged.rb"), "class Merged; end")
+          system("git", "-C", worktree_path, "add", "-A", exception: true)
+          system("git", "-C", worktree_path, "commit", "-m", "Add merged.rb", exception: true)
+
+          # merge_branch should complete without opening an editor
+          @provider.send(:merge_branch, branch)
+
+          # Verify it created a merge commit (--no-ff always creates one)
+          log_output, = Open3.capture2("git", "-C", @repo_path, "log", "--oneline", "-1")
+          assert_match(/Merge branch/, log_output)
+        ensure
+          system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
+        end
+
         test "recoverable_errors includes MergeError" do
           assert_includes @provider.recoverable_errors, ClaudeCode::MergeError
         end
