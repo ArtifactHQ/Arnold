@@ -1,7 +1,7 @@
 # Agentic Workflow Specification
 
 ## Purpose
-This specification defines an agentic workflow for transforming natural language (NL) descriptions of applications into executable code using AI agents, integrated with GitHub for task orchestration and execution. The workflow includes spec generation from NL inputs using a library of agent personas and application recipes, task breakdown, execution via GitHub Issues/Actions/PRs, and a feedback loop for ensuring alignment through iterative analysis. The system SHALL prioritize automation, modularity, and alignment between specifications and implementations, enabling iterative refinement without human intervention where possible.
+This specification defines an agentic workflow for transforming natural language (NL) descriptions of applications into executable code using AI agents, with pluggable execution providers for task orchestration (e.g., GitHub API, Claude Code, or custom backends). The workflow includes spec generation from NL inputs using a library of agent personas and application recipes, task breakdown, execution via the configured provider, and a feedback loop for ensuring alignment through iterative analysis. The system SHALL prioritize automation, modularity, and alignment between specifications and implementations, enabling iterative refinement without human intervention where possible.
 
 ## Requirements
 
@@ -35,17 +35,24 @@ The first task (position 0) SHOULD be a bootstrap task that sets up the project 
 - WHEN tasks are generated.
 - THEN tasks SHALL be ordered or flagged with dependencies to prevent execution conflicts.
 
-### Requirement: GitHub Integration
-The system SHALL push generated tasks to GitHub as Issues using the GitHub API.
-The system MUST support assignment to multiple AI coding agents (e.g., Claude Code, OpenAI Codex) within GitHub branches.
-GitHub Issues serve as tasks, GitHub Actions or Copilot handle execution, and PRs manage results.
+### Requirement: Task Execution
+The system SHALL publish generated tasks to the configured execution provider and collect code results.
+Execution providers implement a common interface: `create_tasks`, `fetch_results`, `merge_results`, and `async?`.
+Async providers (e.g., GitHub) use polling to await results; sync providers (e.g., Claude Code) return results immediately.
 
-#### Scenario: Task Ingestion
+#### Built-in Providers
+- **GitHub** (`:github`) — Creates GitHub Issues, uses Actions/Copilot for execution, collects results from PRs. Supports `github_issue_mention` for @mention-based agent routing.
+- **Claude Code** (`:claude_code`) — Executes tasks locally via the `claude` CLI in git worktrees. Sync provider (no polling).
+- **Null** (`:null`) — Test-only provider that returns empty results.
+
+Custom providers can be registered via `ArnoldPipeline::Providers::Execution.register(:name, ProviderClass)`.
+
+#### Scenario: Task Ingestion (GitHub)
 - GIVEN a list of tasks from the Task Breakdown Agent.
 - WHEN pushed via the GitHub API (e.g., creating Issues).
 - THEN tasks appear as GitHub Issues, linked to the project repository, ready for agent assignment and execution.
 
-#### Scenario: Multi-Agent Routing
+#### Scenario: Multi-Agent Routing (GitHub)
 - GIVEN tasks with labels.
 - WHEN executed via GitHub.
 - THEN the system SHOULD route tasks to appropriate agents. Current implementation uses @mention (via `github_issue_mention` config) and labels on GitHub Issues. Active routing by agent strength (e.g., assigning frontend tasks to specialized agents) is a future enhancement. [PLANNED]
@@ -54,7 +61,7 @@ GitHub Issues serve as tasks, GitHub Actions or Copilot handle execution, and PR
 The system SHALL implement a post-execution feedback loop using an Analysis Agent to evaluate code outputs against the original specification.
 The system MUST decide whether to iterate on tasks (for implementation fixes) or the specification (for clarifications), with a configurable maximum iterations (default 3, range 1-10) to prevent infinite loops.
 The system SHOULD use confidence scores (0-100%) as a reporting guideline to flag low-confidence decisions (below 70%) for human review. Confidence does not gate execution -- all decisions are acted on regardless of score.
-The loop SHALL use GitHub API polling for PR/issue events.
+The loop SHALL use the execution provider's polling mechanism (async providers) or immediate result collection (sync providers) for the feedback cycle.
 
 #### Scenario: Task Iteration Due to Misalignment
 - GIVEN code diffs from GitHub PRs that deviate from the spec (e.g., missing edge case handling).
@@ -285,6 +292,7 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 
 ### Requirement: Configuration
 The system SHALL be configurable via a Ruby block (`ArnoldPipeline.configure`) or YAML config file.
+When multiple sources provide the same key, CLI flags take precedence over YAML config, which takes precedence over defaults (CLI > YAML > defaults).
 All configuration keys SHALL be validated before pipeline execution via `validate!`.
 
 | Key | Type | Default | Validation |
@@ -292,10 +300,14 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | llm_provider | Symbol | :anthropic | Must be :anthropic or :openai |
 | llm_api_key | String | ENV lookup | Required (non-empty) |
 | llm_model | String | Provider default | None |
-| execution_provider | Symbol | :github | Must be :github |
+| execution_provider | Symbol | :github | Must be :github, :claude_code, :null, or a registered provider |
 | github_token | String | ENV["GITHUB_TOKEN"] | Required when execution_provider is :github |
 | github_repo | String | nil | Required when execution_provider is :github (format: "owner/repo") |
 | github_issue_mention | String | nil | None |
+| claude_code_repo_path | String | nil | Required when execution_provider is :claude_code (must be valid directory) |
+| claude_code_model | String | "sonnet" | None |
+| claude_code_max_turns | Integer | nil | None |
+| claude_code_permission_mode | String | "bypassPermissions" | Must be one of: acceptEdits, bypassPermissions, default, delegate, dontAsk, plan |
 | max_iterations | Integer | 3 | 1-10 |
 | library_path | String | nil (built-in library) | None |
 | polling_interval | Numeric | 30 | Positive |
