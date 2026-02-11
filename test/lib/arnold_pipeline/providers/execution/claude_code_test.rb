@@ -557,6 +557,318 @@ module ArnoldPipeline
           assert_equal 10, provider.max_turns
           assert_equal "default", provider.permission_mode
         end
+
+        # --- Worktree hygiene tests ---
+
+        test "normalize_worktree excludes tmp/ from staging" do
+          branch = "test-normalize-exclude-tmp"
+          worktree_path = File.join(@repo_path, ".worktrees", branch)
+          system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
+
+          # Create a file in tmp/ that should be excluded
+          FileUtils.mkdir_p(File.join(worktree_path, "tmp", "cache", "bootsnap"))
+          File.write(File.join(worktree_path, "tmp", "cache", "bootsnap", "compiled.bin"), "binary data")
+
+          # Also create a normal file that should be staged
+          File.write(File.join(worktree_path, "app.rb"), "class App; end")
+
+          @provider.send(:normalize_worktree, worktree_path: worktree_path, title: "Test exclusions")
+
+          diff = @provider.send(:capture_diff, branch: branch)
+          assert_includes diff, "app.rb"
+          refute_includes diff, "bootsnap"
+          refute_includes diff, "compiled.bin"
+        ensure
+          system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
+        end
+
+        test "normalize_worktree excludes log/ from staging" do
+          branch = "test-normalize-exclude-log"
+          worktree_path = File.join(@repo_path, ".worktrees", branch)
+          system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
+
+          FileUtils.mkdir_p(File.join(worktree_path, "log"))
+          File.write(File.join(worktree_path, "log", "development.log"), "log line")
+          File.write(File.join(worktree_path, "app.rb"), "class App; end")
+
+          @provider.send(:normalize_worktree, worktree_path: worktree_path, title: "Test log exclusion")
+
+          diff = @provider.send(:capture_diff, branch: branch)
+          assert_includes diff, "app.rb"
+          refute_includes diff, "development.log"
+        ensure
+          system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
+        end
+
+        test "normalize_worktree excludes node_modules/ from staging" do
+          branch = "test-normalize-exclude-node"
+          worktree_path = File.join(@repo_path, ".worktrees", branch)
+          system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
+
+          FileUtils.mkdir_p(File.join(worktree_path, "node_modules", "express"))
+          File.write(File.join(worktree_path, "node_modules", "express", "index.js"), "module.exports = {}")
+          File.write(File.join(worktree_path, "index.js"), "console.log('hello')")
+
+          @provider.send(:normalize_worktree, worktree_path: worktree_path, title: "Test node exclusion")
+
+          diff = @provider.send(:capture_diff, branch: branch)
+          assert_includes diff, "index.js"
+          refute_includes diff, "node_modules"
+        ensure
+          system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
+        end
+
+        test "setup_worktree creates .gitignore when missing" do
+          branch = "test-gitignore-creation"
+          worktree_path = @provider.send(:setup_worktree, branch)
+
+          gitignore = File.join(worktree_path, ".gitignore")
+          assert File.exist?(gitignore), ".gitignore should be created in worktree"
+
+          content = File.read(gitignore)
+          assert_includes content, "tmp/"
+          assert_includes content, "log/"
+          assert_includes content, "node_modules/"
+          assert_includes content, "vendor/bundle/"
+        ensure
+          system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
+        end
+
+        test "setup_worktree preserves existing .gitignore" do
+          # First, create a .gitignore on main branch
+          File.write(File.join(@repo_path, ".gitignore"), "*.secret\n")
+          system("git", "-C", @repo_path, "add", ".gitignore", exception: true)
+          system("git", "-C", @repo_path, "commit", "-m", "Add gitignore", exception: true)
+
+          branch = "test-gitignore-preserved"
+          worktree_path = @provider.send(:setup_worktree, branch)
+
+          content = File.read(File.join(worktree_path, ".gitignore"))
+          assert_equal "*.secret\n", content, "Existing .gitignore should not be overwritten"
+        ensure
+          system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
+        end
+
+        # --- Merge conflict resolution tests ---
+
+        # Helper: create a conflict scenario.
+        # Creates branch_a and branch_b that both modify the same file.
+        # Merges branch_a into main, leaving branch_b ready to conflict.
+        def create_conflict_scenario(file: "routes.rb", content_a: "get '/leads'\n", content_b: "root 'landing#index'\n")
+          # Create a base file and commit
+          File.write(File.join(@repo_path, file), "# Routes\n")
+          system("git", "-C", @repo_path, "add", file, exception: true)
+          system("git", "-C", @repo_path, "commit", "-m", "Add base #{file}", exception: true)
+
+          # Branch A: modify the file
+          system("git", "-C", @repo_path, "checkout", "-b", "branch-a", exception: true)
+          File.write(File.join(@repo_path, file), "# Routes\n#{content_a}")
+          system("git", "-C", @repo_path, "add", file, exception: true)
+          system("git", "-C", @repo_path, "commit", "-m", "Branch A changes", exception: true)
+
+          # Back to main, merge branch A
+          system("git", "-C", @repo_path, "checkout", "-", exception: true)
+          system("git", "-C", @repo_path, "merge", "--no-ff", "--no-edit", "branch-a", exception: true)
+
+          # Branch B from pre-merge main (the parent of the merge commit)
+          base_sha, = Open3.capture2("git", "-C", @repo_path, "rev-parse", "HEAD~1")
+          system("git", "-C", @repo_path, "branch", "branch-b", base_sha.strip, exception: true)
+          system("git", "-C", @repo_path, "checkout", "branch-b", exception: true)
+          File.write(File.join(@repo_path, file), "# Routes\n#{content_b}")
+          system("git", "-C", @repo_path, "add", file, exception: true)
+          system("git", "-C", @repo_path, "commit", "-m", "Branch B changes", exception: true)
+
+          # Back to main — merging branch-b will conflict
+          system("git", "-C", @repo_path, "checkout", "-", exception: true)
+
+          "branch-b"
+        end
+
+        test "merge_branch detects conflict and resolves via Claude CLI" do
+          ArnoldPipeline.configure { |c| c.merge_conflict_resolution_enabled = true }
+
+          branch = create_conflict_scenario
+          task = @pipeline_run.tasks.create!(title: "Landing page", description: "Add landing page routes", position: 0)
+
+          # Write a resolver script that the CLI command will execute
+          resolve_script_path = File.join(@repo_path, "_resolve.rb")
+          routes_path = File.join(@repo_path, "routes.rb")
+          File.write(resolve_script_path, <<~RUBY)
+            File.write(#{routes_path.inspect}, "# Routes\\nget '/leads'\\nroot 'landing#index'\\n")
+          RUBY
+
+          @provider.stubs(:build_cli_command).returns("ruby #{resolve_script_path.shellescape}")
+
+          @provider.send(:merge_branch, branch, task: task)
+
+          # Verify both changes are present
+          content = File.read(routes_path)
+          assert_includes content, "get '/leads'"
+          assert_includes content, "root 'landing#index'"
+
+          # Verify no conflict markers remain
+          refute_includes content, "<<<<<<<"
+          refute_includes content, ">>>>>>>"
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "merge_branch raises MergeError when resolution is disabled" do
+          ArnoldPipeline.configure { |c| c.merge_conflict_resolution_enabled = false }
+
+          branch = create_conflict_scenario
+          task = @pipeline_run.tasks.create!(title: "Landing page", description: "Add routes", position: 0)
+
+          error = assert_raises(ClaudeCode::MergeError) do
+            @provider.send(:merge_branch, branch, task: task)
+          end
+          assert_match(/Failed to merge branch/, error.message)
+
+          # Verify merge was aborted (no MERGE_HEAD left)
+          merge_head = File.join(@repo_path, ".git", "MERGE_HEAD")
+          refute File.exist?(merge_head), "MERGE_HEAD should be cleaned up after abort"
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "merge_branch raises MergeError when too many conflicted files" do
+          ArnoldPipeline.configure do |c|
+            c.merge_conflict_resolution_enabled = true
+            c.merge_conflict_max_files = 1
+          end
+
+          # Create conflicts in two files
+          File.write(File.join(@repo_path, "file1.rb"), "base1\n")
+          File.write(File.join(@repo_path, "file2.rb"), "base2\n")
+          system("git", "-C", @repo_path, "add", ".", exception: true)
+          system("git", "-C", @repo_path, "commit", "-m", "Add base files", exception: true)
+
+          # Branch A
+          system("git", "-C", @repo_path, "checkout", "-b", "branch-a2", exception: true)
+          File.write(File.join(@repo_path, "file1.rb"), "branch-a-change1\n")
+          File.write(File.join(@repo_path, "file2.rb"), "branch-a-change2\n")
+          system("git", "-C", @repo_path, "add", ".", exception: true)
+          system("git", "-C", @repo_path, "commit", "-m", "A changes", exception: true)
+
+          system("git", "-C", @repo_path, "checkout", "-", exception: true)
+          system("git", "-C", @repo_path, "merge", "--no-ff", "--no-edit", "branch-a2", exception: true)
+
+          # Branch B from pre-merge
+          base_sha, = Open3.capture2("git", "-C", @repo_path, "rev-parse", "HEAD~1")
+          system("git", "-C", @repo_path, "branch", "branch-b2", base_sha.strip, exception: true)
+          system("git", "-C", @repo_path, "checkout", "branch-b2", exception: true)
+          File.write(File.join(@repo_path, "file1.rb"), "branch-b-change1\n")
+          File.write(File.join(@repo_path, "file2.rb"), "branch-b-change2\n")
+          system("git", "-C", @repo_path, "add", ".", exception: true)
+          system("git", "-C", @repo_path, "commit", "-m", "B changes", exception: true)
+
+          system("git", "-C", @repo_path, "checkout", "-", exception: true)
+
+          task = @pipeline_run.tasks.create!(title: "Task", description: "Desc", position: 0)
+
+          error = assert_raises(ClaudeCode::MergeError) do
+            @provider.send(:merge_branch, "branch-b2", task: task)
+          end
+          assert_match(/Too many conflicted files/, error.message)
+
+          merge_head = File.join(@repo_path, ".git", "MERGE_HEAD")
+          refute File.exist?(merge_head), "MERGE_HEAD should be cleaned up"
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "merge_branch raises MergeError when CLI fails" do
+          ArnoldPipeline.configure { |c| c.merge_conflict_resolution_enabled = true }
+
+          branch = create_conflict_scenario
+          task = @pipeline_run.tasks.create!(title: "Task", description: "Desc", position: 0)
+
+          @provider.stubs(:build_cli_command).returns("false") # exits with code 1
+
+          error = assert_raises(ClaudeCode::MergeError) do
+            @provider.send(:merge_branch, branch, task: task)
+          end
+          assert_match(/Claude CLI failed to resolve/, error.message)
+
+          merge_head = File.join(@repo_path, ".git", "MERGE_HEAD")
+          refute File.exist?(merge_head), "MERGE_HEAD should be cleaned up after CLI failure"
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "merge_branch raises MergeError when conflict markers remain after resolution" do
+          ArnoldPipeline.configure { |c| c.merge_conflict_resolution_enabled = true }
+
+          branch = create_conflict_scenario
+          task = @pipeline_run.tasks.create!(title: "Task", description: "Desc", position: 0)
+
+          # CLI "succeeds" but doesn't actually fix the markers
+          @provider.stubs(:build_cli_command).returns("true") # no-op, leaves markers
+
+          error = assert_raises(ClaudeCode::MergeError) do
+            @provider.send(:merge_branch, branch, task: task)
+          end
+          assert_match(/Conflict markers remain/, error.message)
+
+          merge_head = File.join(@repo_path, ".git", "MERGE_HEAD")
+          refute File.exist?(merge_head), "MERGE_HEAD should be cleaned up"
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "build_conflict_resolution_prompt includes task context and file contents" do
+          task = @pipeline_run.tasks.create!(
+            title: "Add landing page",
+            description: "Create a landing page with hero section",
+            position: 0
+          )
+
+          # Create a fake conflicted file
+          File.write(File.join(@repo_path, "routes.rb"), <<~CONTENT)
+            <<<<<<< HEAD
+            get '/leads'
+            =======
+            root 'landing#index'
+            >>>>>>> branch-b
+          CONTENT
+
+          prompt = @provider.send(:build_conflict_resolution_prompt,
+            branch: "branch-b",
+            task: task,
+            conflicted_files: ["routes.rb"]
+          )
+
+          assert_includes prompt, "branch-b"
+          assert_includes prompt, "Add landing page"
+          assert_includes prompt, "Create a landing page with hero section"
+          assert_includes prompt, "routes.rb"
+          assert_includes prompt, "<<<<<<< HEAD"
+          assert_includes prompt, "Remove ALL conflict markers"
+        end
+
+        test "merge_results passes task to merge_branch" do
+          task = @pipeline_run.tasks.create!(title: "My Task", description: "Desc", position: 0, external_id: "cc-1-1")
+          @provider.instance_variable_set(:@results, {
+            "cc-1-1" => { success: true, branch: "task-branch" }
+          })
+
+          @provider.expects(:merge_branch).with("task-branch", task: task)
+          @provider.merge_results(pipeline_run: @pipeline_run, tasks: [task])
+        end
+
+        test "fatal git error (exit 128) skips resolution" do
+          ArnoldPipeline.configure { |c| c.merge_conflict_resolution_enabled = true }
+
+          # A non-existent branch produces exit code 128 (fatal)
+          task = @pipeline_run.tasks.create!(title: "Task", description: "Desc", position: 0)
+
+          error = assert_raises(ClaudeCode::MergeError) do
+            @provider.send(:merge_branch, "nonexistent-branch-xyz", task: task)
+          end
+          assert_match(/Failed to merge branch/, error.message)
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
       end
     end
   end

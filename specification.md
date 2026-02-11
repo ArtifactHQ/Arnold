@@ -237,6 +237,24 @@ After each tier completes, results are merged before the next tier begins.
 - WHEN the retry limit is reached.
 - THEN the pipeline is paused with status "paused", metadata records the tier_gate_failure details, and a TierGateError is raised.
 
+#### Scenario: Merge Conflict Resolution (Claude Code Provider)
+- GIVEN two tasks in the same tier that modify the same file (e.g., both adding routes to `config/routes.rb`).
+- AND the execution provider is Claude Code with `merge_conflict_resolution_enabled` set to true (default).
+- WHEN the first task's branch merges successfully but the second task's branch produces a merge conflict.
+- THEN the system detects the conflict, invokes the Claude CLI with a resolution prompt containing the conflicted file contents and task context, verifies all conflict markers are removed, and completes the merge with both tasks' changes preserved.
+
+#### Scenario: Merge Conflict Resolution Disabled
+- GIVEN a merge conflict occurs during tier merging.
+- AND `merge_conflict_resolution_enabled` is set to false.
+- WHEN the merge fails.
+- THEN the system aborts the merge and raises a recoverable MergeError without attempting resolution.
+
+#### Scenario: Merge Conflict Resolution Failure
+- GIVEN a merge conflict occurs during tier merging.
+- AND `merge_conflict_resolution_enabled` is true.
+- WHEN the Claude CLI fails to resolve the conflict (exits non-zero, leaves conflict markers, or the number of conflicted files exceeds `merge_conflict_max_files` (default: 10)).
+- THEN the system aborts the merge and raises a recoverable MergeError. The TierExecutionEngine logs this as a non-fatal warning and continues the pipeline.
+
 ### Requirement: Context Propagation
 The system SHALL accumulate context summaries from tier gate checks and inject them into subsequent tier issue bodies.
 This enables later tiers to be aware of decisions and patterns established in earlier tiers.

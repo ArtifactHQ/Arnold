@@ -18,7 +18,9 @@ module ArnoldPipeline
                   :polling_interval, :polling_timeout, :polling_max_interval,
                   :tier_gate_enabled, :context_propagation_enabled, :max_tier_retries,
                   :workflow_status_enabled, :workflow_branch_pattern,
-                  :openspec_enabled, :openspec_cli_path
+                  :openspec_enabled, :openspec_cli_path,
+                  :max_diff_chars, :max_diff_per_file_chars,
+                  :merge_conflict_resolution_enabled, :merge_conflict_max_files
     attr_writer   :llm_provider, :llm_api_key, :llm_model
 
     def initialize
@@ -45,6 +47,10 @@ module ArnoldPipeline
       @workflow_branch_pattern     = /issue[-_]?\d+/i
       @openspec_enabled           = true
       @openspec_cli_path          = "openspec"
+      @max_diff_chars             = 100_000
+      @max_diff_per_file_chars    = 10_000
+      @merge_conflict_resolution_enabled = true
+      @merge_conflict_max_files          = 10
     end
 
     def llm_provider
