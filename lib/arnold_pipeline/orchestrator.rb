@@ -8,6 +8,7 @@ require "arnold_pipeline/tier_calculator"
 require "arnold_pipeline/tier_execution_engine"
 require "arnold_pipeline/analysis_loop"
 require "arnold_pipeline/resume_inferrer"
+require "arnold_pipeline/pipeline_event_recorder"
 
 module ArnoldPipeline
   class Orchestrator
@@ -55,6 +56,11 @@ module ArnoldPipeline
     private
 
     def run_pipeline!(pipeline_run, from:, stop_after: nil)
+      @event_recorder = PipelineEventRecorder.new(pipeline_run:)
+      @tier_execution_engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check, logger: @logger,
+        event_recorder: @event_recorder
+      )
       start_index = STAGES.index(from)
 
       begin
@@ -65,14 +71,34 @@ module ArnoldPipeline
             send(:"#{stage}!", pipeline_run)
             checkpoint = STAGE_CHECKPOINTS[stage]
             if checkpoint && stop_after == checkpoint
+              @event_recorder&.record(
+                event_type: :pipeline_paused, stage: "lifecycle",
+                summary: { status: "paused", reason: "stop_after_#{checkpoint}" }
+              )
               return pause!(pipeline_run, checkpoint)
             end
           end
         end
+
+        @event_recorder&.record(
+          event_type: :pipeline_completed, stage: "lifecycle",
+          summary: {
+            total_iterations: pipeline_run.iterations.count,
+            total_tasks: pipeline_run.tasks.count
+          }
+        )
       rescue TierGateError => e
+        @event_recorder&.record(
+          event_type: :pipeline_paused, stage: "lifecycle",
+          summary: { status: "paused", reason: e.message }
+        )
         logger.warn { "[Arnold] Pipeline paused: #{e.message}" }
         pipeline_run.reload
       rescue => e
+        @event_recorder&.record(
+          event_type: :pipeline_failed, stage: "lifecycle",
+          summary: { error_class: e.class.name, error_message: e.message }
+        )
         pipeline_run.update!(status: :failed, metadata: (pipeline_run.metadata || {}).merge("error" => e.message))
         logger.error { "[Arnold] Pipeline failed: #{e.message}" }
         raise
@@ -92,35 +118,52 @@ module ArnoldPipeline
       domain_type = library_manager.find_domain_type(pipeline_run.nl_input)
       logger.info { "[Arnold] Selected domain type: #{domain_type.code} — #{domain_type.name}" }
 
-      result = spec_generator.call(
-        nl_input: pipeline_run.nl_input,
-        persona:,
-        recipe:,
-        supporting_recipes:,
-        domain_type:
+      @event_recorder&.record(
+        event_type: :library_selection, stage: "spec_generation",
+        summary: {
+          persona: persona&.name, recipe: recipe&.name,
+          domain_type: domain_type&.code,
+          supporting_recipes: supporting_recipes&.map(&:name)
+        }
       )
 
-      if pipeline_run.specification
-        spec = pipeline_run.specification
-        spec.update!(
-          content: result[:content],
-          structured_data: result[:structured_data],
-          version: spec.version + 1
+      @event_recorder&.timed(
+        event_type: :spec_generated, stage: "spec_generation",
+        summary: ->(r) { { spec_version: r ? 1 : nil, content_length: r&.dig(:content)&.length, has_structured_data: r&.dig(:structured_data).present? } },
+        payload: ->(r) { { prompt_input: pipeline_run.nl_input, response: r } }
+      ) do
+        result = spec_generator.call(
+          nl_input: pipeline_run.nl_input,
+          persona:,
+          recipe:,
+          supporting_recipes:,
+          domain_type:
         )
-      else
-        spec = pipeline_run.create_specification!(
-          content: result[:content],
-          structured_data: result[:structured_data],
-          version: 1
+
+        if pipeline_run.specification
+          spec = pipeline_run.specification
+          spec.update!(
+            content: result[:content],
+            structured_data: result[:structured_data],
+            version: spec.version + 1
+          )
+        else
+          spec = pipeline_run.create_specification!(
+            content: result[:content],
+            structured_data: result[:structured_data],
+            version: 1
+          )
+        end
+
+        spec.spec_revisions.create!(
+          version: spec.version,
+          content: spec.content,
+          structured_data: spec.structured_data,
+          change_source: "spec_generation"
         )
+
+        result
       end
-
-      spec.spec_revisions.create!(
-        version: spec.version,
-        content: spec.content,
-        structured_data: spec.structured_data,
-        change_source: "spec_generation"
-      )
     end
 
     def break_tasks!(pipeline_run)
@@ -129,21 +172,34 @@ module ArnoldPipeline
 
       pipeline_run.tasks.destroy_all
 
-      recipe, supporting_recipes = resolve_recipes(pipeline_run)
-      task_data = task_breaker.call(spec_content: pipeline_run.specification.content, recipe:, supporting_recipes:)
+      @event_recorder&.timed(
+        event_type: :tasks_broken, stage: "task_breakdown",
+        summary: ->(_) {
+          tasks = pipeline_run.tasks.reload
+          {
+            task_count: tasks.count,
+            tier_count: (tasks.map(&:tier).compact.uniq.size),
+            dependency_edge_count: tasks.sum { |t| (t.depends_on || []).size }
+          }
+        },
+        payload: ->(_) { { spec_content: pipeline_run.specification&.content } }
+      ) do
+        recipe, supporting_recipes = resolve_recipes(pipeline_run)
+        task_data = task_breaker.call(spec_content: pipeline_run.specification.content, recipe:, supporting_recipes:)
 
-      task_data.each do |td|
-        pipeline_run.tasks.create!(
-          title: td["title"],
-          description: td["description"],
-          priority: td["priority"] || 0,
-          labels: td["labels"] || [],
-          position: td["position"],
-          depends_on: td["depends_on"] || []
-        )
+        task_data.each do |td|
+          pipeline_run.tasks.create!(
+            title: td["title"],
+            description: td["description"],
+            priority: td["priority"] || 0,
+            labels: td["labels"] || [],
+            position: td["position"],
+            depends_on: td["depends_on"] || []
+          )
+        end
+
+        TierCalculator.call(pipeline_run.tasks.reload)
       end
-
-      TierCalculator.call(pipeline_run.tasks.reload)
     end
 
     def execute!(pipeline_run)
@@ -156,7 +212,8 @@ module ArnoldPipeline
         task_breaker:,
         library_manager:,
         tier_execution_engine:,
-        logger:
+        logger:,
+        event_recorder: @event_recorder
       )
       loop.run!(pipeline_run)
     end

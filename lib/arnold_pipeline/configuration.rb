@@ -20,7 +20,8 @@ module ArnoldPipeline
                   :workflow_status_enabled, :workflow_branch_pattern,
                   :openspec_enabled, :openspec_cli_path,
                   :max_diff_chars, :max_diff_per_file_chars,
-                  :merge_conflict_resolution_enabled, :merge_conflict_max_files
+                  :merge_conflict_resolution_enabled, :merge_conflict_max_files,
+                  :event_logging_enabled, :verbose_event_logging
     attr_writer   :llm_provider, :llm_api_key, :llm_model
 
     def initialize
@@ -51,6 +52,8 @@ module ArnoldPipeline
       @max_diff_per_file_chars    = 10_000
       @merge_conflict_resolution_enabled = true
       @merge_conflict_max_files          = 10
+      @event_logging_enabled             = true
+      @verbose_event_logging             = false
     end
 
     def llm_provider

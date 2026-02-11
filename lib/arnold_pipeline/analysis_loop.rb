@@ -1,15 +1,17 @@
 require "arnold_pipeline/openspec_bridge"
+require "arnold_pipeline/diff_summarizer"
 
 module ArnoldPipeline
   class AnalysisLoop
-    attr_reader :analyzer, :task_breaker, :library_manager, :tier_execution_engine, :logger
+    attr_reader :analyzer, :task_breaker, :library_manager, :tier_execution_engine, :logger, :event_recorder
 
-    def initialize(analyzer:, task_breaker:, library_manager:, tier_execution_engine:, logger: Logger.new($stdout, level: Logger::INFO))
+    def initialize(analyzer:, task_breaker:, library_manager:, tier_execution_engine:, logger: Logger.new($stdout, level: Logger::INFO), event_recorder: nil)
       @analyzer = analyzer
       @task_breaker = task_breaker
       @library_manager = library_manager
       @tier_execution_engine = tier_execution_engine
       @logger = logger
+      @event_recorder = event_recorder
     end
 
     def run!(pipeline_run)
@@ -23,14 +25,30 @@ module ArnoldPipeline
 
         case analysis["decision"]
         when "done"
+          event_recorder&.record(
+            event_type: :iteration_decision, stage: "iteration",
+            summary: { decision: "done" }, iteration_number: iteration_number
+          )
           pipeline_run.update!(status: :completed)
           tier_execution_engine.merge_all_results!(pipeline_run)
           logger.info { "[Arnold] Pipeline complete." }
           break
         when "iterate_tasks"
+          corrective_count = (analysis.dig("corrective_data", "tasks") || []).size
+          event_recorder&.record(
+            event_type: :iteration_decision, stage: "iteration",
+            summary: { decision: "iterate_tasks", corrective_task_count: corrective_count },
+            iteration_number: iteration_number
+          )
           handle_iterate_tasks!(pipeline_run, analysis)
           tier_execution_engine.execute_tiers!(pipeline_run)
         when "iterate_spec"
+          delta_count = (analysis.dig("corrective_data", "deltas") || []).size
+          event_recorder&.record(
+            event_type: :iteration_decision, stage: "iteration",
+            summary: { decision: "iterate_spec", delta_count: delta_count },
+            iteration_number: iteration_number
+          )
           handle_iterate_spec!(pipeline_run, analysis)
           break_tasks!(pipeline_run)
           tier_execution_engine.execute_tiers!(pipeline_run)
@@ -54,16 +72,27 @@ module ArnoldPipeline
 
       persona = library_manager.find_persona("testing quality review")
       tasks = pipeline_run.tasks.reload
-      diffs = tasks.map { |t| t.result_diff }.compact.join("\n\n")
+      diffs = DiffSummarizer.call(tasks.map(&:result_diff).compact)
       comments = tier_execution_engine.format_task_comments(tasks)
 
-      result = analyzer.call(
-        spec_content: pipeline_run.specification.content,
-        diffs:,
-        iteration_number:,
-        persona:,
-        comments:
-      )
+      result = if event_recorder
+        event_recorder.timed(
+          event_type: :analysis_completed, stage: "analysis",
+          summary: ->(r) {
+            {
+              decision: r&.dig("decision"),
+              confidence: r&.dig("confidence"),
+              reasoning_excerpt: r&.dig("reasoning")&.to_s&.slice(0, 200)
+            }
+          },
+          payload: ->(r) { { spec_content: pipeline_run.specification.content, diffs: diffs, response: r } },
+          iteration_number: iteration_number
+        ) do
+          analyzer.call(spec_content: pipeline_run.specification.content, diffs:, iteration_number:, persona:, comments:)
+        end
+      else
+        analyzer.call(spec_content: pipeline_run.specification.content, diffs:, iteration_number:, persona:, comments:)
+      end
 
       pipeline_run.iterations.create!(
         number: iteration_number,
@@ -115,8 +144,26 @@ module ArnoldPipeline
         persist_deltas!(spec, pipeline_run, raw_deltas)
         merge_deltas!(spec, raw_deltas, pipeline_run)
         snapshot_revision!(spec, raw_deltas, "iterate_spec")
+
+        merge_strategy = if ArnoldPipeline.configuration.openspec_enabled
+          "openspec"
+        else
+          "append"
+        end
+        event_recorder&.record(
+          event_type: :spec_delta_merged, stage: "iteration",
+          summary: {
+            merge_strategy: merge_strategy,
+            delta_count: raw_deltas.size,
+            new_version: spec.reload.version
+          }
+        )
       else
         legacy_append!(spec, analysis)
+        event_recorder&.record(
+          event_type: :spec_delta_merged, stage: "iteration",
+          summary: { merge_strategy: "legacy", delta_count: 0, new_version: spec.reload.version }
+        )
       end
     end
 

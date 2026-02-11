@@ -1,11 +1,14 @@
+require "arnold_pipeline/diff_summarizer"
+
 module ArnoldPipeline
   class TierExecutionEngine
-    attr_reader :executor, :tier_gate_check, :logger
+    attr_reader :executor, :tier_gate_check, :logger, :event_recorder
 
-    def initialize(executor:, tier_gate_check:, logger:)
+    def initialize(executor:, tier_gate_check:, logger:, event_recorder: nil)
       @executor = executor
       @tier_gate_check = tier_gate_check
       @logger = logger
+      @event_recorder = event_recorder
     end
 
     def execute_tiers!(pipeline_run)
@@ -26,6 +29,12 @@ module ArnoldPipeline
 
         logger.info { "[Arnold] Executing tier #{tier_num + 1}/#{max_tier + 1} (#{tier_tasks.size} tasks)..." }
 
+        event_recorder&.record(
+          event_type: :tier_execution_started, stage: "execution",
+          summary: { tier_number: tier_num, task_count: tier_tasks.size, task_titles: tier_tasks.map(&:title) },
+          tier_number: tier_num
+        )
+
         prior_context = build_prior_context(accumulated_context)
 
         # Publish (executor skips tasks with existing external_id)
@@ -45,6 +54,16 @@ module ArnoldPipeline
 
         # Merge this tier before next tier starts
         merge_tier_results!(pipeline_run, tier_tasks)
+
+        tier_tasks.each(&:reload)
+        resolved = tier_tasks.count { |t| tier_task_resolved?(t) }
+        failed = tier_tasks.count(&:failed?)
+        event_recorder&.record(
+          event_type: :tier_execution_completed, stage: "execution",
+          summary: { tier_number: tier_num, resolved_count: resolved, failed_count: failed },
+          tier_number: tier_num
+        )
+
         logger.info { "[Arnold] Tier #{tier_num + 1}/#{max_tier + 1} complete. Running gate check..." }
 
         # Gate check + context (when either feature is enabled)
@@ -115,15 +134,27 @@ module ArnoldPipeline
       tier_tasks.each(&:reload)
 
       task_summaries = tier_tasks.map { |t| "- **#{t.title}**: #{t.description}" }.join("\n")
-      diffs = tier_tasks.map(&:result_diff).compact.join("\n\n")
+      diffs = DiffSummarizer.call(tier_tasks.map(&:result_diff).compact)
       comments = format_task_comments(tier_tasks)
 
-      result = tier_gate_check.call(
-        tier_number: tier_num,
-        task_summaries: task_summaries,
-        diffs: diffs,
-        comments: comments
-      )
+      result = if event_recorder
+        event_recorder.timed(
+          event_type: :tier_gate_evaluated, stage: "tier_gate",
+          summary: ->(r) {
+            {
+              pass: r&.dig("pass"),
+              issues: r&.dig("issues") || [],
+              corrective_task_count: (r&.dig("corrective_tasks") || []).size
+            }
+          },
+          payload: ->(r) { { diffs: diffs, gate_response: r } },
+          tier_number: tier_num
+        ) do
+          tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:)
+        end
+      else
+        tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:)
+      end
 
       if result
         status = result["pass"] ? "PASSED" : "FAILED"

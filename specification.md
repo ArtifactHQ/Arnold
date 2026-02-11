@@ -326,6 +326,41 @@ Resume SHALL be idempotent: re-publishing already-published tasks is safely skip
 - WHEN TierExecutionEngine iterates through tiers.
 - THEN tiers where all tasks are resolved (have results or are failed) are skipped entirely.
 
+### Requirement: Pipeline Event Audit Trail
+The system SHALL record structured pipeline execution events to provide observability into decision points and execution flow.
+The system MUST support configurable event recording modes: disabled, summary-only (default), and verbose (full payloads).
+Event recording SHALL be non-fatal: database errors during event creation do not interrupt pipeline execution.
+
+#### Scenario: Pipeline Event Audit Trail [SPEC-EVENT-001]
+- GIVEN the pipeline event system is enabled.
+- WHEN a pipeline run executes through its stages.
+- THEN structured PipelineEvent records are created capturing decisions at each stage.
+- AND each event has an event_type, stage, summary, optional payload, and optional duration_ms.
+
+#### Scenario: Default Event Recording [SPEC-EVENT-002]
+- GIVEN event_logging_enabled is true (default).
+- AND verbose_event_logging is false (default).
+- WHEN a pipeline run completes.
+- THEN events are recorded with summary data for each stage.
+- AND payload fields are NULL (not stored).
+
+#### Scenario: Verbose Event Recording [SPEC-EVENT-003]
+- GIVEN event_logging_enabled is true.
+- AND verbose_event_logging is true (set via --verbose CLI flag).
+- WHEN a pipeline run completes.
+- THEN events are recorded with both summary and full LLM payload data.
+
+#### Scenario: Event Recording Disabled [SPEC-EVENT-004]
+- GIVEN event_logging_enabled is false.
+- WHEN a pipeline run completes.
+- THEN no PipelineEvent records are created.
+
+#### Scenario: Event Recording Failure is Non-Fatal [SPEC-EVENT-005]
+- GIVEN a database error occurs during event recording.
+- WHEN the PipelineEventRecorder attempts to create an event.
+- THEN the error is silently rescued.
+- AND the pipeline continues execution without interruption.
+
 ### Requirement: CLI Commands
 The system SHALL provide a command-line interface via the `arnold_pipeline` executable.
 
@@ -369,6 +404,19 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 - WHEN `arnold_pipeline tree` is executed.
 - THEN a tree of all available commands is printed.
 
+#### Command: log [SPEC-CLI-008]
+- GIVEN a pipeline run with ID exists.
+- WHEN `arnold_pipeline log ID` is executed.
+- THEN the event timeline is displayed chronologically.
+- AND each event shows timestamp, stage, event_type, and formatted summary.
+- WHEN the --stage flag is provided (e.g., `arnold_pipeline log ID --stage analysis`).
+- THEN only events matching the specified stage are shown.
+- WHEN the --json flag is provided.
+- THEN events are output as a JSON array.
+- WHEN the --verbose flag is provided.
+- THEN full payload data is included in the output.
+- Exit code 0 on success, 1 if not found.
+
 ### Requirement: Configuration
 The system SHALL be configurable via a Ruby block (`ArnoldPipeline.configure`) or YAML config file.
 When multiple sources provide the same key, CLI flags take precedence over YAML config, which takes precedence over defaults (CLI > YAML > defaults).
@@ -399,6 +447,8 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | workflow_branch_pattern | Regexp | /issue[-_]?\d+/i | None |
 | openspec_enabled | Boolean | true | None |
 | openspec_cli_path | String | "openspec" | None |
+| event_logging_enabled | Boolean | true | None |
+| verbose_event_logging | Boolean | false | None |
 
 ### PipelineRun State Machine
 
