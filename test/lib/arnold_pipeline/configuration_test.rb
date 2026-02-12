@@ -23,6 +23,7 @@ module ArnoldPipeline
       assert_kind_of Regexp, @config.workflow_branch_pattern
       assert_equal true, @config.openspec_enabled
       assert_equal "openspec", @config.openspec_cli_path
+      assert_equal 600, @config.llm_request_timeout
     end
 
     test "validate! passes with valid config" do

@@ -21,7 +21,8 @@ module ArnoldPipeline
                   :openspec_enabled, :openspec_cli_path,
                   :max_diff_chars, :max_diff_per_file_chars,
                   :merge_conflict_resolution_enabled, :merge_conflict_max_files,
-                  :event_logging_enabled, :verbose_event_logging
+                  :event_logging_enabled, :verbose_event_logging,
+                  :llm_request_timeout
     attr_writer   :llm_provider, :llm_api_key, :llm_model
 
     def initialize
@@ -54,6 +55,7 @@ module ArnoldPipeline
       @merge_conflict_max_files          = 10
       @event_logging_enabled             = true
       @verbose_event_logging             = false
+      @llm_request_timeout               = 600
     end
 
     def llm_provider

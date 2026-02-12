@@ -7,9 +7,9 @@ module ArnoldPipeline
       class Anthropic < Base
         DEFAULT_MAX_TOKENS = 4096
 
-        def initialize(api_key:, model:, logger: nil)
+        def initialize(api_key:, model:, request_timeout: 600, logger: nil)
           super(logger:)
-          @client = ::Anthropic::Client.new(access_token: api_key)
+          @client = ::Anthropic::Client.new(access_token: api_key, request_timeout: request_timeout)
           @model = model
         end
 

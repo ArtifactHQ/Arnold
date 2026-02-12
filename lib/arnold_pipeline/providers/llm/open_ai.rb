@@ -5,9 +5,9 @@ module ArnoldPipeline
   module Providers
     module Llm
       class OpenAi < Base
-        def initialize(api_key:, model:, logger: nil)
+        def initialize(api_key:, model:, request_timeout: 600, logger: nil)
           super(logger:)
-          @client = ::OpenAI::Client.new(access_token: api_key)
+          @client = ::OpenAI::Client.new(access_token: api_key, request_timeout: request_timeout)
           @model = model
         end
 

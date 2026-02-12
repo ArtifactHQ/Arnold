@@ -72,6 +72,16 @@ module ArnoldPipeline
           assert_match(/Anthropic API 400: prompt is too long/, log_output.string)
         end
 
+        test "passes request_timeout to client" do
+          ::Anthropic::Client.expects(:new).with(access_token: "sk-test-key", request_timeout: 300).returns(stub(messages: {}))
+          Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-20250514", request_timeout: 300)
+        end
+
+        test "defaults request_timeout to 600" do
+          ::Anthropic::Client.expects(:new).with(access_token: "sk-test-key", request_timeout: 600).returns(stub(messages: {}))
+          Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-20250514")
+        end
+
         test "chat logs response body on 429 error" do
           log_output = StringIO.new
           provider = Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-20250514",

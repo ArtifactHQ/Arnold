@@ -57,6 +57,16 @@ module ArnoldPipeline
           assert_equal "", result
         end
 
+        test "passes request_timeout to client" do
+          ::OpenAI::Client.expects(:new).with(access_token: "sk-test-key", request_timeout: 300).returns(stub(chat: {}))
+          OpenAi.new(api_key: "sk-test-key", model: "gpt-4", request_timeout: 300)
+        end
+
+        test "defaults request_timeout to 600" do
+          ::OpenAI::Client.expects(:new).with(access_token: "sk-test-key", request_timeout: 600).returns(stub(chat: {}))
+          OpenAi.new(api_key: "sk-test-key", model: "gpt-4")
+        end
+
         test "chat logs response body on 400 error" do
           log_output = StringIO.new
           provider = OpenAi.new(api_key: "sk-test-key", model: "gpt-4",
