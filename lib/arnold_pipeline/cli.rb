@@ -572,6 +572,13 @@ module ArnoldPipeline
         say "  Status: #{summary['status']}, reason: #{summary['reason']}"
       when "pipeline_failed"
         say "  #{summary['error_class']}: #{summary['error_message']}"
+        say "  Stage: #{summary['failed_stage']}" if summary["failed_stage"]
+        say "  Provider: #{summary['llm_provider']} / #{summary['llm_model']}" if summary["llm_provider"]
+        say "  Execution: #{summary['execution_provider']}" if summary["execution_provider"]
+        if options[:verbose] && summary["backtrace"]
+          say "  Backtrace:"
+          summary["backtrace"].each { |frame| say "    #{frame}" }
+        end
       when "pipeline_completed"
         say "  #{summary['total_iterations']} iterations, #{summary['total_tasks']} tasks"
       else

@@ -131,6 +131,24 @@ module ArnoldPipeline
       run_record = PipelineRun.last
       assert_equal "failed", run_record.status
       assert_equal "LLM is down", run_record.metadata["error"]
+      assert_equal "StandardError", run_record.metadata["error_class"]
+      assert_equal "generate_spec", run_record.metadata["failed_stage"]
+    end
+
+    test "pipeline_failed event includes provider and stage context" do
+      @spec_generator.expects(:call).raises(StandardError, "Net::ReadTimeout")
+
+      assert_raises(StandardError) do
+        @orchestrator.call(nl_input: "Build a todo app")
+      end
+
+      event = PipelineRun.last.pipeline_events.find_by(event_type: :pipeline_failed)
+      assert_not_nil event
+      assert_equal "generate_spec", event.summary["failed_stage"]
+      assert_equal ArnoldPipeline.configuration.llm_provider.to_s, event.summary["llm_provider"]
+      assert_equal ArnoldPipeline.configuration.llm_model, event.summary["llm_model"]
+      assert_equal ArnoldPipeline.configuration.execution_provider.to_s, event.summary["execution_provider"]
+      assert event.summary["backtrace"].is_a?(Array)
     end
 
     test "call validates configuration before running" do

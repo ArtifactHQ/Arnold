@@ -62,9 +62,11 @@ module ArnoldPipeline
         event_recorder: @event_recorder
       )
       start_index = STAGES.index(from)
+      @current_stage = nil
 
       begin
         STAGES[start_index..].each do |stage|
+          @current_stage = stage
           if stage == :analyze
             analysis_loop!(pipeline_run)
           else
@@ -95,11 +97,21 @@ module ArnoldPipeline
         logger.warn { "[Arnold] Pipeline paused: #{e.message}" }
         pipeline_run.reload
       rescue => e
+        config = ArnoldPipeline.configuration
         @event_recorder&.record(
           event_type: :pipeline_failed, stage: "lifecycle",
-          summary: { error_class: e.class.name, error_message: e.message }
+          summary: {
+            error_class: e.class.name, error_message: e.message,
+            failed_stage: @current_stage&.to_s,
+            llm_provider: config.llm_provider.to_s,
+            llm_model: config.llm_model,
+            execution_provider: config.execution_provider.to_s,
+            backtrace: e.backtrace&.first(10)
+          }
         )
-        pipeline_run.update!(status: :failed, metadata: (pipeline_run.metadata || {}).merge("error" => e.message))
+        pipeline_run.update!(status: :failed, metadata: (pipeline_run.metadata || {}).merge(
+          "error" => e.message, "error_class" => e.class.name, "failed_stage" => @current_stage&.to_s
+        ))
         logger.error { "[Arnold] Pipeline failed: #{e.message}" }
         raise
       end
