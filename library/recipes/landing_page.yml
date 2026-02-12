@@ -26,6 +26,11 @@ framework:
   css: Tailwind CSS via tailwindcss-rails
   deployment: Kamal 2 (or static export if purely static)
 
+verification:
+  setup_command: "bin/setup"
+  run_command: "bin/dev"
+  health_check: "http://localhost:3000"
+
 sections:
   - name: Content & Layout
     description: >
@@ -109,6 +114,35 @@ sections:
       - Minimize external scripts; each one adds latency
       - Use Thruster for automatic gzip and HTTP/2 in production
 
+  - name: Local Development
+    description: >
+      Bootstrapping scripts, development database, and single-command
+      startup for immediate local execution.
+    rails_tools:
+      - bin/setup (first-time dependency install and database preparation)
+      - bin/dev with Procfile.dev (multi-process startup)
+      - db/seeds.rb (demo data)
+    guidance:
+      - Use SQLite for development database — zero external dependencies
+      - bin/setup must handle bundle install, db:prepare, and asset compilation
+      - Procfile.dev starts Puma and Tailwind CSS watcher
+      - Include sample seed data for lead capture forms
+      - Development MUST work with zero environment variables configured
+
+  - name: Testing
+    description: >
+      Test strategy for form submissions, SEO markup, and page
+      rendering across screen sizes.
+    rails_tools:
+      - Minitest (default) or RSpec
+      - Capybara (system tests for visual and form interaction testing)
+    guidance:
+      - Write system tests for form submission and success/error states
+      - Test SEO meta tags and Open Graph markup are present
+      - Test responsive layout at key breakpoints
+      - Test email delivery for lead capture confirmation
+    tier_placement: final
+
   - name: Deployment
     description: >
       Production hosting, domain setup, and SSL.
@@ -120,3 +154,4 @@ sections:
       - Configure custom domain and SSL via Thruster
       - Set up redirects (www → apex or vice versa)
       - Plan for scaling up if a launch goes viral (Kamal can add servers)
+    phase: post_pipeline

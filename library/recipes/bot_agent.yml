@@ -27,6 +27,11 @@ framework:
   realtime: Action Cable (for web-based chat widget)
   deployment: Kamal 2
 
+verification:
+  setup_command: "bin/setup"
+  run_command: "bin/dev"
+  health_check: "http://localhost:3000/up"
+
 sections:
   - name: Platform Integration
     description: >
@@ -119,6 +124,23 @@ sections:
       - Handle reconnection gracefully when WebSocket drops
       - Style to match the host website (configurable colors/branding)
 
+  - name: Local Development
+    description: >
+      Bootstrapping scripts, development database, and single-command
+      startup for immediate local execution.
+    rails_tools:
+      - bin/setup (first-time dependency install and database preparation)
+      - bin/dev with Procfile.dev (multi-process startup)
+      - db/seeds.rb (demo data)
+    guidance:
+      - Use SQLite for development database — zero external dependencies
+      - Use Solid Queue, Solid Cache, Solid Cable — no Redis needed
+      - bin/setup must handle bundle install, db:prepare, and asset compilation
+      - Create .env.example documenting all platform tokens and API keys
+      - Bot MUST start and respond gracefully without platform tokens configured
+      - Include meaningful seed data with sample conversations
+      - Development MUST work with zero environment variables configured
+
   - name: Testing
     description: >
       Testing conversation flows, command handling, and platform
@@ -133,6 +155,7 @@ sections:
       - Mock LLM responses with VCR or WebMock (don't call real APIs in tests)
       - Test edge cases (empty input, very long messages, special characters)
       - Test rate limiting and abuse prevention
+    tier_placement: final
 
   - name: Deployment & Operations
     description: >
@@ -147,3 +170,4 @@ sections:
       - Set up health checks and uptime monitoring
       - Log conversation metrics (messages/day, response times, error rates)
       - Plan for graceful restarts (don't drop in-flight conversations)
+    phase: post_pipeline
