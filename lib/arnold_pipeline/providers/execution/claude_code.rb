@@ -360,10 +360,13 @@ module ArnoldPipeline
             FileUtils.rm_rf(full_path) if File.directory?(full_path)
           end
 
-          # Stage any unstaged/untracked files, excluding noise directories
-          system("git", "-C", worktree_path, "add", "-A",
-            "--", ".", ":!tmp/", ":!log/", ":!node_modules/", ":!.bundle/", ":!vendor/bundle/",
-            exception: true)
+          # Stage any unstaged/untracked files.
+          # Noise directories are handled by .gitignore (either the repo's own or one
+          # created by ensure_gitignore!), so no pathspec exclusions are needed here.
+          output, status = Open3.capture2e("git", "-C", worktree_path, "add", "-A", ".")
+          unless status.success?
+            Rails.logger.warn { "[Arnold] git add exited #{status.exitstatus}: #{output.strip}" } if defined?(Rails)
+          end
 
           # Commit only if there are staged changes (exit 1 = changes exist)
           _output, status = Open3.capture2("git", "-C", worktree_path, "diff", "--cached", "--quiet")

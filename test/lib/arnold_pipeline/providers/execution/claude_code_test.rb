@@ -565,6 +565,9 @@ module ArnoldPipeline
           worktree_path = File.join(@repo_path, ".worktrees", branch)
           system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
 
+          # ensure_gitignore! runs before normalize_worktree in production
+          File.write(File.join(worktree_path, ".gitignore"), "tmp/\n")
+
           # Create a file in tmp/ that should be excluded
           FileUtils.mkdir_p(File.join(worktree_path, "tmp", "cache", "bootsnap"))
           File.write(File.join(worktree_path, "tmp", "cache", "bootsnap", "compiled.bin"), "binary data")
@@ -587,6 +590,9 @@ module ArnoldPipeline
           worktree_path = File.join(@repo_path, ".worktrees", branch)
           system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
 
+          # ensure_gitignore! runs before normalize_worktree in production
+          File.write(File.join(worktree_path, ".gitignore"), "log/\n")
+
           FileUtils.mkdir_p(File.join(worktree_path, "log"))
           File.write(File.join(worktree_path, "log", "development.log"), "log line")
           File.write(File.join(worktree_path, "app.rb"), "class App; end")
@@ -605,6 +611,9 @@ module ArnoldPipeline
           worktree_path = File.join(@repo_path, ".worktrees", branch)
           system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
 
+          # ensure_gitignore! runs before normalize_worktree in production
+          File.write(File.join(worktree_path, ".gitignore"), "node_modules/\n")
+
           FileUtils.mkdir_p(File.join(worktree_path, "node_modules", "express"))
           File.write(File.join(worktree_path, "node_modules", "express", "index.js"), "module.exports = {}")
           File.write(File.join(worktree_path, "index.js"), "console.log('hello')")
@@ -613,7 +622,53 @@ module ArnoldPipeline
 
           diff = @provider.send(:capture_diff, branch: branch)
           assert_includes diff, "index.js"
-          refute_includes diff, "node_modules"
+          refute_includes diff, "node_modules/express"
+        ensure
+          system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
+        end
+
+        test "normalize_worktree handles repos with existing .gitignore gracefully" do
+          branch = "test-normalize-existing-gitignore"
+          worktree_path = File.join(@repo_path, ".worktrees", branch)
+          system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
+
+          # Simulate a Rails repo's .gitignore that already excludes log/ and tmp/
+          File.write(File.join(worktree_path, ".gitignore"), "log/\ntmp/\n")
+
+          # Create files only in gitignored directories (the trigger scenario)
+          FileUtils.mkdir_p(File.join(worktree_path, "log"))
+          FileUtils.mkdir_p(File.join(worktree_path, "tmp"))
+          File.write(File.join(worktree_path, "log", "development.log"), "log data")
+          File.write(File.join(worktree_path, "tmp", "cache.bin"), "cache data")
+
+          # Should NOT raise — this is the bug fix
+          @provider.send(:normalize_worktree, worktree_path: worktree_path, title: "Handle gitignore")
+
+          # Verify no commit was made for the title (only gitignored files changed, plus .gitignore itself)
+          log_output, = Open3.capture2("git", "-C", worktree_path, "log", "--oneline")
+          # The .gitignore change will be committed, but the ignored files won't be
+          diff = @provider.send(:capture_diff, branch: branch)
+          refute_includes diff, "development.log"
+          refute_includes diff, "cache.bin"
+        ensure
+          system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
+        end
+
+        test "normalize_worktree stages non-ignored files when repo has .gitignore" do
+          branch = "test-normalize-mixed-gitignore"
+          worktree_path = File.join(@repo_path, ".worktrees", branch)
+          system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
+
+          File.write(File.join(worktree_path, ".gitignore"), "log/\ntmp/\n")
+          FileUtils.mkdir_p(File.join(worktree_path, "log"))
+          File.write(File.join(worktree_path, "log", "dev.log"), "log")
+          File.write(File.join(worktree_path, "app.rb"), "class App; end")
+
+          @provider.send(:normalize_worktree, worktree_path: worktree_path, title: "Mixed files")
+
+          diff = @provider.send(:capture_diff, branch: branch)
+          assert_includes diff, "app.rb"
+          refute_includes diff, "dev.log"
         ensure
           system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
         end
