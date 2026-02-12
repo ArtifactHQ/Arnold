@@ -133,7 +133,16 @@ module ArnoldPipeline
     def run_tier_gate!(pipeline_run, tier_num, tier_tasks)
       tier_tasks.each(&:reload)
 
-      task_summaries = tier_tasks.map { |t| "- **#{t.title}**: #{t.description}" }.join("\n")
+      task_summaries = tier_tasks.map { |t|
+        suffix = if t.failed? && (t.result_diff.blank? || t.result_diff == "[]")
+          " **[FAILED - EMPTY DIFF]**"
+        elsif t.failed?
+          " **[FAILED]**"
+        else
+          ""
+        end
+        "- **#{t.title}**: #{t.description}#{suffix}"
+      }.join("\n")
       diffs = DiffSummarizer.call(tier_tasks.map(&:result_diff).compact)
       comments = format_task_comments(tier_tasks)
 
@@ -203,20 +212,23 @@ module ArnoldPipeline
 
         return if created_tasks.empty?
 
-        # Execute corrective tasks
+        # Execute corrective tasks sequentially — each branches from updated master
         prior_context = build_prior_context(accumulated_context)
         pipeline_run.update!(status: :executing)
-        executor.call(tasks: created_tasks, pipeline_run:, prior_context:)
 
-        if executor.provider.async?
-          pipeline_run.update!(status: :awaiting_results)
-          executor.await_results(pipeline_run:, tasks: created_tasks)
-        else
-          created_tasks.each(&:reload)
-          executor.fetch_results(pipeline_run:, tasks: created_tasks)
+        created_tasks.each do |task|
+          executor.call(tasks: [task], pipeline_run:, prior_context:)
+
+          if executor.provider.async?
+            pipeline_run.update!(status: :awaiting_results)
+            executor.await_results(pipeline_run:, tasks: [task])
+          else
+            task.reload
+            executor.fetch_results(pipeline_run:, tasks: [task])
+          end
+
+          merge_tier_results!(pipeline_run, [task])
         end
-
-        merge_tier_results!(pipeline_run, created_tasks)
 
         # Re-run gate check
         all_tier_tasks = pipeline_run.tasks.in_tier(tier_num).to_a

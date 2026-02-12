@@ -25,21 +25,27 @@ module ArnoldPipeline
              fix the critical issues. Each task has "title", "description", and "labels".
              Keep corrections minimal — fix only what's broken, don't improve or refactor.
 
-          Return a JSON block fenced with ```json:
-          ```json
+          Your response will be validated against a JSON schema. Return valid JSON matching this structure:
           {
             "pass": true|false,
             "issues": ["..."],
             "context_summary": "2-3 sentence summary of what was built",
             "corrective_tasks": [{"title": "...", "description": "...", "labels": [...]}]
           }
-          ```
 
           Guidelines:
           - ALWAYS provide a context_summary, even when pass=true
           - pass=true is the default — only fail for critical, build-breaking issues
           - corrective_tasks should only appear when pass=false
           - Keep corrective tasks minimal and focused on the critical fix
+
+          ## Handling Total Task Failures
+
+          When a task is annotated with [FAILED - EMPTY DIFF]:
+          - This means the coding agent ran but produced zero code changes
+          - Create exactly ONE corrective task that replaces the failed task entirely
+          - Do NOT decompose into multiple subtasks — the original scope was appropriate
+          - Copy the original task's description and add context about the failure
         PROMPT
       end
 

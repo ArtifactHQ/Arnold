@@ -59,6 +59,12 @@ module ArnoldPipeline
         refute_includes prompt, "### Task Comments / Agent Feedback"
       end
 
+      test "system_prompt includes empty diff handling guidance" do
+        prompt = TierGate.system_prompt
+        assert_includes prompt, "FAILED - EMPTY DIFF"
+        assert_includes prompt, "ONE corrective task"
+      end
+
       test "user_prompt omits comments when not provided" do
         prompt = TierGate.user_prompt(
           tier_number: 0,

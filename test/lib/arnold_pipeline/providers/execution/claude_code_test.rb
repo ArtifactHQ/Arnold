@@ -358,6 +358,67 @@ module ArnoldPipeline
           @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
         end
 
+        # --- Empty-diff detection tests ---
+
+        test "create_tasks marks successful execution with empty diff as failed" do
+          tasks = [{ "title" => "Setup project", "description" => "Initialize" }]
+          @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("")
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+
+          @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          results = @provider.instance_variable_get(:@results)
+          stored = results.values.first
+          assert_equal false, stored[:success]
+          assert_match(/produced no code changes/, stored[:error])
+        end
+
+        test "fetch_results returns :failed for empty-diff task" do
+          tasks = [{ "title" => "Setup", "description" => "Init" }]
+          @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("")
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+
+          created = @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+          ext_id = created.first[:external_id]
+          task = @pipeline_run.tasks.create!(title: "Setup", position: 0, external_id: ext_id)
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run, tasks: [task])
+          assert_equal :failed, results.first[:status]
+        end
+
+        test "create_tasks preserves success when diff is non-empty" do
+          tasks = [{ "title" => "Setup project", "description" => "Initialize" }]
+          @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("diff --git a/file.rb b/file.rb\n+hello")
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+
+          @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          results = @provider.instance_variable_get(:@results)
+          stored = results.values.first
+          assert_equal true, stored[:success]
+          assert_nil stored[:error]
+        end
+
+        test "create_tasks preserves original failure when CLI fails" do
+          tasks = [{ "title" => "Setup project", "description" => "Initialize" }]
+          @provider.stubs(:execute_claude_code).returns({ success: false, output: "", error: "CLI exited with code 1" })
+          @provider.stubs(:capture_diff).returns("")
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+
+          @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          results = @provider.instance_variable_get(:@results)
+          stored = results.values.first
+          assert_equal false, stored[:success]
+          assert_equal "CLI exited with code 1", stored[:error]
+        end
+
         # --- Configuration tests ---
 
         test "validate_configuration! raises when repo_path blank" do

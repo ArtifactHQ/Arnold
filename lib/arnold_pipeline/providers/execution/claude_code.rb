@@ -87,6 +87,14 @@ module ArnoldPipeline
 
             diff = capture_diff(branch: branch_name)
 
+            # CLI succeeded but produced no code changes — treat as failure
+            if result[:success] && diff.strip.empty?
+              result = result.merge(
+                success: false,
+                error: "Task completed with exit code 0 but produced no code changes"
+              )
+            end
+
             @results[external_id] = {
               success: result[:success],
               output: result[:output],

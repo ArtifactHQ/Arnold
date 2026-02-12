@@ -255,6 +255,166 @@ module ArnoldPipeline
         "Engine should reload tasks before fetch_results so external_id is present"
     end
 
+    # --- Sequential corrective task execution ---
+
+    test "handle_tier_gate_failure! executes corrective tasks sequentially with merge between each" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 1
+        c.tier_gate_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      # Gate fails first, then passes on re-check
+      gate_fail = {
+        "pass" => false,
+        "issues" => ["missing files"],
+        "corrective_tasks" => [
+          { "title" => "Fix A", "description" => "fix a" },
+          { "title" => "Fix B", "description" => "fix b" }
+        ],
+        "context_summary" => "context"
+      }
+      gate_pass = {
+        "pass" => true,
+        "issues" => [],
+        "context_summary" => "All good.",
+        "corrective_tasks" => []
+      }
+
+      call_order = sequence("sequential_execution")
+
+      # Task 1: call → await → merge
+      @executor.expects(:call).with { |tasks:, **| tasks.size == 1 && tasks.first.title == "Fix A" }
+        .in_sequence(call_order).returns([])
+      @executor.expects(:await_results).in_sequence(call_order).returns(nil)
+      @executor.expects(:merge_results).in_sequence(call_order).returns([])
+
+      # Task 2: call → await → merge
+      @executor.expects(:call).with { |tasks:, **| tasks.size == 1 && tasks.first.title == "Fix B" }
+        .in_sequence(call_order).returns([])
+      @executor.expects(:await_results).in_sequence(call_order).returns(nil)
+      @executor.expects(:merge_results).in_sequence(call_order).returns([])
+
+      # Re-check gate passes
+      @tier_gate_check.stubs(:call).returns(gate_pass)
+
+      @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [], gate_fail, [])
+
+      # Verify 2 corrective tasks were created
+      corrective = pipeline_run.tasks.where(tier: 0).where.not(title: "Setup DB")
+      assert_equal 2, corrective.count
+    end
+
+    test "handle_tier_gate_failure! sequential execution works with sync provider" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 1
+        c.tier_gate_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      @provider.stubs(:async?).returns(false)
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      gate_fail = {
+        "pass" => false,
+        "issues" => ["broken build"],
+        "corrective_tasks" => [
+          { "title" => "Fix build", "description" => "fix the build" }
+        ],
+        "context_summary" => "context"
+      }
+      gate_pass = {
+        "pass" => true,
+        "issues" => [],
+        "context_summary" => "Fixed.",
+        "corrective_tasks" => []
+      }
+
+      call_order = sequence("sync_execution")
+
+      # Sync: call → fetch_results → merge (no await)
+      @executor.expects(:call).in_sequence(call_order).returns([])
+      @executor.expects(:fetch_results).in_sequence(call_order).returns([])
+      @executor.expects(:await_results).never
+      @executor.expects(:merge_results).in_sequence(call_order).returns([])
+
+      @tier_gate_check.stubs(:call).returns(gate_pass)
+
+      @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [], gate_fail, [])
+    end
+
+    # --- Task annotation in tier gate ---
+
+    test "run_tier_gate! annotates empty-diff failed tasks" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Admin Interface", position: 0, tier: 0,
+        external_id: "42", status: :failed, result_diff: "[]"
+      )
+
+      captured_summaries = nil
+      @tier_gate_check.stubs(:call).with { |**kwargs|
+        captured_summaries = kwargs[:task_summaries]
+        true
+      }.returns({ "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => [] })
+
+      @engine.send(:run_tier_gate!, pipeline_run, 0, [task])
+
+      assert_includes captured_summaries, "[FAILED - EMPTY DIFF]"
+    end
+
+    test "run_tier_gate! annotates failed tasks with diffs" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        external_id: "42", status: :failed,
+        result_diff: '[{"filename":"schema.rb","patch":"+ create_table"}]'
+      )
+
+      captured_summaries = nil
+      @tier_gate_check.stubs(:call).with { |**kwargs|
+        captured_summaries = kwargs[:task_summaries]
+        true
+      }.returns({ "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => [] })
+
+      @engine.send(:run_tier_gate!, pipeline_run, 0, [task])
+
+      assert_includes captured_summaries, "**[FAILED]**"
+      refute_includes captured_summaries, "EMPTY DIFF"
+    end
+
+    test "run_tier_gate! does not annotate successful tasks" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        external_id: "42", status: :completed,
+        result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      captured_summaries = nil
+      @tier_gate_check.stubs(:call).with { |**kwargs|
+        captured_summaries = kwargs[:task_summaries]
+        true
+      }.returns({ "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => [] })
+
+      @engine.send(:run_tier_gate!, pipeline_run, 0, [task])
+
+      refute_includes captured_summaries, "[FAILED"
+    end
+
+    # --- Existing gate failure tests ---
+
     test "handle_tier_gate_failure! retries up to max_tier_retries then pauses" do
       ArnoldPipeline.configure do |c|
         c.max_iterations = 3
