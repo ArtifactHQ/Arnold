@@ -153,6 +153,24 @@ The system SHOULD support dynamic selection based on NL input keyword matching. 
 - WHEN keyword matching is performed against the library's persona and recipe keywords.
 - THEN the most relevant persona (e.g., Domain Expert for fintech) and recipe (e.g., API Service) are retrieved and injected into prompts.
 
+### Requirement: Recipe Structural Metadata [SPEC-LIBRARY-002]
+Recipes MAY include structural metadata on their sections to guide task breakdown and execution ordering.
+
+#### Scenario: Phase Filtering Excludes Post-Pipeline Sections
+- GIVEN a recipe with a section tagged `phase: post_pipeline` (e.g., Deployment & Infrastructure).
+- WHEN the task breakdown prompt is constructed.
+- THEN sections with `phase: post_pipeline` are excluded from the prompt, so the agent does not generate deployment tasks that cannot be executed in the pipeline.
+
+#### Scenario: Tier Placement Hints Guide Task Ordering
+- GIVEN a recipe section with `tier_placement: final` (e.g., Testing & Quality).
+- WHEN the task breakdown prompt includes that section.
+- THEN the prompt instructs the agent to place tasks from that section in the final execution tier, after all other implementation tiers.
+
+#### Scenario: Verification Criteria Inform Bootstrap Tasks
+- GIVEN a recipe with a `verification` block containing `setup_command`, `run_command`, and/or `health_check`.
+- WHEN the task breakdown prompt is constructed.
+- THEN the verification steps are included in the prompt so the agent ensures the bootstrap task produces a project that passes those checks.
+
 ### Requirement: OpenSpec Integration [SPEC-OPENSPEC-001]
 The system SHALL support integration with the OpenSpec CLI (`@fission-ai/openspec`) for structured spec merging during `iterate_spec` decisions.
 The system MUST gracefully degrade when the OpenSpec CLI is not installed, falling back to the structured append or legacy append merge strategies.
@@ -469,6 +487,7 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | claude_code_model | String | "sonnet" | None |
 | claude_code_max_turns | Integer | nil | None |
 | claude_code_permission_mode | String | "bypassPermissions" | Must be one of: acceptEdits, bypassPermissions, default, delegate, dontAsk, plan |
+| claude_code_max_concurrency | Integer | 4 | 1-16 |
 | max_iterations | Integer | 3 | 1-10 |
 | library_path | String | nil (built-in library) | None |
 | polling_interval | Numeric | 30 | Positive |
