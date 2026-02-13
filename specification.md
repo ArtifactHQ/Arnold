@@ -350,6 +350,187 @@ During GitHub polling, the system classifies issue comments using pattern-based 
 
 A comment is considered "substantive" if it matches at least one resolution pattern. The `has_substantive_comments?` method on the Task model uses these patterns to determine whether a task's comments indicate resolution. Tasks with only WIP-pattern comments are classified as `wip_comments_only` in the resolution summary.
 
+### Requirement: Empirical Validation System [SPEC-VALIDATION-001]
+The system SHALL provide a four-layer empirical validation system that evaluates task outputs using acceptance criteria, recipe verification, test execution, and spec-scenario integration tests.
+Validation results are passed to the tier gate check agent to inform pass/fail decisions and corrective task generation.
+All validation layers are optional and configurable; when disabled, the tier gate operates without those signals.
+
+#### Layer 1: Acceptance Criteria on Tasks [SPEC-CRITERIA-001]
+
+Tasks MAY include an `acceptance_criteria` JSON array field defining verifiable conditions that must be met for the task to be considered complete.
+Each criterion has a `type`, `description`, and `params` hash.
+The system SHALL support six criterion types: four static types (evaluated offline against the repository) and two runtime types (evaluated by executing commands or HTTP requests).
+
+**Static Criterion Types:**
+- `file_exists` — Verifies a file matching a glob pattern exists (params: `pattern`)
+- `test_exists` — Verifies a test file matching a glob pattern exists (params: `pattern`)
+- `model_has` — Verifies a Rails model has specific attributes/associations (params: `model`, `attributes`, `associations`)
+- `route_exists` — Verifies a Rails route exists (params: `method`, `path`, `controller`, `action`)
+
+**Runtime Criterion Types:**
+- `http` — Executes an HTTP request and verifies response (params: `method`, `url`, `expected_status`, `expected_body_pattern`)
+- `command_exits` — Executes a shell command and verifies exit code (params: `command`, `expected_exit_code`)
+
+#### Scenario: Acceptance Criteria Definition in Task Breakdown
+- GIVEN a specification requiring user authentication.
+- WHEN the Task Breakdown Agent generates tasks.
+- THEN the authentication task includes acceptance criteria such as:
+  - `{ "type": "file_exists", "description": "User model exists", "params": { "pattern": "app/models/user.rb" } }`
+  - `{ "type": "route_exists", "description": "Login route exists", "params": { "method": "POST", "path": "/login" } }`
+
+#### Scenario: Static Criteria Evaluation After Tier Merge
+- GIVEN tasks with acceptance criteria have been executed and merged.
+- WHEN the CriteriaChecker evaluates static criteria against the repository.
+- THEN each criterion is marked as `verified`, `unverified`, or `failed`.
+- AND the results summary is passed to the tier gate check via `acceptance_criteria_summary:`.
+
+#### Scenario: Criteria Re-evaluation on Tier Gate Retry
+- GIVEN a tier that failed the gate check and triggered corrective tasks.
+- WHEN corrective tasks are executed and merged.
+- THEN acceptance criteria are re-evaluated against the updated repository state.
+
+#### Scenario: Acceptance Criteria Persistence
+- GIVEN the Task Breakdown Agent generates tasks with acceptance criteria.
+- WHEN tasks are persisted to the database.
+- THEN the `acceptance_criteria` JSON field is saved for each task.
+- AND when corrective tasks are generated from tier gate failures, they also receive `acceptance_criteria` if provided by the tier gate agent.
+
+#### Layer 2: Test Execution at Tier Gates [SPEC-TEST-001]
+
+The system SHALL support automatic test execution after each tier merge when `test_execution_enabled` is true.
+The TestRunner auto-detects the project's test framework and runs tests with configurable timeout.
+Test results (pass/fail, exit code, summary, failures) are passed to the tier gate check via `test_execution_summary:`.
+
+#### Scenario: Test Framework Auto-Detection
+- GIVEN a repository with a test suite.
+- WHEN the TestRunner detects the test framework.
+- THEN it checks for frameworks in order: `bin/rails test` → minitest, `Gemfile` + rspec-core → rspec, `package.json` → npm test, `pytest.ini`/`pyproject.toml` → pytest.
+- AND the detected command is used to run tests.
+
+#### Scenario: Test Execution After Tier Merge
+- GIVEN a tier has completed execution and merge.
+- AND `test_execution_enabled` is true.
+- WHEN the tier gate process runs.
+- THEN the TestRunner executes the test command with `test_timeout` (default: 120 seconds).
+- AND the TestResultParser parses the output to extract pass/fail status, summary, and failures.
+- AND the formatted test results are passed to TierGateCheck via `test_execution_summary:`.
+
+#### Scenario: Test Execution with Boot Command
+- GIVEN a project requiring application boot before tests (e.g., Rails server).
+- AND `test_boot_command` is configured (e.g., `bin/rails server`).
+- WHEN tests are executed.
+- THEN the boot command is started in the background with `test_boot_timeout` (default: 60 seconds).
+- AND tests run after the boot process completes.
+
+#### Scenario: Test Re-execution on Tier Gate Retry
+- GIVEN a tier that failed the gate check and triggered corrective tasks.
+- WHEN corrective tasks are executed and merged.
+- THEN tests are re-run against the updated codebase.
+
+#### Scenario: Test Command Override
+- GIVEN a project with a non-standard test command.
+- WHEN `test_command` is configured (e.g., `bundle exec rake spec`).
+- THEN the configured command is used instead of auto-detection.
+
+#### Layer 3: Recipe Verification Blocks [SPEC-VERIFY-001]
+
+Recipes MAY include a `verification` block defining setup, boot, health check, and test commands.
+When `verification_enabled` is true, the VerificationRunner executes the verification sequence after each tier merge.
+Verification results are passed to the tier gate check via `verification_summary:`.
+
+#### Scenario: Recipe Verification Block Extraction
+- GIVEN a recipe with a `verification` block containing `setup_command`, `boot_command`, `health_check`, and `run_command`.
+- WHEN the RecipeVerificationExtractor processes the pipeline run's specification.
+- THEN the verification block is extracted and normalized for execution.
+
+#### Scenario: Four-Step Verification Sequence
+- GIVEN a tier has completed execution and merge.
+- AND `verification_enabled` is true.
+- AND the recipe includes a verification block.
+- WHEN the VerificationRunner executes the verification sequence.
+- THEN it runs:
+  1. `setup_command` (e.g., `bundle install`) with `verification_timeout`
+  2. `boot_command` (e.g., `bin/rails server`) spawned as a background process
+  3. Health check via HTTP GET with `verification_health_check_retries` (default: 10) and `verification_health_check_interval` (default: 3 seconds)
+  4. `run_command` (e.g., `bin/rails test`) with `verification_timeout`
+- AND the VerificationResult captures pass/fail for each step.
+- AND the formatted verification summary is passed to TierGateCheck via `verification_summary:`.
+
+#### Scenario: Verification Re-execution on Tier Gate Retry
+- GIVEN a tier that failed the gate check and triggered corrective tasks.
+- WHEN corrective tasks are executed and merged.
+- THEN the verification sequence is re-run against the updated codebase.
+
+#### Scenario: Graceful Degradation Without Verification Block
+- GIVEN a recipe without a `verification` block.
+- OR `verification_enabled` is false.
+- WHEN the tier gate process runs.
+- THEN verification is skipped and `verification_summary:` is nil.
+
+#### Layer 4: Spec-Scenario Integration Tests [SPEC-SPECTEST-001]
+
+The system SHALL generate integration tests from specification GIVEN/WHEN/THEN scenarios using the SpecTestGenerator agent.
+Generated tests are executed after each tier to measure alignment progress: total tests, passing tests, newly passing tests, regressions, and pass rate.
+Spec test results are passed to the Analysis Agent via `spec_test_progress_summary:` as a primary alignment signal.
+
+#### Scenario: Spec Test Generation After Tier 0
+- GIVEN tier 0 (bootstrap tier) has completed execution and merge.
+- AND `spec_test_generation_enabled` is true.
+- WHEN the orchestrator invokes `run_spec_test_generation!`.
+- THEN the SpecTestGenerator agent uses a Testing Specialist persona to generate integration tests from the specification's GIVEN/WHEN/THEN scenarios.
+- AND generated test files are written to `spec_test_directory` (default: `test/spec_integration`).
+- AND the generation is tracked as a tier "0.5" event.
+
+#### Scenario: Spec Test Progress Tracking After Each Tier
+- GIVEN spec tests have been generated after tier 0.
+- AND subsequent tiers have completed execution and merge.
+- WHEN the orchestrator invokes `run_spec_test_progress!`.
+- THEN the SpecTestProgressTracker runs the spec tests and compares results against previous runs.
+- AND it calculates: `total_tests`, `total_passing`, `newly_passing`, `regressions`, `still_failing`, and `pass_rate`.
+- AND progress summary is stored in `pipeline_run.metadata["spec_test_results"]`.
+- AND the formatted summary is passed to the Analysis Agent via `spec_test_progress_summary:`.
+
+#### Scenario: Spec Test Results Inform Iteration Decisions
+- GIVEN the Analysis Agent evaluates code outputs against the specification.
+- AND spec test progress shows `pass_rate: 0.60` (60% passing).
+- WHEN the agent decides whether to iterate.
+- THEN the spec test progression is used as a primary alignment signal alongside diff analysis.
+- AND if pass rate is below acceptable thresholds, the agent may decide `iterate_tasks` to fix failing tests.
+
+#### Scenario: Graceful Degradation Without Spec Test Generation
+- GIVEN `spec_test_generation_enabled` is false.
+- WHEN the pipeline executes.
+- THEN spec test generation and progress tracking are skipped.
+- AND the Analysis Agent operates without `spec_test_progress_summary:`.
+
+#### DiffSummarizer Deduplication [SPEC-DIFF-001]
+
+When multiple tasks within the same tier modify the same file, the DiffSummarizer SHALL keep only the latest entry per filename to prevent contradictory diffs.
+
+#### Scenario: Deduplication of Same-File Modifications
+- GIVEN an original task creates `app/controllers/users_controller.rb`.
+- AND a corrective task modifies `app/controllers/users_controller.rb`.
+- WHEN the DiffSummarizer processes both task results.
+- THEN only the latest diff for `app/controllers/users_controller.rb` is included in the summary.
+- AND the tier gate check receives a single, coherent diff per file.
+
+#### Pipeline Event Types for Validation [SPEC-EVENT-006]
+
+The system SHALL record four additional event types for empirical validation:
+
+| Event Type | Enum Value | Description |
+|---|---|---|
+| criteria_check | 15 | Records acceptance criteria evaluation results |
+| verification_execution | 16 | Records recipe verification results |
+| test_execution | 17 | Records test execution results |
+| spec_test_execution | 18 | Records spec-scenario test execution results |
+
+#### Scenario: Validation Event Recording
+- GIVEN a tier completes execution and validation.
+- AND `event_logging_enabled` is true.
+- WHEN criteria are checked, verification runs, tests execute, or spec tests progress.
+- THEN corresponding PipelineEvent records are created with summaries and optional payloads.
+
 ### Requirement: Pause and Resume
 The system SHALL support pausing execution at configurable stage checkpoints and resuming from the last completed stage.
 Resume SHALL be idempotent: re-publishing already-published tasks is safely skipped.
@@ -504,6 +685,18 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | verbose_event_logging | Boolean | false | None |
 | repo_context_scan_patterns | Array of Strings | nil (uses defaults) | None |
 | repo_context_scan_files | Array of Strings | nil (uses defaults) | None |
+| verification_enabled | Boolean | false | None |
+| verification_timeout | Integer | 120 | Positive integer |
+| verification_health_check_retries | Integer | 10 | Positive integer |
+| verification_health_check_interval | Integer | 3 | Positive integer |
+| test_execution_enabled | Boolean | false | None |
+| test_command | String | nil | None |
+| test_timeout | Integer | 120 | Positive integer |
+| test_boot_command | String | nil | None |
+| test_boot_timeout | Integer | 60 | Positive integer |
+| spec_test_generation_enabled | Boolean | false | None |
+| spec_test_directory | String | "test/spec_integration" | None |
+| spec_test_persona | String | "testing_specialist" | None |
 
 ### PipelineRun State Machine
 
