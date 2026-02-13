@@ -127,7 +127,8 @@ module ArnoldPipeline
           priority: td["priority"] || 0,
           labels: td["labels"] || [],
           position: i,
-          depends_on: td["depends_on"] || []
+          depends_on: td["depends_on"] || [],
+          acceptance_criteria: td["acceptance_criteria"] || []
         )
       end
 

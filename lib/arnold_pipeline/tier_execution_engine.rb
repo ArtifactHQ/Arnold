@@ -1,5 +1,10 @@
 require "arnold_pipeline/diff_summarizer"
 require "arnold_pipeline/repo_context_scanner"
+require "arnold_pipeline/acceptance_criterion"
+require "arnold_pipeline/criteria_checker"
+require "arnold_pipeline/verification/verification_result"
+require "arnold_pipeline/verification/verification_runner"
+require "arnold_pipeline/verification/recipe_verification_extractor"
 
 module ArnoldPipeline
   class TierExecutionEngine
@@ -67,9 +72,22 @@ module ArnoldPipeline
 
         logger.info { "[Arnold] Tier #{tier_num + 1}/#{max_tier + 1} complete. Running gate check..." }
 
+        # Run verification after bootstrap tier (tier 0) if enabled
+        verification_summary = nil
+        if tier_num == 0 && verification_enabled?
+          verification_summary = run_verification!(pipeline_run)
+        end
+
+        # Run criteria check for this tier's tasks
+        acceptance_criteria_summary = nil
+        if gate_check_needed?
+          acceptance_criteria_summary = run_criteria_check!(pipeline_run, tier_tasks)
+        end
+
         # Gate check + context (when either feature is enabled)
         if gate_check_needed?
-          gate_result = run_tier_gate!(pipeline_run, tier_num, tier_tasks)
+          gate_result = run_tier_gate!(pipeline_run, tier_num, tier_tasks,
+                                      acceptance_criteria_summary:, verification_summary:)
 
           if gate_result
             if ArnoldPipeline.configuration.tier_gate_enabled && !gate_result["pass"]
@@ -131,7 +149,8 @@ module ArnoldPipeline
       ArnoldPipeline.configuration.tier_gate_enabled || ArnoldPipeline.configuration.context_propagation_enabled
     end
 
-    def run_tier_gate!(pipeline_run, tier_num, tier_tasks)
+    def run_tier_gate!(pipeline_run, tier_num, tier_tasks,
+                       acceptance_criteria_summary: nil, verification_summary: nil)
       tier_tasks.each(&:reload)
 
       task_summaries = tier_tasks.map { |t|
@@ -161,10 +180,12 @@ module ArnoldPipeline
           payload: ->(r) { { diffs: diffs, gate_response: r } },
           tier_number: tier_num
         ) do
-          tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:, repo_context:)
+          tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:, repo_context:,
+                               acceptance_criteria_summary:, verification_summary:)
         end
       else
-        tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:, repo_context:)
+        tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:, repo_context:,
+                             acceptance_criteria_summary:, verification_summary:)
       end
 
       if result
@@ -203,7 +224,8 @@ module ArnoldPipeline
             description: td["description"],
             labels: td["labels"] || [],
             position: max_position + i + 1,
-            tier: tier_num
+            tier: tier_num,
+            acceptance_criteria: td["acceptance_criteria"] || []
           )
         end
 
@@ -232,9 +254,11 @@ module ArnoldPipeline
           merge_tier_results!(pipeline_run, [task])
         end
 
-        # Re-run gate check
+        # Re-run criteria check and gate check with empirical signals
         all_tier_tasks = pipeline_run.tasks.in_tier(tier_num).to_a
-        gate_result = run_tier_gate!(pipeline_run, tier_num, all_tier_tasks)
+        acceptance_criteria_summary = run_criteria_check!(pipeline_run, all_tier_tasks)
+        gate_result = run_tier_gate!(pipeline_run, tier_num, all_tier_tasks,
+                                     acceptance_criteria_summary:)
 
         # If gate passed or returned nil, we're done
         return if gate_result.nil? || gate_result["pass"]
@@ -271,6 +295,111 @@ module ArnoldPipeline
 
     def load_accumulated_context(pipeline_run)
       (pipeline_run.metadata || {})["tier_contexts"] || []
+    end
+
+    def verification_enabled?
+      ArnoldPipeline.configuration.verification_enabled
+    end
+
+    def run_verification!(pipeline_run)
+      config = Verification::RecipeVerificationExtractor.call(pipeline_run:)
+      return nil unless config
+
+      repo_path = ArnoldPipeline.configuration.claude_code_repo_path
+      return nil unless repo_path && Dir.exist?(repo_path)
+
+      logger.info { "[Arnold] Running recipe verification (setup + boot + health check)..." }
+
+      cfg = ArnoldPipeline.configuration
+      timeout = cfg.verification_timeout
+      retries = cfg.verification_health_check_retries
+      interval = cfg.verification_health_check_interval
+
+      runner_args = { repo_path:, verification_config: config, timeout:,
+                      health_check_retries: retries, health_check_interval: interval }
+
+      if event_recorder
+        result = event_recorder.timed(
+          event_type: :verification_execution, stage: "execution",
+          summary: ->(r) {
+            {
+              setup_passed: r&.setup_passed,
+              boot_passed: r&.boot_passed,
+              health_check_passed: r&.health_check_passed,
+              test_passed: r&.test_passed,
+              passed: r&.passed?,
+              error_count: r&.errors&.size || 0
+            }
+          }
+        ) do
+          Verification::VerificationRunner.call(**runner_args)
+        end
+      else
+        result = Verification::VerificationRunner.call(**runner_args)
+      end
+
+      status = result.passed? ? "PASSED" : "FAILED"
+      logger.info { "[Arnold] Verification #{status}" }
+      result.errors.each { |e| logger.warn { "[Arnold] Verification error: #{e}" } } unless result.passed?
+
+      result.to_gate_summary
+    rescue => e
+      logger.warn { "[Arnold] Verification failed (non-fatal): #{e.class}: #{e.message}" }
+      nil
+    end
+
+    def run_criteria_check!(pipeline_run, tier_tasks)
+      all_criteria = tier_tasks.flat_map do |task|
+        AcceptanceCriterion.from_array(task.acceptance_criteria)
+      end
+
+      return nil if all_criteria.empty?
+
+      repo_path = ArnoldPipeline.configuration.claude_code_repo_path
+      return nil unless repo_path
+
+      logger.info { "[Arnold] Running criteria check (#{all_criteria.size} criteria)..." }
+
+      check_result = CriteriaChecker.call(criteria: all_criteria, repo_path:)
+
+      event_recorder&.record(
+        event_type: :criteria_check, stage: "tier_gate",
+        summary: {
+          verified_count: check_result[:verified].size,
+          failed_count: check_result[:failed].size,
+          unverified_count: check_result[:unverified].size
+        }
+      )
+
+      format_criteria_summary(check_result)
+    rescue => e
+      logger.warn { "[Arnold] Criteria check failed (non-fatal): #{e.class}: #{e.message}" }
+      nil
+    end
+
+    def format_criteria_summary(check_result)
+      lines = []
+
+      if check_result[:verified].any?
+        lines << "**Verified (programmatic — treat as confirmed):**"
+        check_result[:verified].each { |c| lines << "- [PASS] #{c.description} (#{c.type})" }
+      end
+
+      if check_result[:failed].any?
+        lines << "" if lines.any?
+        lines << "**Failed (programmatic — these are NOT satisfied):**"
+        check_result[:failed].each { |c| lines << "- [FAIL] #{c.description} (#{c.type})" }
+      end
+
+      if check_result[:unverified].any?
+        lines << "" if lines.any?
+        lines << "**Unverified (requires your evaluation):**"
+        check_result[:unverified].each { |c| lines << "- [EVALUATE] #{c.description} (#{c.type})" }
+      end
+
+      return nil if lines.empty?
+
+      lines.join("\n")
     end
 
     def build_repo_context(pipeline_run)

@@ -47,6 +47,29 @@ module ArnoldPipeline
           - Do NOT decompose into multiple subtasks — the original scope was appropriate
           - Copy the original task's description and add context about the failure
 
+          ## Acceptance Criteria Evaluation
+
+          When acceptance criteria are provided for this tier's tasks, evaluate the diffs
+          against each criterion specifically:
+          - **Verified (programmatic)**: These criteria were already checked automatically.
+            Treat them as confirmed facts — do not re-evaluate them.
+          - **Failed (programmatic)**: These criteria failed automatic checks. Flag these as
+            issues and create corrective tasks if critical.
+          - **Unverified**: These criteria require your evaluation. Check the diffs to
+            determine if each criterion is satisfied.
+
+          Focus your evaluation on the specific acceptance criteria rather than making
+          open-ended judgments about alignment.
+
+          ## Verification Results
+
+          When verification results (boot/health check) are provided, treat them as
+          empirical evidence:
+          - If verification PASSED: the application boots and responds correctly.
+          - If verification FAILED: this is a critical issue — the application does not
+            work. Create corrective tasks targeting the specific failure (setup, boot, or
+            health check).
+
           ## Incremental Pipeline Awareness
 
           This pipeline may be running incrementally on a repository that already contains
@@ -62,7 +85,8 @@ module ArnoldPipeline
         PROMPT
       end
 
-      def self.user_prompt(tier_number:, task_summaries:, diffs:, comments: "", repo_context: nil)
+      def self.user_prompt(tier_number:, task_summaries:, diffs:, comments: "", repo_context: nil,
+                           acceptance_criteria_summary: nil, verification_summary: nil)
         prompt = <<~PROMPT
           ## Tier #{tier_number} Gate Review
 
@@ -72,6 +96,22 @@ module ArnoldPipeline
           ### Code Diffs
           #{diffs}
         PROMPT
+
+        if acceptance_criteria_summary.present?
+          prompt += <<~CRITERIA
+
+            ### Acceptance Criteria Results
+            #{acceptance_criteria_summary}
+          CRITERIA
+        end
+
+        if verification_summary.present?
+          prompt += <<~VERIFICATION
+
+            ### Verification Results
+            #{verification_summary}
+          VERIFICATION
+        end
 
         if repo_context.present?
           prompt += <<~BASELINE

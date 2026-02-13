@@ -102,7 +102,10 @@ module ArnoldPipeline
         data = {
           "tasks" => [
             { "title" => "Setup", "description" => "Bootstrap", "priority" => 0,
-              "labels" => ["setup"], "position" => 0, "depends_on" => [], "section_ref" => "Setup" }
+              "labels" => ["setup"], "position" => 0, "depends_on" => [], "section_ref" => "Setup",
+              "acceptance_criteria" => [
+                { "type" => "file_exists", "description" => "Project exists", "params" => { "pattern" => "Gemfile" } }
+              ] }
           ]
         }
         assert schemer.valid?(data), "Expected valid, got: #{schemer.validate(data).map(&:to_h)}"

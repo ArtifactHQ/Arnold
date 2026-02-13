@@ -24,7 +24,9 @@ module ArnoldPipeline
                   :merge_conflict_resolution_enabled, :merge_conflict_max_files,
                   :event_logging_enabled, :verbose_event_logging,
                   :llm_request_timeout,
-                  :repo_context_scan_patterns, :repo_context_scan_files
+                  :repo_context_scan_patterns, :repo_context_scan_files,
+                  :verification_enabled, :verification_timeout,
+                  :verification_health_check_retries, :verification_health_check_interval
     attr_writer   :llm_provider, :llm_api_key, :llm_model
 
     def initialize
@@ -61,6 +63,10 @@ module ArnoldPipeline
       @llm_request_timeout               = 600
       @repo_context_scan_patterns        = nil
       @repo_context_scan_files           = nil
+      @verification_enabled                    = false
+      @verification_timeout                    = 120
+      @verification_health_check_retries       = 10
+      @verification_health_check_interval      = 3
     end
 
     def llm_provider
@@ -84,6 +90,7 @@ module ArnoldPipeline
       validate_polling_config!
       validate_max_tier_retries!
       validate_workflow_branch_pattern!
+      validate_verification_config!
       true
     end
 
@@ -140,6 +147,20 @@ module ArnoldPipeline
       return if @workflow_branch_pattern.is_a?(Regexp)
 
       raise ConfigurationError, "workflow_branch_pattern must be a Regexp"
+    end
+
+    def validate_verification_config!
+      unless @verification_timeout.is_a?(Integer) && @verification_timeout > 0
+        raise ConfigurationError, "verification_timeout must be a positive integer."
+      end
+
+      unless @verification_health_check_retries.is_a?(Integer) && @verification_health_check_retries > 0
+        raise ConfigurationError, "verification_health_check_retries must be a positive integer."
+      end
+
+      unless @verification_health_check_interval.is_a?(Integer) && @verification_health_check_interval > 0
+        raise ConfigurationError, "verification_health_check_interval must be a positive integer."
+      end
     end
 
     def validate_polling_config!
