@@ -103,13 +103,19 @@ module ArnoldPipeline
       end
 
       def try_jest
-        # Jest summary: "Tests:  X passed, Y failed, Z total" or "Tests:  X passed, Y total"
-        match = @combined.match(/Tests:\s+(?:(\d+)\s+failed,\s+)?(\d+)\s+passed,\s+(\d+)\s+total/)
+        # Jest summary formats:
+        #   "Tests:  5 passed, 5 total"
+        #   "Tests:  2 failed, 3 passed, 5 total"
+        #   "Tests:  3 failed, 3 total" (all fail, no "passed" segment)
+        #   "Tests:  1 skipped, 4 passed, 5 total"
+        match = @combined.match(/Tests:\s+.*?(\d+)\s+total/)
         return nil unless match
 
-        failed = (match[1] || "0").to_i
-        passed = match[2].to_i
-        total = match[3].to_i
+        total = match[1].to_i
+        passed_m = @combined.match(/Tests:\s+.*?(\d+)\s+passed/)
+        failed_m = @combined.match(/Tests:\s+.*?(\d+)\s+failed/)
+        passed = passed_m ? passed_m[1].to_i : 0
+        failed = failed_m ? failed_m[1].to_i : 0
 
         summary = "#{total} tests, #{passed} passed, #{failed} failed"
         failures = extract_jest_failures
@@ -156,9 +162,9 @@ module ArnoldPipeline
       end
 
       def try_pytest
-        # Pytest summary: "X passed" or "X passed, Y failed" or "X failed"
-        # Require at least one numeric result group to avoid matching "test session starts"
-        match = @combined.match(/=+\s+(\d+\s+passed(?:,\s*\d+\s+failed)?(?:,\s*\d+\s+errors?)?|\d+\s+failed(?:,\s*\d+\s+errors?)?|\d+\s+errors?)\s*=+/)
+        # Pytest summary: "= N passed =", "= N passed, M failed =", "= N passed, M warnings ="
+        # Also handles "in X.XXs" suffix: "= 10 passed, 3 warnings in 0.34s ="
+        match = @combined.match(/=+\s+((?:\d+\s+(?:passed|failed|errors?|warnings?|deselected|xfailed|xpassed)(?:,\s*)?)+)(?:\s+in\s+\S+)?\s*=+/)
         return nil unless match
 
         result_text = match[1]
@@ -166,9 +172,9 @@ module ArnoldPipeline
         failed_m = result_text.match(/(\d+)\s+failed/)
         error_m = result_text.match(/(\d+)\s+errors?/)
 
-        passed_count = (passed_m && passed_m[1] || "0").to_i
-        failed_count = (failed_m && failed_m[1] || "0").to_i
-        error_count = (error_m && error_m[1] || "0").to_i
+        passed_count = passed_m ? passed_m[1].to_i : 0
+        failed_count = failed_m ? failed_m[1].to_i : 0
+        error_count = error_m ? error_m[1].to_i : 0
 
         summary = "#{passed_count} passed, #{failed_count} failed"
         summary += ", #{error_count} errors" if error_count > 0

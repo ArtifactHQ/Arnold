@@ -136,6 +136,37 @@ module ArnoldPipeline
         assert_equal "8 tests, 6 passed, 2 failed", result.summary
       end
 
+      test "parses jest all-fail output (no passed segment)" do
+        stdout = <<~OUTPUT
+          FAIL src/auth.test.js
+
+          Test Suites: 1 failed, 1 total
+          Tests:       3 failed, 3 total
+          Snapshots:   0 total
+          Time:        0.8s
+        OUTPUT
+
+        result = TestResultParser.call(stdout: stdout, stderr: "", exit_code: 1)
+
+        refute result.passed
+        assert_equal "jest", result.framework
+        assert_equal "3 tests, 0 passed, 3 failed", result.summary
+      end
+
+      test "parses jest output with skipped tests" do
+        stdout = <<~OUTPUT
+          Test Suites: 1 passed, 1 total
+          Tests:       1 skipped, 4 passed, 5 total
+          Snapshots:   0 total
+        OUTPUT
+
+        result = TestResultParser.call(stdout: stdout, stderr: "", exit_code: 0)
+
+        assert result.passed
+        assert_equal "jest", result.framework
+        assert_equal "5 tests, 4 passed, 0 failed", result.summary
+      end
+
       # --- Pytest ---
 
       test "parses pytest passing output" do
@@ -179,6 +210,37 @@ module ArnoldPipeline
         assert_equal "test_login", result.failures[0][:name]
         assert_equal "AssertionError: expected 200", result.failures[0][:message]
         assert_equal "tests/test_auth.py", result.failures[0][:location]
+      end
+
+      test "parses pytest with warnings" do
+        stdout = <<~OUTPUT
+          ============================= test session starts ==============================
+          collected 10 items
+
+          tests/test_auth.py ..........                                              [100%]
+
+          ============================== 10 passed, 3 warnings in 0.34s ==============================
+        OUTPUT
+
+        result = TestResultParser.call(stdout: stdout, stderr: "", exit_code: 0)
+
+        assert result.passed
+        assert_equal "pytest", result.framework
+        assert_equal "10 passed, 0 failed", result.summary
+      end
+
+      test "parses pytest with failures and warnings" do
+        stdout = <<~OUTPUT
+          FAILED tests/test_auth.py::test_login - AssertionError
+
+          ========================= 8 passed, 2 failed, 1 warning in 1.2s =========================
+        OUTPUT
+
+        result = TestResultParser.call(stdout: stdout, stderr: "", exit_code: 1)
+
+        refute result.passed
+        assert_equal "pytest", result.framework
+        assert_equal "8 passed, 2 failed", result.summary
       end
 
       test "parses pytest with errors" do
