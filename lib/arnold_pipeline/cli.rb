@@ -25,7 +25,7 @@ module ArnoldPipeline
     option :claude_code_repo_path, type: :string, desc: "Path to repo for Claude Code provider"
     option :claude_code_model, type: :string, desc: "Claude Code model (default: sonnet)"
     option :claude_code_max_turns, type: :numeric, desc: "Max turns for Claude Code execution"
-    option :claude_code_permission_mode, type: :string, desc: "Claude Code permission mode (default: auto)"
+    option :claude_code_permission_mode, type: :string, desc: "Claude Code permission mode (default: bypassPermissions)"
     option :stop_after, type: :string, desc: "Stop after stage: spec, tasks, executed"
     option :preview, type: :boolean, default: false, aliases: ["--dry-run"], desc: "Generate spec and tasks without publishing to execution provider. Note: makes LLM API calls and creates local database records."
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
@@ -102,7 +102,7 @@ module ArnoldPipeline
     option :claude_code_repo_path, type: :string, desc: "Path to repo for Claude Code provider"
     option :claude_code_model, type: :string, desc: "Claude Code model (default: sonnet)"
     option :claude_code_max_turns, type: :numeric, desc: "Max turns for Claude Code execution"
-    option :claude_code_permission_mode, type: :string, desc: "Claude Code permission mode (default: auto)"
+    option :claude_code_permission_mode, type: :string, desc: "Claude Code permission mode (default: bypassPermissions)"
     option :stop_after, type: :string, desc: "Stop after stage: spec, tasks, executed"
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
     def resume(id)
