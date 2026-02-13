@@ -134,7 +134,7 @@ module ArnoldPipeline
         PROMPT
       end
 
-      def self.user_prompt(spec_content:, diffs:, iteration_number:, comments: "")
+      def self.user_prompt(spec_content:, diffs:, iteration_number:, comments: "", spec_test_progress_summary: nil)
         prompt = <<~PROMPT
           Iteration #{iteration_number}: Analyze the following implementation against the spec.
 
@@ -144,6 +144,21 @@ module ArnoldPipeline
           ## Code Diffs / Results
           #{diffs}
         PROMPT
+
+        if spec_test_progress_summary.present?
+          prompt += <<~SPEC_TESTS
+
+            ## Spec-Scenario Test Results
+            These tests were generated from the specification's GIVEN/WHEN/THEN scenarios
+            before implementation began. They validate the behavioral contract independently
+            of the coding agent's own tests.
+
+            #{spec_test_progress_summary}
+
+            Use these results as a primary alignment signal — a high spec-test pass rate
+            is stronger evidence of alignment than subjective evaluation.
+          SPEC_TESTS
+        end
 
         if comments.present?
           prompt += <<~COMMENTS

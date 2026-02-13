@@ -28,7 +28,7 @@ module ArnoldPipeline
 
       def call(tier_number:, task_summaries:, diffs:, comments: "", repo_context: nil,
                acceptance_criteria_summary: nil, verification_summary: nil,
-               test_execution_summary: nil)
+               test_execution_summary: nil, spec_test_progress_summary: nil)
         logger.info { "Running tier gate check for tier #{tier_number}" }
 
         system = Prompts::TierGate.system_prompt
@@ -40,7 +40,8 @@ module ArnoldPipeline
           repo_context:,
           acceptance_criteria_summary:,
           verification_summary:,
-          test_execution_summary:
+          test_execution_summary:,
+          spec_test_progress_summary:
         )
 
         result = chat_json(

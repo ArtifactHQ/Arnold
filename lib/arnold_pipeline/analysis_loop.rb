@@ -74,6 +74,7 @@ module ArnoldPipeline
       tasks = pipeline_run.tasks.reload
       diffs = DiffSummarizer.call(tasks.map(&:result_diff).compact)
       comments = tier_execution_engine.format_task_comments(tasks)
+      spec_test_progress_summary = build_spec_test_progress_summary(pipeline_run)
 
       result = if event_recorder
         event_recorder.timed(
@@ -88,10 +89,12 @@ module ArnoldPipeline
           payload: ->(r) { { spec_content: pipeline_run.specification.content, diffs: diffs, response: r } },
           iteration_number: iteration_number
         ) do
-          analyzer.call(spec_content: pipeline_run.specification.content, diffs:, iteration_number:, persona:, comments:)
+          analyzer.call(spec_content: pipeline_run.specification.content, diffs:, iteration_number:, persona:, comments:,
+                        spec_test_progress_summary:)
         end
       else
-        analyzer.call(spec_content: pipeline_run.specification.content, diffs:, iteration_number:, persona:, comments:)
+        analyzer.call(spec_content: pipeline_run.specification.content, diffs:, iteration_number:, persona:, comments:,
+                      spec_test_progress_summary:)
       end
 
       pipeline_run.iterations.create!(
@@ -267,6 +270,24 @@ module ArnoldPipeline
       end
 
       TierCalculator.call(pipeline_run.tasks.reload)
+    end
+
+    def build_spec_test_progress_summary(pipeline_run)
+      return nil unless ArnoldPipeline.configuration.spec_test_generation_enabled
+
+      metadata = pipeline_run.metadata || {}
+      results = metadata["spec_test_results"]
+      return nil unless results
+
+      total = results["total"] || 0
+      passing = results["passing_count"] || 0
+      return nil if total == 0
+
+      rate = (passing.to_f / total * 100).round(1)
+      "Spec test coverage: #{passing}/#{total} passing (#{rate}%)"
+    rescue => e
+      logger.warn { "[Arnold] Failed to build spec test progress summary: #{e.message}" }
+      nil
     end
 
     def resolve_recipes(pipeline_run)

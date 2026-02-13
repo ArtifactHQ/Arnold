@@ -8,6 +8,8 @@ require "arnold_pipeline/verification/recipe_verification_extractor"
 require "arnold_pipeline/test_execution/test_result"
 require "arnold_pipeline/test_execution/test_result_parser"
 require "arnold_pipeline/test_execution/test_runner"
+require "arnold_pipeline/spec_test_progress_tracker"
+require "arnold_pipeline/spec_test_progress"
 
 module ArnoldPipeline
   class TierExecutionEngine
@@ -81,10 +83,21 @@ module ArnoldPipeline
           verification_summary = run_verification!(pipeline_run)
         end
 
+        # Run spec test generation after bootstrap tier (tier 0.5) if enabled
+        if tier_num == 0 && spec_test_generation_enabled?
+          run_spec_test_generation!(pipeline_run)
+        end
+
         # Run test execution after merge if enabled
         test_execution_summary = nil
         if test_execution_enabled?
           test_execution_summary = run_test_execution!(pipeline_run)
+        end
+
+        # Run spec test progress tracking after merge if enabled
+        spec_test_progress_summary = nil
+        if spec_test_generation_enabled?
+          spec_test_progress_summary = run_spec_test_progress!(pipeline_run)
         end
 
         # Run criteria check for this tier's tasks
@@ -97,7 +110,8 @@ module ArnoldPipeline
         if gate_check_needed?
           gate_result = run_tier_gate!(pipeline_run, tier_num, tier_tasks,
                                       acceptance_criteria_summary:, verification_summary:,
-                                      test_execution_summary:)
+                                      test_execution_summary:,
+                                      spec_test_progress_summary:)
 
           if gate_result
             if ArnoldPipeline.configuration.tier_gate_enabled && !gate_result["pass"]
@@ -161,7 +175,7 @@ module ArnoldPipeline
 
     def run_tier_gate!(pipeline_run, tier_num, tier_tasks,
                        acceptance_criteria_summary: nil, verification_summary: nil,
-                       test_execution_summary: nil)
+                       test_execution_summary: nil, spec_test_progress_summary: nil)
       tier_tasks.each(&:reload)
 
       task_summaries = tier_tasks.map { |t|
@@ -193,12 +207,12 @@ module ArnoldPipeline
         ) do
           tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:, repo_context:,
                                acceptance_criteria_summary:, verification_summary:,
-                               test_execution_summary:)
+                               test_execution_summary:, spec_test_progress_summary:)
         end
       else
         tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:, repo_context:,
                              acceptance_criteria_summary:, verification_summary:,
-                             test_execution_summary:)
+                             test_execution_summary:, spec_test_progress_summary:)
       end
 
       if result
@@ -318,6 +332,135 @@ module ArnoldPipeline
 
     def test_execution_enabled?
       ArnoldPipeline.configuration.test_execution_enabled
+    end
+
+    def spec_test_generation_enabled?
+      ArnoldPipeline.configuration.spec_test_generation_enabled
+    end
+
+    def run_spec_test_generation!(pipeline_run)
+      cfg = ArnoldPipeline.configuration
+      repo_path = cfg.claude_code_repo_path
+      return unless repo_path && Dir.exist?(repo_path)
+
+      spec_content = pipeline_run.specification&.content
+      return unless spec_content.present?
+
+      logger.info { "[Arnold] Generating spec-scenario tests (tier 0.5)..." }
+
+      require "arnold_pipeline/agents/spec_test_generator"
+      generator = Agents::SpecTestGenerator.new(logger: logger)
+
+      result = if event_recorder
+        event_recorder.timed(
+          event_type: :spec_test_execution, stage: "execution",
+          summary: ->(r) {
+            {
+              phase: "generation",
+              test_file_count: r&.dig("test_files")&.size || 0,
+              test_directory: cfg.spec_test_directory
+            }
+          }
+        ) do
+          generator.call(spec_content:, test_directory: cfg.spec_test_directory)
+        end
+      else
+        generator.call(spec_content:, test_directory: cfg.spec_test_directory)
+      end
+
+      test_files = result["test_files"] || []
+      return if test_files.empty?
+
+      # Write generated test files to the repo
+      test_files.each do |file|
+        path = File.join(repo_path, file["path"])
+        FileUtils.mkdir_p(File.dirname(path))
+        File.write(path, file["content"])
+      end
+
+      logger.info { "[Arnold] Generated #{test_files.size} spec test files in #{cfg.spec_test_directory}/" }
+
+      # Run baseline — all tests should fail (no implementation yet)
+      baseline_progress = SpecTestProgressTracker.call(
+        repo_path: repo_path,
+        test_directory: cfg.spec_test_directory
+      )
+
+      # Store baseline results in pipeline_run metadata
+      metadata = pipeline_run.metadata || {}
+      metadata["spec_test_results"] = {
+        "total" => baseline_progress.total_tests,
+        "passing_count" => baseline_progress.total_passing,
+        "failed_names" => baseline_progress.still_failing
+      }
+      pipeline_run.update!(metadata: metadata)
+
+      logger.info { "[Arnold] Spec test baseline: #{baseline_progress.total_passing}/#{baseline_progress.total_tests} passing (#{baseline_progress.pass_rate}%)" }
+    rescue => e
+      logger.warn { "[Arnold] Spec test generation failed (non-fatal): #{e.class}: #{e.message}" }
+    end
+
+    def run_spec_test_progress!(pipeline_run)
+      cfg = ArnoldPipeline.configuration
+      repo_path = cfg.claude_code_repo_path
+      return nil unless repo_path && Dir.exist?(repo_path)
+
+      test_dir = File.join(repo_path, cfg.spec_test_directory)
+      return nil unless Dir.exist?(test_dir)
+
+      logger.info { "[Arnold] Running spec-scenario test progression check..." }
+
+      metadata = pipeline_run.metadata || {}
+      previous_results = metadata["spec_test_results"]
+
+      progress = if event_recorder
+        event_recorder.timed(
+          event_type: :spec_test_execution, stage: "tier_gate",
+          summary: ->(r) {
+            {
+              phase: "progress_check",
+              total_tests: r&.total_tests,
+              total_passing: r&.total_passing,
+              pass_rate: r&.pass_rate,
+              newly_passing_count: r&.newly_passing&.size || 0,
+              regression_count: r&.regressions&.size || 0
+            }
+          }
+        ) do
+          SpecTestProgressTracker.call(
+            repo_path: repo_path,
+            test_directory: cfg.spec_test_directory,
+            previous_results: previous_results
+          )
+        end
+      else
+        SpecTestProgressTracker.call(
+          repo_path: repo_path,
+          test_directory: cfg.spec_test_directory,
+          previous_results: previous_results
+        )
+      end
+
+      # Update stored results for next tier comparison
+      metadata["spec_test_results"] = {
+        "total" => progress.total_tests,
+        "passing_count" => progress.total_passing,
+        "failed_names" => progress.still_failing + progress.regressions
+      }
+      pipeline_run.update!(metadata: metadata)
+
+      logger.info { "[Arnold] Spec tests: #{progress.total_passing}/#{progress.total_tests} passing (#{progress.pass_rate}%)" }
+      if progress.newly_passing.any?
+        logger.info { "[Arnold] Newly passing: #{progress.newly_passing.join(', ')}" }
+      end
+      if progress.regressions.any?
+        logger.warn { "[Arnold] Regressions: #{progress.regressions.join(', ')}" }
+      end
+
+      progress.to_gate_summary
+    rescue => e
+      logger.warn { "[Arnold] Spec test progress check failed (non-fatal): #{e.class}: #{e.message}" }
+      nil
     end
 
     def run_test_execution!(pipeline_run)

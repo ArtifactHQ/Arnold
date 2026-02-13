@@ -28,7 +28,8 @@ module ArnoldPipeline
                   :verification_enabled, :verification_timeout,
                   :verification_health_check_retries, :verification_health_check_interval,
                   :test_execution_enabled, :test_command, :test_timeout,
-                  :test_boot_command, :test_boot_timeout
+                  :test_boot_command, :test_boot_timeout,
+                  :spec_test_generation_enabled, :spec_test_directory, :spec_test_persona
     attr_writer   :llm_provider, :llm_api_key, :llm_model
 
     def initialize
@@ -74,6 +75,9 @@ module ArnoldPipeline
       @test_timeout                            = 120
       @test_boot_command                       = nil
       @test_boot_timeout                       = 60
+      @spec_test_generation_enabled             = false
+      @spec_test_directory                       = "test/spec_integration"
+      @spec_test_persona                         = "testing_specialist"
     end
 
     def llm_provider

@@ -22,7 +22,8 @@ module ArnoldPipeline
       repo_context_scanned: 14,
       criteria_check: 15,
       verification_execution: 16,
-      test_execution: 17
+      test_execution: 17,
+      spec_test_execution: 18
     }
 
     belongs_to :pipeline_run
