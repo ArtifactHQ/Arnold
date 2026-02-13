@@ -153,6 +153,7 @@ module ArnoldPipeline
     test "merge conflict resolution resolves same-tier conflicts during execute_tiers" do
       ArnoldPipeline.configure do |c|
         c.merge_conflict_resolution_enabled = true
+        c.claude_code_max_concurrency = 1 # sequential — stub does real git ops
       end
 
       pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :pending)

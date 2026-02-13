@@ -597,6 +597,148 @@ module ArnoldPipeline
           end
         end
 
+        # --- Concurrency tests ---
+
+        test "create_tasks executes multiple tasks concurrently" do
+          ArnoldPipeline.configure { |c| c.claude_code_max_concurrency = 4 }
+
+          tasks = 3.times.map { |i| { "title" => "Task #{i}", "description" => "Desc #{i}" } }
+          mu = Mutex.new
+          thread_ids = []
+
+          @provider.stubs(:execute_claude_code).with { |**_kwargs|
+            mu.synchronize { thread_ids << Thread.current.object_id }
+            sleep 0.05
+            true
+          }.returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("diff --git a/f.rb b/f.rb\n+x")
+
+          results = @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          assert_equal 3, results.size
+          assert thread_ids.uniq.size > 1, "Expected multiple threads, got #{thread_ids.uniq.size}"
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "create_tasks with concurrency 1 stays sequential" do
+          ArnoldPipeline.configure { |c| c.claude_code_max_concurrency = 1 }
+
+          tasks = 2.times.map { |i| { "title" => "Task #{i}", "description" => "Desc #{i}" } }
+          thread_ids = []
+
+          @provider.stubs(:execute_claude_code).with { |**_kwargs|
+            thread_ids << Thread.current.object_id
+            true
+          }.returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("diff --git a/f.rb b/f.rb\n+x")
+
+          @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          assert_equal 1, thread_ids.uniq.size, "Expected single thread for concurrency=1"
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "create_tasks stores results correctly under concurrent execution" do
+          ArnoldPipeline.configure { |c| c.claude_code_max_concurrency = 4 }
+
+          tasks = 5.times.map { |i|
+            @pipeline_run.tasks.create!(title: "Task #{i}", description: "Desc #{i}", position: i)
+          }
+
+          @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("diff --git a/f.rb b/f.rb\n+x")
+
+          results = @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          assert_equal 5, results.size
+          stored = @provider.instance_variable_get(:@results)
+          assert_equal 5, stored.size
+
+          # Verify ordering: results[i] corresponds to tasks[i]
+          results.each_with_index do |r, i|
+            assert_equal "Task #{i}", r[:title]
+            assert_match(/cc-#{@pipeline_run.id}-#{tasks[i].id}/, r[:external_id])
+          end
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "create_tasks handles per-thread failures gracefully" do
+          ArnoldPipeline.configure { |c| c.claude_code_max_concurrency = 3 }
+
+          tasks = 3.times.map { |i| { "title" => "Task #{i}", "description" => "Desc #{i}" } }
+          mu = Mutex.new
+          call_count = 0
+
+          @provider.stubs(:execute_claude_code).with { |**_kwargs|
+            mu.synchronize { call_count += 1 }
+            true
+          }.returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("diff --git a/f.rb b/f.rb\n+x")
+
+          results = @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          assert_equal 3, results.size
+          assert_equal 3, call_count
+          results.each do |r|
+            assert r.key?(:external_id)
+            assert r.key?(:title)
+          end
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "create_tasks with single task skips thread pool" do
+          tasks = [{ "title" => "Solo Task", "description" => "Only one" }]
+
+          @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("diff --git a/f.rb b/f.rb\n+x")
+
+          @provider.expects(:execute_parallel).never
+
+          results = @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+          assert_equal 1, results.size
+        end
+
+        test "claude_code_max_concurrency defaults to 4" do
+          config = ArnoldPipeline::Configuration.new
+          assert_equal 4, config.claude_code_max_concurrency
+        end
+
+        test "validate_configuration! rejects invalid concurrency values" do
+          config = ArnoldPipeline::Configuration.new
+          config.execution_provider = :claude_code
+          config.claude_code_repo_path = @repo_path
+          ClaudeCode.stubs(:claude_cli_available?).returns(true)
+
+          [0, -1, 17, 1.5, "4"].each do |bad_value|
+            config.claude_code_max_concurrency = bad_value
+            error = assert_raises(ArnoldPipeline::ConfigurationError) do
+              ClaudeCode.validate_configuration!(config)
+            end
+            assert_match(/claude_code_max_concurrency/, error.message)
+          end
+        end
+
+        test "validate_configuration! accepts valid concurrency values" do
+          config = ArnoldPipeline::Configuration.new
+          config.execution_provider = :claude_code
+          config.claude_code_repo_path = @repo_path
+          ClaudeCode.stubs(:claude_cli_available?).returns(true)
+
+          [1, 4, 8, 16, nil].each do |good_value|
+            config.claude_code_max_concurrency = good_value
+            assert_nothing_raised { ClaudeCode.validate_configuration!(config) }
+          end
+        end
+
         # --- Constructor tests ---
 
         test "constructor sets defaults" do
