@@ -15,7 +15,7 @@ module ArnoldPipeline
                   :claude_code_repo_path, :claude_code_model,
                   :claude_code_max_turns, :claude_code_permission_mode,
                   :claude_code_max_concurrency,
-                  :max_iterations, :library_path,
+                  :max_iterations, :analysis_done_threshold, :library_path,
                   :polling_interval, :polling_timeout, :polling_max_interval,
                   :tier_gate_enabled, :context_propagation_enabled, :max_tier_retries,
                   :workflow_status_enabled, :workflow_branch_pattern,
@@ -46,6 +46,7 @@ module ArnoldPipeline
       @claude_code_permission_mode = "bypassPermissions"
       @claude_code_max_concurrency = 4
       @max_iterations     = 3
+      @analysis_done_threshold = nil
       @library_path       = nil
       @polling_interval     = 30
       @polling_timeout      = 1800
@@ -98,6 +99,7 @@ module ArnoldPipeline
       validate_execution_provider!
       validate_execution_config! unless %i[spec tasks].include?(stop_after)
       validate_max_iterations!
+      validate_analysis_done_threshold!
       validate_polling_config!
       validate_max_tier_retries!
       validate_workflow_branch_pattern!
@@ -147,6 +149,13 @@ module ArnoldPipeline
       return if @max_iterations.is_a?(Integer) && @max_iterations.between?(1, 10)
 
       raise ConfigurationError, "max_iterations must be an integer between 1 and 10."
+    end
+
+    def validate_analysis_done_threshold!
+      return if @analysis_done_threshold.nil?
+      return if @analysis_done_threshold.is_a?(Integer) && @analysis_done_threshold.between?(50, 100)
+
+      raise ConfigurationError, "analysis_done_threshold must be nil or an integer between 50 and 100."
     end
 
     def validate_max_tier_retries!

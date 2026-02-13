@@ -149,6 +149,35 @@ module ArnoldPipeline
         assert_equal "done", result["decision"]
       end
 
+      test "passes max_iterations and previous_decisions through to prompt" do
+        analysis = {
+          "decision" => "done",
+          "confidence" => 90,
+          "reasoning" => "Analysis complete",
+          "completeness_scores" => { "new_reader_test" => 90, "coding_agent_test" => 90, "change_request_test" => 90 },
+          "anti_patterns_found" => [],
+          "corrective_data" => { "tasks" => nil, "deltas" => nil },
+          "requirement_coverage" => nil
+        }
+        @llm.expects(:chat_json).with { |params|
+          user_msg = params[:messages].first[:content]
+          user_msg.include?("iteration 2 of 3") &&
+            user_msg.include?("### Previous Decisions") &&
+            user_msg.include?("**iterate_tasks**")
+        }.returns(analysis)
+
+        @agent.call(
+          spec_content: "# Spec",
+          diffs: "diff content",
+          iteration_number: 2,
+          persona: @persona,
+          max_iterations: 3,
+          previous_decisions: [
+            { iteration: 1, decision: "iterate_tasks", confidence: 75, reasoning_excerpt: "Missing auth" }
+          ]
+        )
+      end
+
       # -- Schema validation --
 
       test "RESPONSE_SCHEMA validates a done response" do

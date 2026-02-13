@@ -83,7 +83,8 @@ module ArnoldPipeline
         }
       }.freeze
 
-      def call(spec_content:, diffs:, iteration_number:, persona:, comments: "", spec_test_progress_summary: nil)
+      def call(spec_content:, diffs:, iteration_number:, persona:, comments: "", spec_test_progress_summary: nil,
+               max_iterations: nil, previous_decisions: [])
         logger.info { "Analyzing iteration #{iteration_number}" }
 
         system = Prompts::Analysis.system_prompt(persona:)
@@ -92,7 +93,9 @@ module ArnoldPipeline
           diffs:,
           iteration_number:,
           comments:,
-          spec_test_progress_summary:
+          spec_test_progress_summary:,
+          max_iterations:,
+          previous_decisions:
         )
 
         result = chat_json(

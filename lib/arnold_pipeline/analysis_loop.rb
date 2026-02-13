@@ -22,13 +22,16 @@ module ArnoldPipeline
       loop do
         iteration_number += 1
         analysis = analyze!(pipeline_run, iteration_number)
+        analysis = maybe_promote_to_done(analysis, iteration_number)
 
         case analysis["decision"]
         when "done"
-          event_recorder&.record(
-            event_type: :iteration_decision, stage: "iteration",
-            summary: { decision: "done" }, iteration_number: iteration_number
-          )
+          unless analysis["promoted_from"]
+            event_recorder&.record(
+              event_type: :iteration_decision, stage: "iteration",
+              summary: { decision: "done" }, iteration_number: iteration_number
+            )
+          end
           pipeline_run.update!(status: :completed)
           tier_execution_engine.merge_all_results!(pipeline_run)
           logger.info { "[Arnold] Pipeline complete." }
@@ -75,6 +78,8 @@ module ArnoldPipeline
       diffs = DiffSummarizer.call(tasks.map(&:result_diff).compact)
       comments = tier_execution_engine.format_task_comments(tasks)
       spec_test_progress_summary = build_spec_test_progress_summary(pipeline_run)
+      max_iterations = ArnoldPipeline.configuration.max_iterations
+      previous_decisions = build_previous_decisions(pipeline_run)
 
       result = if event_recorder
         event_recorder.timed(
@@ -90,11 +95,11 @@ module ArnoldPipeline
           iteration_number: iteration_number
         ) do
           analyzer.call(spec_content: pipeline_run.specification.content, diffs:, iteration_number:, persona:, comments:,
-                        spec_test_progress_summary:)
+                        spec_test_progress_summary:, max_iterations:, previous_decisions:)
         end
       else
         analyzer.call(spec_content: pipeline_run.specification.content, diffs:, iteration_number:, persona:, comments:,
-                      spec_test_progress_summary:)
+                      spec_test_progress_summary:, max_iterations:, previous_decisions:)
       end
 
       pipeline_run.iterations.create!(
@@ -109,6 +114,38 @@ module ArnoldPipeline
       logger.info { "[Arnold] Decision: #{result['decision']} (confidence: #{result['confidence']}%)" }
 
       result
+    end
+
+    def build_previous_decisions(pipeline_run)
+      pipeline_run.iterations.order(:number).map do |iter|
+        {
+          iteration: iter.number,
+          decision: iter.decision,
+          confidence: iter.confidence,
+          reasoning_excerpt: iter.reasoning&.to_s&.slice(0, 200)
+        }
+      end
+    end
+
+    def maybe_promote_to_done(analysis, iteration_number)
+      threshold = ArnoldPipeline.configuration.analysis_done_threshold
+      return analysis unless threshold
+      return analysis unless analysis["decision"] == "iterate_tasks"
+      return analysis unless analysis["confidence"] && analysis["confidence"] >= threshold
+
+      logger.info { "[Arnold] Promoting iterate_tasks to done (confidence #{analysis['confidence']}% >= threshold #{threshold}%)" }
+      event_recorder&.record(
+        event_type: :iteration_decision, stage: "iteration",
+        summary: {
+          decision: "done",
+          promoted_from: "iterate_tasks",
+          confidence: analysis["confidence"],
+          threshold: threshold
+        },
+        iteration_number: iteration_number
+      )
+
+      analysis.merge("decision" => "done", "promoted_from" => "iterate_tasks")
     end
 
     def handle_iterate_tasks!(pipeline_run, analysis)
