@@ -5,6 +5,9 @@ require "arnold_pipeline/criteria_checker"
 require "arnold_pipeline/verification/verification_result"
 require "arnold_pipeline/verification/verification_runner"
 require "arnold_pipeline/verification/recipe_verification_extractor"
+require "arnold_pipeline/test_execution/test_result"
+require "arnold_pipeline/test_execution/test_result_parser"
+require "arnold_pipeline/test_execution/test_runner"
 
 module ArnoldPipeline
   class TierExecutionEngine
@@ -78,6 +81,12 @@ module ArnoldPipeline
           verification_summary = run_verification!(pipeline_run)
         end
 
+        # Run test execution after merge if enabled
+        test_execution_summary = nil
+        if test_execution_enabled?
+          test_execution_summary = run_test_execution!(pipeline_run)
+        end
+
         # Run criteria check for this tier's tasks
         acceptance_criteria_summary = nil
         if gate_check_needed?
@@ -87,7 +96,8 @@ module ArnoldPipeline
         # Gate check + context (when either feature is enabled)
         if gate_check_needed?
           gate_result = run_tier_gate!(pipeline_run, tier_num, tier_tasks,
-                                      acceptance_criteria_summary:, verification_summary:)
+                                      acceptance_criteria_summary:, verification_summary:,
+                                      test_execution_summary:)
 
           if gate_result
             if ArnoldPipeline.configuration.tier_gate_enabled && !gate_result["pass"]
@@ -150,7 +160,8 @@ module ArnoldPipeline
     end
 
     def run_tier_gate!(pipeline_run, tier_num, tier_tasks,
-                       acceptance_criteria_summary: nil, verification_summary: nil)
+                       acceptance_criteria_summary: nil, verification_summary: nil,
+                       test_execution_summary: nil)
       tier_tasks.each(&:reload)
 
       task_summaries = tier_tasks.map { |t|
@@ -181,11 +192,13 @@ module ArnoldPipeline
           tier_number: tier_num
         ) do
           tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:, repo_context:,
-                               acceptance_criteria_summary:, verification_summary:)
+                               acceptance_criteria_summary:, verification_summary:,
+                               test_execution_summary:)
         end
       else
         tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:, repo_context:,
-                             acceptance_criteria_summary:, verification_summary:)
+                             acceptance_criteria_summary:, verification_summary:,
+                             test_execution_summary:)
       end
 
       if result
@@ -254,11 +267,13 @@ module ArnoldPipeline
           merge_tier_results!(pipeline_run, [task])
         end
 
-        # Re-run criteria check and gate check with empirical signals
+        # Re-run empirical checks and gate check
         all_tier_tasks = pipeline_run.tasks.in_tier(tier_num).to_a
         acceptance_criteria_summary = run_criteria_check!(pipeline_run, all_tier_tasks)
+        retry_test_execution_summary = test_execution_enabled? ? run_test_execution!(pipeline_run) : nil
         gate_result = run_tier_gate!(pipeline_run, tier_num, all_tier_tasks,
-                                     acceptance_criteria_summary:)
+                                     acceptance_criteria_summary:,
+                                     test_execution_summary: retry_test_execution_summary)
 
         # If gate passed or returned nil, we're done
         return if gate_result.nil? || gate_result["pass"]
@@ -299,6 +314,54 @@ module ArnoldPipeline
 
     def verification_enabled?
       ArnoldPipeline.configuration.verification_enabled
+    end
+
+    def test_execution_enabled?
+      ArnoldPipeline.configuration.test_execution_enabled
+    end
+
+    def run_test_execution!(pipeline_run)
+      cfg = ArnoldPipeline.configuration
+      repo_path = cfg.claude_code_repo_path
+      return nil unless repo_path && Dir.exist?(repo_path)
+
+      logger.info { "[Arnold] Running test execution..." }
+
+      runner_args = {
+        repo_path: repo_path,
+        test_command: cfg.test_command,
+        timeout: cfg.test_timeout,
+        boot_command: cfg.test_boot_command,
+        boot_timeout: cfg.test_boot_timeout
+      }
+
+      if event_recorder
+        result = event_recorder.timed(
+          event_type: :test_execution, stage: "execution",
+          summary: ->(r) {
+            {
+              passed: r&.passed,
+              exit_code: r&.exit_code,
+              framework: r&.framework,
+              summary: r&.summary,
+              failure_count: r&.failures&.size || 0
+            }
+          }
+        ) do
+          TestExecution::TestRunner.call(**runner_args)
+        end
+      else
+        result = TestExecution::TestRunner.call(**runner_args)
+      end
+
+      status = result.passed ? "PASSED" : "FAILED"
+      logger.info { "[Arnold] Test execution #{status}: #{result.summary}" }
+      result.failures.each { |f| logger.warn { "[Arnold] Test failure: #{f[:name]}: #{f[:message]}" } } unless result.passed
+
+      result.to_gate_summary
+    rescue => e
+      logger.warn { "[Arnold] Test execution failed (non-fatal): #{e.class}: #{e.message}" }
+      nil
     end
 
     def run_verification!(pipeline_run)

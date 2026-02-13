@@ -70,6 +70,17 @@ module ArnoldPipeline
             work. Create corrective tasks targeting the specific failure (setup, boot, or
             health check).
 
+          ## Test Execution Results
+
+          When test results are provided, they represent the project's own test suite
+          running after this tier's merge. Treat them as empirical evidence:
+          - If tests PASSED: the implementation satisfies its own test suite.
+          - If tests FAILED: focus corrective tasks on fixing specific test failures
+            rather than vague alignment concerns. Each failure includes the test name,
+            message, and location — use these to create targeted corrective tasks.
+          - If test execution had an error (timeout, boot failure, no test suite):
+            evaluate whether this is a critical issue or expected for the current tier.
+
           ## Incremental Pipeline Awareness
 
           This pipeline may be running incrementally on a repository that already contains
@@ -86,7 +97,8 @@ module ArnoldPipeline
       end
 
       def self.user_prompt(tier_number:, task_summaries:, diffs:, comments: "", repo_context: nil,
-                           acceptance_criteria_summary: nil, verification_summary: nil)
+                           acceptance_criteria_summary: nil, verification_summary: nil,
+                           test_execution_summary: nil)
         prompt = <<~PROMPT
           ## Tier #{tier_number} Gate Review
 
@@ -111,6 +123,14 @@ module ArnoldPipeline
             ### Verification Results
             #{verification_summary}
           VERIFICATION
+        end
+
+        if test_execution_summary.present?
+          prompt += <<~TEST_EXECUTION
+
+            ### Test Execution Results
+            #{test_execution_summary}
+          TEST_EXECUTION
         end
 
         if repo_context.present?

@@ -26,7 +26,9 @@ module ArnoldPipeline
                   :llm_request_timeout,
                   :repo_context_scan_patterns, :repo_context_scan_files,
                   :verification_enabled, :verification_timeout,
-                  :verification_health_check_retries, :verification_health_check_interval
+                  :verification_health_check_retries, :verification_health_check_interval,
+                  :test_execution_enabled, :test_command, :test_timeout,
+                  :test_boot_command, :test_boot_timeout
     attr_writer   :llm_provider, :llm_api_key, :llm_model
 
     def initialize
@@ -67,6 +69,11 @@ module ArnoldPipeline
       @verification_timeout                    = 120
       @verification_health_check_retries       = 10
       @verification_health_check_interval      = 3
+      @test_execution_enabled                  = false
+      @test_command                            = nil
+      @test_timeout                            = 120
+      @test_boot_command                       = nil
+      @test_boot_timeout                       = 60
     end
 
     def llm_provider
@@ -91,6 +98,7 @@ module ArnoldPipeline
       validate_max_tier_retries!
       validate_workflow_branch_pattern!
       validate_verification_config!
+      validate_test_execution_config!
       true
     end
 
@@ -160,6 +168,16 @@ module ArnoldPipeline
 
       unless @verification_health_check_interval.is_a?(Integer) && @verification_health_check_interval > 0
         raise ConfigurationError, "verification_health_check_interval must be a positive integer."
+      end
+    end
+
+    def validate_test_execution_config!
+      unless @test_timeout.is_a?(Integer) && @test_timeout > 0
+        raise ConfigurationError, "test_timeout must be a positive integer."
+      end
+
+      unless @test_boot_timeout.is_a?(Integer) && @test_boot_timeout > 0
+        raise ConfigurationError, "test_boot_timeout must be a positive integer."
       end
     end
 

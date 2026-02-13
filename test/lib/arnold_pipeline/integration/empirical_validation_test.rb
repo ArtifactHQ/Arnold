@@ -8,6 +8,9 @@ require "arnold_pipeline/verification/verification_result"
 require "arnold_pipeline/verification/verification_runner"
 require "arnold_pipeline/verification/recipe_verification_extractor"
 require "arnold_pipeline/prompts/tier_gate"
+require "arnold_pipeline/test_execution/test_result"
+require "arnold_pipeline/test_execution/test_result_parser"
+require "arnold_pipeline/test_execution/test_runner"
 
 module ArnoldPipeline
   class EmpiricalValidationIntegrationTest < ActiveSupport::TestCase
@@ -39,6 +42,7 @@ module ArnoldPipeline
         c.github_repo = "owner/repo"
         c.tier_gate_enabled = true
         c.verification_enabled = false
+        c.test_execution_enabled = false
       end
     end
 
@@ -419,6 +423,286 @@ module ArnoldPipeline
       })
 
       assert_nil result
+    end
+
+    # --- Test execution configuration defaults ---
+
+    test "test_execution_enabled defaults to false" do
+      config = Configuration.new
+      assert_equal false, config.test_execution_enabled
+    end
+
+    test "test_command defaults to nil" do
+      config = Configuration.new
+      assert_nil config.test_command
+    end
+
+    test "test_timeout defaults to 120" do
+      config = Configuration.new
+      assert_equal 120, config.test_timeout
+    end
+
+    test "test_boot_command defaults to nil" do
+      config = Configuration.new
+      assert_nil config.test_boot_command
+    end
+
+    test "test_boot_timeout defaults to 60" do
+      config = Configuration.new
+      assert_equal 60, config.test_boot_timeout
+    end
+
+    test "validate! raises on invalid test_timeout" do
+      config = Configuration.new
+      config.llm_api_key = "test"
+      config.github_token = "test"
+      config.github_repo = "owner/repo"
+      config.test_timeout = 0
+
+      error = assert_raises(ConfigurationError) { config.validate! }
+      assert_match(/test_timeout/, error.message)
+    end
+
+    test "validate! raises on invalid test_boot_timeout" do
+      config = Configuration.new
+      config.llm_api_key = "test"
+      config.github_token = "test"
+      config.github_repo = "owner/repo"
+      config.test_boot_timeout = -1
+
+      error = assert_raises(ConfigurationError) { config.validate! }
+      assert_match(/test_boot_timeout/, error.message)
+    end
+
+    test "validate! passes with valid test execution config" do
+      config = Configuration.new
+      config.llm_api_key = "test"
+      config.github_token = "test"
+      config.github_repo = "owner/repo"
+      config.test_execution_enabled = true
+      config.test_command = "bin/rails test"
+      config.test_timeout = 180
+      config.test_boot_timeout = 30
+
+      assert config.validate!
+    end
+
+    # --- Test execution event type ---
+
+    test "test_execution event type exists" do
+      pipeline_run = PipelineRun.create!(nl_input: "test")
+      event = pipeline_run.pipeline_events.create!(
+        event_type: :test_execution,
+        stage: "execution",
+        summary: { passed: true, exit_code: 0, framework: "minitest", failure_count: 0 }
+      )
+
+      assert event.test_execution?
+      assert_equal 17, PipelineEvent.event_types["test_execution"]
+    end
+
+    # --- Test execution prompt integration ---
+
+    test "tier gate system prompt includes test execution section" do
+      prompt = ArnoldPipeline::Prompts::TierGate.system_prompt
+      assert_includes prompt, "Test Execution Results"
+      assert_includes prompt, "focus corrective tasks on fixing specific test failures"
+    end
+
+    test "user_prompt includes test execution summary when provided" do
+      prompt = ArnoldPipeline::Prompts::TierGate.user_prompt(
+        tier_number: 1,
+        task_summaries: "- Build auth",
+        diffs: "diff",
+        test_execution_summary: "## Test Execution Results\n**Overall: FAILED**\n- test_login: Expected 200, got 401"
+      )
+      assert_includes prompt, "### Test Execution Results"
+      assert_includes prompt, "test_login"
+    end
+
+    test "user_prompt omits test execution summary when nil" do
+      prompt = ArnoldPipeline::Prompts::TierGate.user_prompt(
+        tier_number: 1,
+        task_summaries: "- Build auth",
+        diffs: "diff",
+        test_execution_summary: nil
+      )
+      refute_includes prompt, "### Test Execution Results"
+    end
+
+    # --- TierGateCheck agent passes test_execution_summary ---
+
+    test "tier_gate_check.call accepts test_execution_summary" do
+      captured_kwargs = nil
+      @tier_gate_check.stubs(:call).with { |**kwargs|
+        captured_kwargs = kwargs
+        true
+      }.returns({
+        "pass" => true,
+        "issues" => [],
+        "context_summary" => "Done.",
+        "corrective_tasks" => []
+      })
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        external_id: "42", status: :completed,
+        result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+                   test_execution_summary: "## Test Execution Results\n**Overall: PASSED**")
+
+      assert_not_nil captured_kwargs
+      assert_equal "## Test Execution Results\n**Overall: PASSED**", captured_kwargs[:test_execution_summary]
+    end
+
+    # --- Test execution engine integration ---
+
+    test "test_execution_enabled? returns false by default" do
+      refute @engine.send(:test_execution_enabled?)
+    end
+
+    test "test_execution_enabled? returns true when configured" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.test_execution_enabled = true
+      end
+
+      assert @engine.send(:test_execution_enabled?)
+    end
+
+    test "run_test_execution! returns gate summary when tests pass" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.test_execution_enabled = true
+        c.claude_code_repo_path = "/tmp/test_repo"
+      end
+
+      Dir.stubs(:exist?).returns(true)
+
+      passed_result = TestExecution::TestResult.new(
+        passed: true, exit_code: 0, summary: "14 tests, 0 failures", framework: "minitest"
+      )
+      TestExecution::TestRunner.stubs(:call).returns(passed_result)
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      summary = @engine.send(:run_test_execution!, pipeline_run)
+
+      assert_not_nil summary
+      assert_includes summary, "PASSED"
+      assert_includes summary, "14 tests, 0 failures"
+    end
+
+    test "run_test_execution! returns gate summary when tests fail" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.test_execution_enabled = true
+        c.claude_code_repo_path = "/tmp/test_repo"
+      end
+
+      Dir.stubs(:exist?).returns(true)
+
+      failed_result = TestExecution::TestResult.new(
+        passed: false, exit_code: 1,
+        summary: "14 tests, 2 failures",
+        failures: [{ name: "test_login", message: "Expected 200", location: "test/auth.rb:42" }],
+        framework: "minitest"
+      )
+      TestExecution::TestRunner.stubs(:call).returns(failed_result)
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      summary = @engine.send(:run_test_execution!, pipeline_run)
+
+      assert_not_nil summary
+      assert_includes summary, "FAILED"
+      assert_includes summary, "test_login"
+    end
+
+    test "run_test_execution! returns nil when repo_path not configured" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.test_execution_enabled = true
+        c.claude_code_repo_path = nil
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      summary = @engine.send(:run_test_execution!, pipeline_run)
+
+      assert_nil summary
+    end
+
+    test "run_test_execution! returns nil when repo_path does not exist" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.test_execution_enabled = true
+        c.claude_code_repo_path = "/nonexistent/path"
+      end
+
+      Dir.stubs(:exist?).with("/nonexistent/path").returns(false)
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      summary = @engine.send(:run_test_execution!, pipeline_run)
+
+      assert_nil summary
+    end
+
+    test "run_test_execution! rescues errors and returns nil" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.test_execution_enabled = true
+        c.claude_code_repo_path = "/tmp/test_repo"
+      end
+
+      Dir.stubs(:exist?).returns(true)
+      TestExecution::TestRunner.stubs(:call).raises(RuntimeError, "unexpected error")
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      summary = @engine.send(:run_test_execution!, pipeline_run)
+
+      assert_nil summary
+    end
+
+    test "run_test_execution! passes config values to TestRunner" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.test_execution_enabled = true
+        c.claude_code_repo_path = "/tmp/test_repo"
+        c.test_command = "custom test"
+        c.test_timeout = 300
+        c.test_boot_command = "bin/setup"
+        c.test_boot_timeout = 90
+      end
+
+      Dir.stubs(:exist?).returns(true)
+
+      passed_result = TestExecution::TestResult.new(
+        passed: true, exit_code: 0, summary: "ok"
+      )
+
+      TestExecution::TestRunner.expects(:call).with(
+        repo_path: "/tmp/test_repo",
+        test_command: "custom test",
+        timeout: 300,
+        boot_command: "bin/setup",
+        boot_timeout: 90
+      ).returns(passed_result)
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      @engine.send(:run_test_execution!, pipeline_run)
     end
   end
 end
