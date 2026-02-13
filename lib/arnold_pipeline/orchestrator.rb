@@ -9,6 +9,7 @@ require "arnold_pipeline/tier_execution_engine"
 require "arnold_pipeline/analysis_loop"
 require "arnold_pipeline/resume_inferrer"
 require "arnold_pipeline/pipeline_event_recorder"
+require "open3"
 
 module ArnoldPipeline
   class Orchestrator
@@ -215,6 +216,7 @@ module ArnoldPipeline
     end
 
     def execute!(pipeline_run)
+      record_baseline_sha!(pipeline_run)
       tier_execution_engine.execute_tiers!(pipeline_run)
     end
 
@@ -236,6 +238,21 @@ module ArnoldPipeline
         metadata: (pipeline_run.metadata || {}).merge("paused_at" => checkpoint.to_s)
       )
       pipeline_run.reload
+    end
+
+    def record_baseline_sha!(pipeline_run)
+      repo_path = ArnoldPipeline.configuration.claude_code_repo_path
+      return unless repo_path && Dir.exist?(repo_path)
+
+      metadata = pipeline_run.metadata || {}
+      return if metadata["baseline_commit_sha"].present?
+
+      sha, status = Open3.capture2("git", "-C", repo_path, "rev-parse", "HEAD")
+      return unless status.success?
+
+      pipeline_run.update!(metadata: metadata.merge("baseline_commit_sha" => sha.strip))
+    rescue => e
+      logger.warn { "[Arnold] Failed to capture baseline SHA: #{e.message}" }
     end
 
     def resolve_recipes(pipeline_run)

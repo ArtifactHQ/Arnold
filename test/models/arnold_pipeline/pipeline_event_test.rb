@@ -46,7 +46,7 @@ module ArnoldPipeline
         library_selection spec_generated tasks_broken
         tier_execution_started tier_execution_completed task_published task_result_fetched
         tier_gate_evaluated analysis_completed iteration_decision spec_delta_merged
-        pipeline_paused pipeline_failed pipeline_completed
+        pipeline_paused pipeline_failed pipeline_completed repo_context_scanned
       ]
       assert_equal expected, PipelineEvent.event_types.keys
     end

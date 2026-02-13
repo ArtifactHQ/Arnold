@@ -73,6 +73,59 @@ module ArnoldPipeline
         )
         refute_includes prompt, "### Task Comments / Agent Feedback"
       end
+
+      test "system_prompt includes incremental pipeline awareness" do
+        prompt = TierGate.system_prompt
+        assert_includes prompt, "Incremental Pipeline Awareness"
+        assert_includes prompt, "Repository Baseline"
+        assert_includes prompt, "ALREADY EXIST"
+      end
+
+      test "user_prompt includes repo baseline when repo_context provided" do
+        prompt = TierGate.user_prompt(
+          tier_number: 0,
+          task_summaries: "- Setup DB",
+          diffs: "diff",
+          repo_context: "  db/migrate/ (2 files): 001_create_users.rb, 002_create_posts.rb"
+        )
+        assert_includes prompt, "### Repository Baseline (files already in repo)"
+        assert_includes prompt, "Do NOT flag them as missing"
+        assert_includes prompt, "db/migrate/"
+        assert_includes prompt, "001_create_users.rb"
+      end
+
+      test "user_prompt omits repo baseline when repo_context is nil" do
+        prompt = TierGate.user_prompt(
+          tier_number: 0,
+          task_summaries: "- Setup DB",
+          diffs: "diff",
+          repo_context: nil
+        )
+        refute_includes prompt, "Repository Baseline"
+      end
+
+      test "user_prompt omits repo baseline when repo_context is empty" do
+        prompt = TierGate.user_prompt(
+          tier_number: 0,
+          task_summaries: "- Setup DB",
+          diffs: "diff",
+          repo_context: ""
+        )
+        refute_includes prompt, "Repository Baseline"
+      end
+
+      test "user_prompt places repo baseline before comments" do
+        prompt = TierGate.user_prompt(
+          tier_number: 0,
+          task_summaries: "- Setup DB",
+          diffs: "diff",
+          comments: "some feedback",
+          repo_context: "  config/ (1 files): routes.rb"
+        )
+        baseline_pos = prompt.index("Repository Baseline")
+        comments_pos = prompt.index("Task Comments / Agent Feedback")
+        assert baseline_pos < comments_pos, "Repo baseline should appear before comments"
+      end
     end
   end
 end

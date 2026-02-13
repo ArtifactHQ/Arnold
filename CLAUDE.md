@@ -87,7 +87,7 @@ Active development. The pipeline is fully implemented with:
 - 300+ tests (Minitest, 833 assertions, 0 failures)
 - Anthropic and OpenAI LLM providers
 - GitHub execution provider with tiered task management
-- Tier gate checking with context propagation
+- Tier gate checking with context propagation and baseline awareness
 - Workflow status monitoring
 - Pause/resume with stage checkpoints
 - Configurable iteration limits (1-10, default 3)

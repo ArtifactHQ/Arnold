@@ -4,7 +4,29 @@ require "arnold_pipeline/prompts/tier_gate"
 module ArnoldPipeline
   module Agents
     class TierGateCheck < BaseAgent
-      def call(tier_number:, task_summaries:, diffs:, comments: "")
+      RESPONSE_SCHEMA = {
+        name: "tier_gate_result",
+        schema: {
+          type: "object", additionalProperties: false,
+          required: ["pass", "issues", "context_summary", "corrective_tasks"],
+          properties: {
+            pass: { type: "boolean" },
+            issues: { type: "array", items: { type: "string" } },
+            context_summary: { type: "string" },
+            corrective_tasks: { type: "array", items: {
+              type: "object", additionalProperties: false,
+              required: ["title", "description", "labels"],
+              properties: {
+                title: { type: "string" },
+                description: { type: "string" },
+                labels: { type: "array", items: { type: "string" } }
+              }
+            } }
+          }
+        }
+      }.freeze
+
+      def call(tier_number:, task_summaries:, diffs:, comments: "", repo_context: nil)
         logger.info { "Running tier gate check for tier #{tier_number}" }
 
         system = Prompts::TierGate.system_prompt
@@ -12,15 +34,16 @@ module ArnoldPipeline
           tier_number:,
           task_summaries:,
           diffs:,
-          comments:
+          comments:,
+          repo_context:
         )
 
-        response = chat(
+        result = chat_json(
           messages: [{ role: :user, content: user }],
-          system: system
+          system: system,
+          schema: RESPONSE_SCHEMA
         )
 
-        result = parse_json(response)
         validate_result!(result)
         result
       end

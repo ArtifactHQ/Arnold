@@ -1,4 +1,5 @@
 require "arnold_pipeline/diff_summarizer"
+require "arnold_pipeline/repo_context_scanner"
 
 module ArnoldPipeline
   class TierExecutionEngine
@@ -145,6 +146,7 @@ module ArnoldPipeline
       }.join("\n")
       diffs = DiffSummarizer.call(tier_tasks.map(&:result_diff).compact)
       comments = format_task_comments(tier_tasks)
+      repo_context = build_repo_context(pipeline_run)
 
       result = if event_recorder
         event_recorder.timed(
@@ -159,10 +161,10 @@ module ArnoldPipeline
           payload: ->(r) { { diffs: diffs, gate_response: r } },
           tier_number: tier_num
         ) do
-          tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:)
+          tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:, repo_context:)
         end
       else
-        tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:)
+        tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:, repo_context:)
       end
 
       if result
@@ -269,6 +271,41 @@ module ArnoldPipeline
 
     def load_accumulated_context(pipeline_run)
       (pipeline_run.metadata || {})["tier_contexts"] || []
+    end
+
+    def build_repo_context(pipeline_run)
+      repo_path = ArnoldPipeline.configuration.claude_code_repo_path
+      return nil unless repo_path
+
+      file_list = RepoContextScanner.call(repo_path:)
+      return nil if file_list.nil? || file_list.empty?
+
+      formatted = format_repo_context(file_list)
+
+      event_recorder&.record(
+        event_type: :repo_context_scanned, stage: "tier_gate",
+        summary: { file_count: file_list.size, directories: file_list.map { |f| File.dirname(f) }.uniq },
+        payload: { file_list: file_list }
+      )
+
+      formatted
+    rescue => e
+      logger.warn { "[Arnold] Failed to build repo context: #{e.message}" }
+      nil
+    end
+
+    def format_repo_context(file_list)
+      grouped = file_list.group_by { |f| File.dirname(f) }
+      grouped.sort_by(&:first).map do |dir, files|
+        filenames = files.map { |f| File.basename(f) }.sort
+        if filenames.size > RepoContextScanner::MAX_FILES_PER_DIR
+          shown = filenames.first(RepoContextScanner::MAX_FILES_PER_DIR)
+          remaining = filenames.size - RepoContextScanner::MAX_FILES_PER_DIR
+          "  #{dir}/ (#{filenames.size} files): #{shown.join(', ')} ... and #{remaining} more"
+        else
+          "  #{dir}/ (#{filenames.size} files): #{filenames.join(', ')}"
+        end
+      end.join("\n")
     end
 
     def build_prior_context(tier_contexts)

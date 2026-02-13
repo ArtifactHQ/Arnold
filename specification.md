@@ -226,16 +226,50 @@ After each tier completes, results are merged before the next tier begins.
 - WHEN the TierGateCheck agent evaluates the merged diffs and task summaries.
 - THEN it returns a pass/fail verdict, a context_summary, and optionally corrective_tasks.
 
-#### Scenario: Tier Gate Failure with Retry
+#### Scenario: Tier Gate Failure with Retry [SPEC-TIER-004]
 - GIVEN a tier that failed the gate check.
 - AND retry_count is less than max_tier_retries (default 2, range 0-5).
 - WHEN the system retries.
-- THEN corrective tasks from the gate result are created at the same tier, executed, merged, and re-evaluated.
+- THEN corrective tasks from the gate result are created at the same tier, executed sequentially (one at a time with merge between each), and re-evaluated.
+- AND each corrective task branches from the updated master branch (including changes from the previous corrective task's merge).
+- AND task summaries sent to the tier gate reviewer are annotated with `[FAILED - EMPTY DIFF]` for tasks that completed with exit code 0 but no code changes, or `[FAILED]` for other failures.
 
 #### Scenario: Tier Gate Retry Exhaustion
 - GIVEN a tier that has failed the gate check max_tier_retries times.
 - WHEN the retry limit is reached.
 - THEN the pipeline is paused with status "paused", metadata records the tier_gate_failure details, and a TierGateError is raised.
+
+#### Scenario: Empty Diff Detection (Claude Code Provider) [SPEC-TIER-005]
+- GIVEN a task executed by the Claude Code provider.
+- AND the Claude CLI exits with code 0 (success).
+- WHEN the captured diff from the worktree branch is empty.
+- THEN the task result is marked as `success: false` with error "Task completed with exit code 0 but produced no code changes".
+- AND the task is eligible for tier gate corrective task generation.
+
+#### Scenario: Baseline-Aware Tier Gate [SPEC-TIER-006]
+- GIVEN a pipeline runs on a repository with existing files from a prior pipeline run.
+- AND `claude_code_repo_path` is configured with a valid git repository path.
+- WHEN the Orchestrator's `execute!` method begins.
+- THEN the baseline commit SHA is recorded in pipeline metadata via `record_baseline_sha!` using `git rev-parse HEAD`.
+- AND when a tier gate check evaluates diffs, the TierExecutionEngine invokes `RepoContextScanner.call(repo_path:)` to scan existing tracked files.
+- AND the scanner uses `git ls-tree` to list files matching `repo_context_scan_patterns` (default: db/migrate/, config/, app/models/, app/controllers/, lib/) and `repo_context_scan_files` (default: Gemfile, config/routes.rb, config/database.yml, db/schema.rb, db/structure.sql).
+- AND the scanned file list is formatted with grouped directories (max 20 files shown per directory) and passed to `TierGateCheck` via the `repo_context:` parameter.
+- AND the tier gate prompt includes a "Repository Baseline" section instructing the gate reviewer to NOT flag existing files as missing.
+- AND a `repo_context_scanned` event is recorded in the pipeline audit trail with file_count and directory summary.
+
+#### Scenario: Baseline Recording is Idempotent
+- GIVEN a pipeline run already has `baseline_commit_sha` in its metadata (e.g., from a prior execution before pause).
+- WHEN `execute!` is called again during resume.
+- THEN `record_baseline_sha!` detects the existing SHA and does NOT overwrite it.
+- AND the same baseline SHA is preserved across resume cycles.
+
+#### Scenario: Graceful Degradation Without Repo Context
+- GIVEN `claude_code_repo_path` is nil or points to a non-existent directory.
+- OR `RepoContextScanner.call` fails (e.g., git command error).
+- WHEN tier gate check runs.
+- THEN the `repo_context:` parameter is nil.
+- AND the tier gate operates normally without a "Repository Baseline" section.
+- AND the pipeline continues execution without interruption.
 
 #### Scenario: Merge Conflict Resolution (Claude Code Provider)
 - GIVEN two tasks in the same tier that modify the same file (e.g., both adding routes to `config/routes.rb`).
@@ -449,6 +483,8 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | openspec_cli_path | String | "openspec" | None |
 | event_logging_enabled | Boolean | true | None |
 | verbose_event_logging | Boolean | false | None |
+| repo_context_scan_patterns | Array of Strings | nil (uses defaults) | None |
+| repo_context_scan_files | Array of Strings | nil (uses defaults) | None |
 
 ### PipelineRun State Machine
 

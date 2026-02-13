@@ -413,6 +413,85 @@ module ArnoldPipeline
       refute_includes captured_summaries, "[FAILED"
     end
 
+    # --- Repo context in tier gate ---
+
+    test "run_tier_gate! passes repo_context when claude_code_repo_path is set" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = File.expand_path("../../..", __dir__)
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        external_id: "42", status: :completed,
+        result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      captured_context = nil
+      @tier_gate_check.stubs(:call).with { |**kwargs|
+        captured_context = kwargs[:repo_context]
+        true
+      }.returns({ "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => [] })
+
+      @engine.send(:run_tier_gate!, pipeline_run, 0, [task])
+
+      assert_not_nil captured_context, "repo_context should be passed to tier gate check"
+      assert_includes captured_context, "lib/", "Should include files from the repo"
+    end
+
+    test "run_tier_gate! passes nil repo_context when no repo_path configured" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = nil
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        external_id: "42", status: :completed,
+        result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      captured_context = :not_set
+      @tier_gate_check.stubs(:call).with { |**kwargs|
+        captured_context = kwargs[:repo_context]
+        true
+      }.returns({ "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => [] })
+
+      @engine.send(:run_tier_gate!, pipeline_run, 0, [task])
+
+      assert_nil captured_context, "repo_context should be nil when no repo_path configured"
+    end
+
+    # --- format_repo_context ---
+
+    test "format_repo_context groups files by directory" do
+      file_list = %w[
+        app/models/user.rb
+        app/models/post.rb
+        config/routes.rb
+        db/migrate/001_create_users.rb
+      ]
+      result = @engine.send(:format_repo_context, file_list)
+
+      assert_includes result, "app/models/ (2 files): post.rb, user.rb"
+      assert_includes result, "config/ (1 files): routes.rb"
+      assert_includes result, "db/migrate/ (1 files): 001_create_users.rb"
+    end
+
+    test "format_repo_context caps long directories" do
+      file_list = (1..30).map { |i| "db/migrate/#{format('%03d', i)}_migration.rb" }
+      result = @engine.send(:format_repo_context, file_list)
+
+      assert_includes result, "db/migrate/ (30 files):"
+      assert_includes result, "... and 10 more"
+    end
+
     # --- Existing gate failure tests ---
 
     test "handle_tier_gate_failure! retries up to max_tier_retries then pauses" do

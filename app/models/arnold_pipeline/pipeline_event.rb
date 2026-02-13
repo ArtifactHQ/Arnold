@@ -18,7 +18,8 @@ module ArnoldPipeline
       spec_delta_merged: 10,
       pipeline_paused: 11,
       pipeline_failed: 12,
-      pipeline_completed: 13
+      pipeline_completed: 13,
+      repo_context_scanned: 14
     }
 
     belongs_to :pipeline_run
