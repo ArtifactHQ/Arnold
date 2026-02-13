@@ -24,6 +24,10 @@ framework:
     ActiveSupport for core extensions and utilities
   packaging: RubyGems or self-contained executable via Traveling Ruby
 
+verification:
+  setup_command: "bundle install"
+  run_command: "bundle exec <toolname> --help"
+
 sections:
   - name: Commands & Arguments
     description: >
@@ -83,6 +87,19 @@ sections:
       - Use interactive prompts for destructive actions (with --yes override)
       - Format structured data as tables or JSON (--format flag)
 
+  - name: Local Development
+    description: >
+      Dependency installation and immediate executability from the
+      project directory.
+    tools:
+      - Bundler (dependency management)
+      - bin/ executable (entry point)
+    guidance:
+      - bundle install is the only setup step required
+      - Provide a bin/ executable that works immediately after install
+      - Include --help output that demonstrates all available commands
+      - No database or background processes needed
+
   - name: Testing
     description: >
       Unit tests for logic, integration tests for command execution,
@@ -96,6 +113,7 @@ sections:
       - Test full command invocations with Aruba for integration coverage
       - Verify exit codes, stdout content, and stderr content
       - Test config file parsing and precedence rules
+    tier_placement: final
 
   - name: Distribution & Packaging
     description: >
@@ -109,3 +127,4 @@ sections:
       - Pin dependencies tightly in gemspec
       - Test on Ruby versions you claim to support
       - Provide Homebrew formula or install script if targeting non-Ruby users
+    phase: post_pipeline

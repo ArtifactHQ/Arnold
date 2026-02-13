@@ -111,7 +111,8 @@ module ArnoldPipeline
             keywords: data["keywords"] || [],
             description: data["description"]&.strip,
             framework: data["framework"] || {},
-            sections: data["sections"] || []
+            sections: data["sections"] || [],
+            verification: data["verification"] || {}
           )
         end
       end

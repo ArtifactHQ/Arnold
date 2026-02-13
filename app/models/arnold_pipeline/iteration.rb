@@ -3,6 +3,7 @@ module ArnoldPipeline
     DECISIONS = %w[iterate_tasks iterate_spec done].freeze
 
     belongs_to :pipeline_run
+    has_many :spec_deltas, dependent: :destroy
 
     validates :number, presence: true, numericality: { greater_than: 0 }
     validates :decision, inclusion: { in: DECISIONS }, allow_nil: true

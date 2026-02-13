@@ -48,12 +48,21 @@ module ArnoldPipeline
         assert_respond_to recipe, :keywords
         assert_respond_to recipe, :framework
         assert_respond_to recipe, :sections
+        assert_respond_to recipe, :verification
       end
 
       test "recipe framework loaded as Hash with expected keys" do
         recipe = @manager.find_recipe("Build a responsive web dashboard")
         assert_kind_of Hash, recipe.framework
         assert recipe.framework.key?("primary"), "Expected framework to have 'primary' key"
+      end
+
+      test "recipe verification loaded as Hash with expected keys" do
+        recipe = @manager.find_recipe("Build a responsive web dashboard")
+        assert_kind_of Hash, recipe.verification
+        assert_equal "bin/setup", recipe.verification["setup_command"]
+        assert_equal "bin/dev", recipe.verification["run_command"]
+        assert_equal "http://localhost:3000/up", recipe.verification["health_check"]
       end
 
       test "find_persona matches software architect keywords" do
@@ -230,6 +239,7 @@ module ArnoldPipeline
           framework:
             primary: Custom Framework
           sections: []
+          verification: {}
         YAML
 
         manager = Manager.new(library_path: custom_path)

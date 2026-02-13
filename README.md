@@ -41,14 +41,22 @@ arnold resume 1                        # Continue from where you left off
 arnold resume 1 --stop-after executed  # Resume and pause again at a later stage
 ```
 
+**Optional: OpenSpec CLI (improves spec iteration quality):**
+
+```bash
+npm install -g @fission-ai/openspec   # Requires Node.js
+```
+
+When installed, Arnold uses OpenSpec's merge engine during `iterate_spec` decisions for surgical spec updates (adding, modifying, or removing individual requirements). Without it, Arnold falls back to appending structured sections — functional but less precise. Disable explicitly with `openspec_enabled: false` in config.
+
 That's it. Arnold will:
 1. Match your description to the best persona and recipe from its library
-2. Generate a structured specification
+2. Generate a structured specification using `### Requirement:` blocks with GIVEN/WHEN/THEN scenarios and `[REQ-*]` IDs for traceability
 3. Break it into 5-20 dependency-ordered tasks
 4. Dispatch tasks to the execution provider (GitHub Issues or Claude Code CLI)
 5. Collect results (poll for PRs on GitHub, or capture diffs immediately with Claude Code)
 6. Analyze results against the spec
-7. Iterate up to 3 times until aligned (or flag for human review)
+7. Iterate up to 3 times until aligned — spec changes are structured deltas (added/modified/removed requirements), not free-text appends, so specs stay clean across iterations. <70% confidence flags for human review.
 
 You can stop the pipeline at any stage and resume later — see [Partial Execution & Resume](#partial-execution--resume).
 
@@ -203,6 +211,8 @@ arnold tree                          # Print command tree
 # Options for `spec`:
 #   -o, --output FILE  Write to file instead of stdout
 #   --json             Output structured JSON data instead of markdown
+#   --history          Show revision history (version, change source, delta summary)
+#   --version N        Show spec content at a specific version
 
 # Options for `tasks`:
 #   -o, --output FILE  Write to file instead of stdout
@@ -219,6 +229,18 @@ arnold spec 1 --json             # Print structured JSON instead
 arnold spec 1 -o spec.md         # Write markdown to file
 arnold spec 1 --json -o spec.json  # Write JSON to file
 ```
+
+### Spec Revision History
+
+Every spec change is snapshotted as a revision — both the initial generation and each `iterate_spec` refinement. Use `--history` to see the timeline and `--version` to retrieve a specific snapshot:
+
+```bash
+arnold spec 1 --history               # Show revision timeline with delta summaries
+arnold spec 1 --version 2             # Show spec content at version 2
+arnold spec 1 --version 2 -o v2.md    # Write version 2 to file
+```
+
+Each revision records its `change_source` (`spec_generation` or `iterate_spec`) and a summary of what changed. When the analysis agent refines the spec, individual changes are tracked as deltas (added/modified/removed requirements with rationale), so you can see exactly what shifted between iterations.
 
 ### Exporting Tasks
 
@@ -257,6 +279,8 @@ Each task includes position, title, tier, priority, status, labels, dependencies
 | `max_tier_retries` | `2` | — | Corrective retries per tier before pausing (0-5) |
 | `workflow_status_enabled` | `true` | — | Check GitHub Actions workflow status before resolving tasks |
 | `workflow_branch_pattern` | `/issue[-_]?\d+/i` | — | Regex to match branch names when checking workflow runs |
+| `openspec_enabled` | `true` | — | Use OpenSpec CLI for spec merging when available. Set `false` to use append fallback (no Node.js needed) |
+| `openspec_cli_path` | `"openspec"` | — | Path to OpenSpec CLI binary |
 | `library_path` | built-in | — | Custom personas/recipes dir |
 
 ## Architecture
@@ -268,7 +292,7 @@ NL Input
 Library Manager ── find persona + recipe
   |
   v
-Spec Generator ── NL + persona + recipe --> structured Markdown spec
+Spec Generator ── NL + persona + recipe --> OpenSpec-format Markdown (### Requirement: headers, GIVEN/WHEN/THEN scenarios, [REQ-*] IDs)
   |
   v
 Task Breaker ── spec --> 5-20 ordered tasks (JSON)
@@ -287,7 +311,7 @@ Analyzer ── diffs + spec --> decision + confidence
   |
   |-- "done" (>=70% confidence) --> merge results, complete
   |-- "iterate_tasks" --> replace tasks, re-execute
-  |-- "iterate_spec" --> refine spec, re-break, re-execute
+  |-- "iterate_spec" --> structured deltas (add/modify/remove requirements), re-break, re-execute
   |
   v
 Max 3 iterations, then stop. <70% confidence flags for human review.

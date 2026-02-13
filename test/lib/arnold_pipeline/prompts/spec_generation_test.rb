@@ -39,11 +39,12 @@ module ArnoldPipeline
       test "system_prompt includes per-feature template elements" do
         prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, domain_type: @domain_type)
         assert_includes prompt, "Context:"
-        assert_includes prompt, "User Story:"
-        assert_includes prompt, "Functional Requirements:"
-        assert_includes prompt, "Behavioral Specifications:"
-        assert_includes prompt, "Corner Cases:"
-        assert_includes prompt, "Acceptance Criteria:"
+        assert_includes prompt, "### Requirement:"
+        assert_includes prompt, "#### Scenario:"
+        assert_includes prompt, "GIVEN"
+        assert_includes prompt, "WHEN"
+        assert_includes prompt, "THEN"
+        assert_includes prompt, "REQ-"
       end
 
       test "system_prompt includes domain type lens" do
@@ -131,7 +132,7 @@ module ArnoldPipeline
       end
 
       test "system_prompt handles recipe with empty framework" do
-        recipe = Library::Recipe.new(name: "Test", type: "test", keywords: [], description: "A test", framework: {}, sections: [])
+        recipe = Library::Recipe.new(name: "Test", type: "test", keywords: [], description: "A test", framework: {}, sections: [], verification: {})
         prompt = SpecGeneration.system_prompt(persona: @persona, recipe: recipe, domain_type: @domain_type)
         refute_includes prompt, "Framework stack:"
         assert_includes prompt, "Recipe: Test"
@@ -159,6 +160,12 @@ module ArnoldPipeline
       test "user_prompt includes nl_input" do
         prompt = SpecGeneration.user_prompt(nl_input: "Build a fitness tracker")
         assert_includes prompt, "Build a fitness tracker"
+      end
+
+      test "system_prompt excludes post_pipeline sections" do
+        prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, domain_type: @domain_type)
+        refute_includes prompt, "### Deployment & Infrastructure"
+        assert_includes prompt, "### Models & Database"
       end
     end
   end

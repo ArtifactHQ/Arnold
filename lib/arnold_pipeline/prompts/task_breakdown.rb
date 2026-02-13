@@ -10,7 +10,9 @@ module ArnoldPipeline
 
           The specification follows a 10-section structure:
           1. Overview (classification, vision, goals, target users, boundaries, assumptions)
-          2. Features (with per-feature context, user stories, requirements, behaviors, corner cases, acceptance criteria)
+          2. Features — organized by functional area using `## [Area Name]` headers.
+             Each area contains `### Requirement: [Name]` blocks with `#### Scenario:` blocks
+             in GIVEN/WHEN/THEN format. Map tasks to specific requirements by name.
           3. Entities & Data Model (attributes, relationships, lifecycle states, business rules)
           4. User Journeys (new user, core, edge case, recovery flows)
           5. Views & Interfaces (screens, actions, navigation, responsive variations)
@@ -46,22 +48,39 @@ module ArnoldPipeline
           - For each spec section, name the specific tools and libraries that apply to
             that section's tasks (e.g., ActiveRecord for models, Turbo Streams for real-time)
 
+          # Local Execution Requirements
+
+          The generated project MUST be immediately runnable after setup:
+          - The bootstrap task MUST produce a working `bin/setup` that installs all
+            dependencies and prepares the database in one command
+          - Use SQLite for the development database (Rails 8 default) — zero external dependencies
+          - Use Solid Queue, Solid Cache, Solid Cable — no Redis or Memcached
+          - All external integrations MUST work without configuration in development
+            (use test/mock modes or graceful degradation)
+
           # Output Format
 
-          Return a JSON array fenced with ```json, where each element has:
+          Your response will be validated against a JSON schema. Return valid JSON matching this structure:
           {
-            "title": "Short descriptive title",
-            "description": "Detailed description with acceptance criteria",
-            "priority": 0,
-            "labels": ["backend", "database"],
-            "position": 0,
-            "depends_on": [],
-            "section_ref": "Features > Authentication"
+            "tasks": [
+              {
+                "title": "Short descriptive title",
+                "description": "Detailed description with acceptance criteria",
+                "priority": 0,
+                "labels": ["backend", "database"],
+                "position": 0,
+                "depends_on": [],
+                "section_ref": "Features > Authentication"
+              }
+            ]
           }
 
           The "position" field determines execution order (0-indexed).
           The "depends_on" field lists positions of tasks that must complete first.
-          The "section_ref" field references which spec section this task implements (optional but recommended for traceability).
+          The "section_ref" field references which spec section and requirement this task
+          implements (e.g., "Authentication > User Registration"). Use the format
+          "[Area Name] > [Requirement Name]" for Features section tasks. This enables
+          traceability between tasks and specific requirements.
         PROMPT
       end
 
@@ -90,6 +109,9 @@ module ArnoldPipeline
         sr = supporting_recipes_brief(supporting_recipes)
         parts << "" << sr unless sr.empty?
 
+        vc = verification_context(recipe)
+        parts << "" << vc unless vc.empty?
+
         parts << ""
         parts << "Use these tools, gems, generators, and framework patterns when writing task descriptions."
         parts.join("\n")
@@ -108,7 +130,8 @@ module ArnoldPipeline
       def self.sections_detail(recipe)
         return "" if recipe.sections.empty?
 
-        recipe.sections.map { |s| format_section(s) }.join("\n\n")
+        pipeline_sections = recipe.sections.reject { |s| s["phase"] == "post_pipeline" }
+        pipeline_sections.map { |s| format_section(s) }.join("\n\n")
       end
 
       def self.format_section(section)
@@ -127,6 +150,11 @@ module ArnoldPipeline
           parts << ""
           parts << "Implementation guidance:"
           guidance.each { |g| parts << "- #{g}" }
+        end
+
+        if section["tier_placement"]
+          parts << ""
+          parts << "Tier placement: #{section['tier_placement']} (tasks from this section should be placed in the #{section['tier_placement']} execution tier)"
         end
 
         parts.join("\n")
@@ -148,7 +176,20 @@ module ArnoldPipeline
         parts.join("\n")
       end
 
-      private_class_method :technology_context, :framework_section, :sections_detail, :format_section, :supporting_recipes_brief
+      def self.verification_context(recipe)
+        return "" if recipe.verification.nil? || recipe.verification.empty?
+
+        parts = ["## Verification"]
+        parts << "After all tasks complete, the project should be verifiable with:"
+        parts << "- Setup: `#{recipe.verification['setup_command']}`" if recipe.verification["setup_command"]
+        parts << "- Run: `#{recipe.verification['run_command']}`" if recipe.verification["run_command"]
+        parts << "- Health check: `#{recipe.verification['health_check']}`" if recipe.verification["health_check"]
+        parts << ""
+        parts << "Ensure the bootstrap task produces a project that passes these verification steps."
+        parts.join("\n")
+      end
+
+      private_class_method :technology_context, :framework_section, :sections_detail, :format_section, :supporting_recipes_brief, :verification_context
     end
   end
 end

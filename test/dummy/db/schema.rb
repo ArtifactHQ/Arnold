@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_02_06_165310) do
+ActiveRecord::Schema[8.1].define(version: 2026_02_10_000001) do
   create_table "arnold_pipeline_iterations", force: :cascade do |t|
     t.integer "confidence"
     t.json "corrective_data"
@@ -25,12 +25,55 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_06_165310) do
     t.index ["pipeline_run_id"], name: "index_arnold_pipeline_iterations_on_pipeline_run_id"
   end
 
+  create_table "arnold_pipeline_pipeline_events", force: :cascade do |t|
+    t.integer "pipeline_run_id", null: false
+    t.integer "event_type", null: false
+    t.string "stage", null: false
+    t.json "summary", null: false
+    t.json "payload"
+    t.float "duration_ms"
+    t.integer "iteration_number"
+    t.integer "tier_number"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["pipeline_run_id", "created_at"], name: "idx_pipeline_events_on_run_and_created_at"
+    t.index ["pipeline_run_id", "stage"], name: "idx_pipeline_events_on_run_and_stage"
+  end
+
   create_table "arnold_pipeline_pipeline_runs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.json "metadata"
     t.text "nl_input", null: false
     t.integer "status", default: 0, null: false
     t.datetime "updated_at", null: false
+  end
+
+  create_table "arnold_pipeline_spec_deltas", force: :cascade do |t|
+    t.integer "specification_id", null: false
+    t.integer "iteration_id", null: false
+    t.string "operation", null: false
+    t.string "section", null: false
+    t.string "requirement"
+    t.text "before_content"
+    t.text "after_content"
+    t.text "rationale"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["iteration_id"], name: "index_arnold_pipeline_spec_deltas_on_iteration_id"
+    t.index ["specification_id"], name: "index_arnold_pipeline_spec_deltas_on_specification_id"
+  end
+
+  create_table "arnold_pipeline_spec_revisions", force: :cascade do |t|
+    t.integer "specification_id", null: false
+    t.integer "version", null: false
+    t.text "content", null: false
+    t.json "structured_data"
+    t.string "change_source"
+    t.json "delta_summary"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["specification_id", "version"], name: "idx_spec_revisions_on_spec_and_version", unique: true
+    t.index ["specification_id"], name: "index_arnold_pipeline_spec_revisions_on_specification_id"
   end
 
   create_table "arnold_pipeline_specifications", force: :cascade do |t|
@@ -63,7 +106,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_06_165310) do
     t.index ["pipeline_run_id"], name: "index_arnold_pipeline_tasks_on_pipeline_run_id"
   end
 
+  add_foreign_key "arnold_pipeline_pipeline_events", "arnold_pipeline_pipeline_runs", column: "pipeline_run_id"
   add_foreign_key "arnold_pipeline_iterations", "arnold_pipeline_pipeline_runs", column: "pipeline_run_id"
+  add_foreign_key "arnold_pipeline_spec_deltas", "arnold_pipeline_iterations", column: "iteration_id"
+  add_foreign_key "arnold_pipeline_spec_deltas", "arnold_pipeline_specifications", column: "specification_id"
+  add_foreign_key "arnold_pipeline_spec_revisions", "arnold_pipeline_specifications", column: "specification_id"
   add_foreign_key "arnold_pipeline_specifications", "arnold_pipeline_pipeline_runs", column: "pipeline_run_id"
   add_foreign_key "arnold_pipeline_tasks", "arnold_pipeline_pipeline_runs", column: "pipeline_run_id"
 end

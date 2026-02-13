@@ -29,6 +29,7 @@ module ArnoldPipeline
     has_one :specification, dependent: :destroy
     has_many :tasks, dependent: :destroy
     has_many :iterations, dependent: :destroy
+    has_many :pipeline_events, dependent: :destroy
 
     validates :nl_input, presence: true
     validate :valid_status_transition, on: :update

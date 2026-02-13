@@ -21,6 +21,11 @@ framework:
   frontend: Hotwire (Turbo + Stimulus)
   deployment: Kamal 2
 
+verification:
+  setup_command: "bin/setup"
+  run_command: "bin/dev"
+  health_check: "http://localhost:3000/up"
+
 sections:
   - name: Core Features
     description: >
@@ -67,6 +72,23 @@ sections:
       - Use ActiveJob for async external calls that can be retried
       - Store API keys in Rails encrypted credentials
 
+  - name: Local Development
+    description: >
+      Bootstrapping scripts, development database, and single-command
+      startup for immediate local execution.
+    rails_tools:
+      - bin/setup (first-time dependency install and database preparation)
+      - bin/dev with Procfile.dev (multi-process startup)
+      - db/seeds.rb (demo data)
+    guidance:
+      - Use SQLite for development database — zero external dependencies
+      - Use Solid Queue, Solid Cache, Solid Cable — no Redis needed
+      - bin/setup must handle bundle install, db:prepare, and asset compilation
+      - Procfile.dev must list all processes (web, job worker)
+      - Create .env.example documenting any optional environment variables
+      - Include meaningful seed data with documented demo credentials
+      - Development MUST work with zero environment variables configured
+
   - name: Testing
     description: >
       Test strategy, coverage targets, and test data.
@@ -79,6 +101,7 @@ sections:
       - Test core user flows with system tests
       - Aim for confidence in deploy safety, not arbitrary coverage numbers
       - Keep test suite fast enough to run on every commit
+    tier_placement: final
 
   - name: Configuration & Deployment
     description: >
@@ -92,3 +115,4 @@ sections:
       - Store all secrets in encrypted credentials
       - Plan deployment strategy early, even for MVP
       - Set up basic error tracking and logging from the start
+    phase: post_pipeline

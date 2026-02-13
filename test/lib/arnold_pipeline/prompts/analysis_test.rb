@@ -80,6 +80,25 @@ module ArnoldPipeline
         refute_includes prompt, "## Task Comments / Agent Feedback"
       end
 
+      test "system_prompt includes delta format for iterate_spec" do
+        prompt = Analysis.system_prompt(persona: @persona)
+        assert_includes prompt, "deltas"
+        assert_includes prompt, '"operation": "added"'
+        assert_includes prompt, '"operation": "modified"'
+        assert_includes prompt, '"operation": "removed"'
+        assert_includes prompt, "GIVEN"
+        assert_includes prompt, "WHEN"
+        assert_includes prompt, "THEN"
+        assert_includes prompt, "### Requirement:"
+        assert_includes prompt, "#### Scenario:"
+      end
+
+      test "system_prompt includes requirement_coverage in output format" do
+        prompt = Analysis.system_prompt(persona: @persona)
+        assert_includes prompt, "requirement_coverage"
+        assert_includes prompt, "REQ-AUTH-001"
+      end
+
       test "user_prompt omits comments section when not provided" do
         prompt = Analysis.user_prompt(
           spec_content: "# Spec",

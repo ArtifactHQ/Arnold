@@ -13,7 +13,7 @@ The system MUST retrieve and apply relevant agent personas and application recip
 - GIVEN an NL input: "Build a todo list app with user authentication, real-time updates, and mobile responsiveness."  
 - AND a library containing personas (e.g., Software Architect) and recipes (e.g., Web App Recipe with sections for frontend, backend, database, auth).  
 - WHEN the Spec Generation Agent processes the input.  
-- THEN a structured specification document is produced in Markdown format with an embedded JSON metadata block, including sections for features, tech stack, data models, user flows, and edge cases, customized by the selected persona and recipe.
+- THEN a structured specification document is produced in Markdown format using OpenSpec conventions: `### Requirement:` headers with `[REQ-{DOMAIN}-{NNN}]` IDs, `#### Scenario:` blocks using GIVEN/WHEN/THEN format, and an embedded JSON metadata block. The document includes sections for features, tech stack, data models, user flows, and edge cases, customized by the selected persona and recipe.
 
 #### Scenario: Library Retrieval Failure
 - GIVEN an NL input that does not match any library items (e.g., highly niche domain).  
@@ -72,7 +72,7 @@ The loop SHALL use the execution provider's polling mechanism (async providers) 
 #### Scenario: Spec Iteration for Ambiguity
 - GIVEN analysis revealing spec vagueness (e.g., unclear user flow).
 - WHEN "iterate_spec" is decided.
-- THEN the spec is refined (e.g., adding clarified sections), re-run through Task Breakdown, and tasks are regenerated from the refined specification, replacing all existing tasks.
+- THEN the Analysis Agent produces structured deltas (added/modified/removed operations targeting specific requirements), the spec is refined via the delta merge chain, a SpecRevision snapshot is created, and the updated spec is re-run through Task Breakdown with tasks regenerated from the refined specification, replacing all existing tasks.
 
 #### Scenario: Loop Termination
 - GIVEN alignment achieved after iterations or max iterations reached.
@@ -109,9 +109,40 @@ The Analysis Agent checks the specification for these anti-patterns and reports 
 
 Confidence scores from the analysis drive the `needs_human_review` boolean on the Iteration model. When the overall confidence score is below 70%, the Iteration's `needs_human_review` field is automatically set to `true` via a `before_save` callback. This flag is queryable via `arnold_pipeline status ID --json`. Confidence does not gate execution -- all decisions are acted on regardless of score.
 
-#### Spec Versioning
+#### Spec Versioning and Delta Tracking [SPEC-DELTA-001]
 
-When an `iterate_spec` decision is made, the Specification model's `version` field is incremented (e.g., version 1 becomes version 2). This enables tracking how many times the spec has been refined through the feedback loop.
+When a specification changes (via initial generation or `iterate_spec` decisions), the Specification model's `version` field is incremented. Each version change is tracked through two models:
+
+**SpecRevision** — Immutable snapshots of the full specification content at each version. [SPEC-DELTA-002]
+- `version`: Integer, matches the Specification's version at time of snapshot (unique per specification).
+- `content`: Full spec Markdown text at this version.
+- `structured_data`: JSON metadata block at this version.
+- `change_source`: One of `"spec_generation"` (initial spec or re-generation) or `"iterate_spec"` (analysis-driven refinement).
+- `delta_summary`: JSON array of human-readable strings summarizing what changed (e.g., `"ADDED: Authentication > Password Reset"`).
+- The Orchestrator creates a SpecRevision after every `generate_spec!` call (change_source: `"spec_generation"`).
+- The AnalysisLoop creates a SpecRevision after every successful delta merge (change_source: `"iterate_spec"`).
+
+**SpecDelta** — Granular, per-requirement change records for `iterate_spec` decisions. [SPEC-DELTA-003]
+- `operation`: One of `"added"`, `"modified"`, or `"removed"`.
+- `section`: The functional area being changed (e.g., "Authentication").
+- `requirement`: The specific requirement name (required for `modified` and `removed` operations).
+- `before_content`: Previous requirement text (required for `modified`).
+- `after_content`: New requirement text (required for `added` and `modified`).
+- `rationale`: Explanation of why the change is needed.
+- Belongs to both a Specification and an Iteration.
+- Scopes: `additions`, `modifications`, `removals`, `by_section(name)`.
+
+The Analysis Agent prompt requests structured deltas in the `corrective_data.deltas` array when making `iterate_spec` decisions. Each delta targets one requirement in one section using the `### Requirement:` / `#### Scenario:` / GIVEN-WHEN-THEN format. If no structured deltas are returned, the system falls back to legacy free-text `spec_changes` appending.
+
+#### Spec Delta Merge Chain [SPEC-DELTA-004]
+
+When structured deltas are available, the system applies them through a three-tier fallback chain:
+
+1. **OpenSpec CLI merge** — If `openspec_enabled` is true and the OpenSpec CLI is available, the OpenspecBridge writes the base spec and delta files into an OpenSpec workspace, runs `openspec validate` and `openspec archive`, and reads back the merged result. This produces the highest-quality merge.
+2. **Structured append** (`append_deltas!`) — If OpenSpec merge fails or is disabled, deltas are formatted into `## ADDED Requirements`, `## MODIFIED Requirements`, and `## REMOVED Requirements` sections and appended to the spec.
+3. **Legacy append** (`legacy_append!`) — If no structured deltas exist (only free-text `spec_changes`), the text is appended under a `## Clarifications (Iteration)` header. This preserves backward compatibility.
+
+Each path increments the spec version and persists SpecDelta records (when structured deltas are available).
 
 ### Requirement: Library Management
 The system SHALL maintain a library of agent personas and application recipes, stored as YAML files with keyword-based retrieval.
@@ -121,6 +152,52 @@ The system SHOULD support dynamic selection based on NL input keyword matching. 
 - GIVEN an NL input.
 - WHEN keyword matching is performed against the library's persona and recipe keywords.
 - THEN the most relevant persona (e.g., Domain Expert for fintech) and recipe (e.g., API Service) are retrieved and injected into prompts.
+
+### Requirement: Recipe Structural Metadata [SPEC-LIBRARY-002]
+Recipes MAY include structural metadata on their sections to guide task breakdown and execution ordering.
+
+#### Scenario: Phase Filtering Excludes Post-Pipeline Sections
+- GIVEN a recipe with a section tagged `phase: post_pipeline` (e.g., Deployment & Infrastructure).
+- WHEN the task breakdown prompt is constructed.
+- THEN sections with `phase: post_pipeline` are excluded from the prompt, so the agent does not generate deployment tasks that cannot be executed in the pipeline.
+
+#### Scenario: Tier Placement Hints Guide Task Ordering
+- GIVEN a recipe section with `tier_placement: final` (e.g., Testing & Quality).
+- WHEN the task breakdown prompt includes that section.
+- THEN the prompt instructs the agent to place tasks from that section in the final execution tier, after all other implementation tiers.
+
+#### Scenario: Verification Criteria Inform Bootstrap Tasks
+- GIVEN a recipe with a `verification` block containing `setup_command`, `run_command`, and/or `health_check`.
+- WHEN the task breakdown prompt is constructed.
+- THEN the verification steps are included in the prompt so the agent ensures the bootstrap task produces a project that passes those checks.
+
+### Requirement: OpenSpec Integration [SPEC-OPENSPEC-001]
+The system SHALL support integration with the OpenSpec CLI (`@fission-ai/openspec`) for structured spec merging during `iterate_spec` decisions.
+The system MUST gracefully degrade when the OpenSpec CLI is not installed, falling back to the structured append or legacy append merge strategies.
+
+#### Scenario: Successful OpenSpec Merge
+- GIVEN a specification and structured deltas from an `iterate_spec` decision.
+- AND `openspec_enabled` is true and the OpenSpec CLI is installed at `openspec_cli_path`.
+- WHEN the OpenspecBridge processes the deltas.
+- THEN it creates a temporary workspace, writes the base spec and delta files, runs `openspec validate` followed by `openspec archive --yes`, and returns the merged spec content.
+
+#### Scenario: OpenSpec CLI Not Installed
+- GIVEN `openspec_enabled` is true but the CLI binary is not found.
+- WHEN the OpenspecBridge attempts to run the CLI.
+- THEN it logs a warning and returns nil, causing the system to fall back to the structured append strategy.
+
+#### Scenario: OpenSpec Validation Failure
+- GIVEN a delta that fails `openspec validate`.
+- WHEN validation returns a non-zero exit code.
+- THEN the merge is skipped with a warning, and the system falls back to structured append.
+
+#### OpenspecBridge Service
+
+The `OpenspecBridge` manages the lifecycle of a temporary OpenSpec workspace:
+- `with_workspace` class method creates a temp directory, scaffolds the OpenSpec structure (`specs/`, `changes/`, `config.yaml`), yields the bridge instance, and cleans up on completion.
+- `write_spec!` writes the current specification content into the workspace.
+- `write_delta_and_merge!` formats deltas into OpenSpec-compatible Markdown (with `## ADDED Requirements`, `## MODIFIED Requirements`, `## REMOVED Requirements` sections), creates a `proposal.md` (with `## Why` and `## What Changes` sections), validates, and archives.
+- Delta Markdown uses the `### Requirement:` / `#### Scenario:` / GIVEN-WHEN-THEN format matching the spec generation output.
 
 ### Requirement: Extensibility and Automation
 The system is implemented as a Ruby gem (Rails engine) for orchestration, using the GitHub API for task management and execution.
@@ -167,16 +244,68 @@ After each tier completes, results are merged before the next tier begins.
 - WHEN the TierGateCheck agent evaluates the merged diffs and task summaries.
 - THEN it returns a pass/fail verdict, a context_summary, and optionally corrective_tasks.
 
-#### Scenario: Tier Gate Failure with Retry
+#### Scenario: Tier Gate Failure with Retry [SPEC-TIER-004]
 - GIVEN a tier that failed the gate check.
 - AND retry_count is less than max_tier_retries (default 2, range 0-5).
 - WHEN the system retries.
-- THEN corrective tasks from the gate result are created at the same tier, executed, merged, and re-evaluated.
+- THEN corrective tasks from the gate result are created at the same tier, executed sequentially (one at a time with merge between each), and re-evaluated.
+- AND each corrective task branches from the updated master branch (including changes from the previous corrective task's merge).
+- AND task summaries sent to the tier gate reviewer are annotated with `[FAILED - EMPTY DIFF]` for tasks that completed with exit code 0 but no code changes, or `[FAILED]` for other failures.
 
 #### Scenario: Tier Gate Retry Exhaustion
 - GIVEN a tier that has failed the gate check max_tier_retries times.
 - WHEN the retry limit is reached.
 - THEN the pipeline is paused with status "paused", metadata records the tier_gate_failure details, and a TierGateError is raised.
+
+#### Scenario: Empty Diff Detection (Claude Code Provider) [SPEC-TIER-005]
+- GIVEN a task executed by the Claude Code provider.
+- AND the Claude CLI exits with code 0 (success).
+- WHEN the captured diff from the worktree branch is empty.
+- THEN the task result is marked as `success: false` with error "Task completed with exit code 0 but produced no code changes".
+- AND the task is eligible for tier gate corrective task generation.
+
+#### Scenario: Baseline-Aware Tier Gate [SPEC-TIER-006]
+- GIVEN a pipeline runs on a repository with existing files from a prior pipeline run.
+- AND `claude_code_repo_path` is configured with a valid git repository path.
+- WHEN the Orchestrator's `execute!` method begins.
+- THEN the baseline commit SHA is recorded in pipeline metadata via `record_baseline_sha!` using `git rev-parse HEAD`.
+- AND when a tier gate check evaluates diffs, the TierExecutionEngine invokes `RepoContextScanner.call(repo_path:)` to scan existing tracked files.
+- AND the scanner uses `git ls-tree` to list files matching `repo_context_scan_patterns` (default: db/migrate/, config/, app/models/, app/controllers/, lib/) and `repo_context_scan_files` (default: Gemfile, config/routes.rb, config/database.yml, db/schema.rb, db/structure.sql).
+- AND the scanned file list is formatted with grouped directories (max 20 files shown per directory) and passed to `TierGateCheck` via the `repo_context:` parameter.
+- AND the tier gate prompt includes a "Repository Baseline" section instructing the gate reviewer to NOT flag existing files as missing.
+- AND a `repo_context_scanned` event is recorded in the pipeline audit trail with file_count and directory summary.
+
+#### Scenario: Baseline Recording is Idempotent
+- GIVEN a pipeline run already has `baseline_commit_sha` in its metadata (e.g., from a prior execution before pause).
+- WHEN `execute!` is called again during resume.
+- THEN `record_baseline_sha!` detects the existing SHA and does NOT overwrite it.
+- AND the same baseline SHA is preserved across resume cycles.
+
+#### Scenario: Graceful Degradation Without Repo Context
+- GIVEN `claude_code_repo_path` is nil or points to a non-existent directory.
+- OR `RepoContextScanner.call` fails (e.g., git command error).
+- WHEN tier gate check runs.
+- THEN the `repo_context:` parameter is nil.
+- AND the tier gate operates normally without a "Repository Baseline" section.
+- AND the pipeline continues execution without interruption.
+
+#### Scenario: Merge Conflict Resolution (Claude Code Provider)
+- GIVEN two tasks in the same tier that modify the same file (e.g., both adding routes to `config/routes.rb`).
+- AND the execution provider is Claude Code with `merge_conflict_resolution_enabled` set to true (default).
+- WHEN the first task's branch merges successfully but the second task's branch produces a merge conflict.
+- THEN the system detects the conflict, invokes the Claude CLI with a resolution prompt containing the conflicted file contents and task context, verifies all conflict markers are removed, and completes the merge with both tasks' changes preserved.
+
+#### Scenario: Merge Conflict Resolution Disabled
+- GIVEN a merge conflict occurs during tier merging.
+- AND `merge_conflict_resolution_enabled` is set to false.
+- WHEN the merge fails.
+- THEN the system aborts the merge and raises a recoverable MergeError without attempting resolution.
+
+#### Scenario: Merge Conflict Resolution Failure
+- GIVEN a merge conflict occurs during tier merging.
+- AND `merge_conflict_resolution_enabled` is true.
+- WHEN the Claude CLI fails to resolve the conflict (exits non-zero, leaves conflict markers, or the number of conflicted files exceeds `merge_conflict_max_files` (default: 10)).
+- THEN the system aborts the merge and raises a recoverable MergeError. The TierExecutionEngine logs this as a non-fatal warning and continues the pipeline.
 
 ### Requirement: Context Propagation
 The system SHALL accumulate context summaries from tier gate checks and inject them into subsequent tier issue bodies.
@@ -249,6 +378,41 @@ Resume SHALL be idempotent: re-publishing already-published tasks is safely skip
 - WHEN TierExecutionEngine iterates through tiers.
 - THEN tiers where all tasks are resolved (have results or are failed) are skipped entirely.
 
+### Requirement: Pipeline Event Audit Trail
+The system SHALL record structured pipeline execution events to provide observability into decision points and execution flow.
+The system MUST support configurable event recording modes: disabled, summary-only (default), and verbose (full payloads).
+Event recording SHALL be non-fatal: database errors during event creation do not interrupt pipeline execution.
+
+#### Scenario: Pipeline Event Audit Trail [SPEC-EVENT-001]
+- GIVEN the pipeline event system is enabled.
+- WHEN a pipeline run executes through its stages.
+- THEN structured PipelineEvent records are created capturing decisions at each stage.
+- AND each event has an event_type, stage, summary, optional payload, and optional duration_ms.
+
+#### Scenario: Default Event Recording [SPEC-EVENT-002]
+- GIVEN event_logging_enabled is true (default).
+- AND verbose_event_logging is false (default).
+- WHEN a pipeline run completes.
+- THEN events are recorded with summary data for each stage.
+- AND payload fields are NULL (not stored).
+
+#### Scenario: Verbose Event Recording [SPEC-EVENT-003]
+- GIVEN event_logging_enabled is true.
+- AND verbose_event_logging is true (set via --verbose CLI flag).
+- WHEN a pipeline run completes.
+- THEN events are recorded with both summary and full LLM payload data.
+
+#### Scenario: Event Recording Disabled [SPEC-EVENT-004]
+- GIVEN event_logging_enabled is false.
+- WHEN a pipeline run completes.
+- THEN no PipelineEvent records are created.
+
+#### Scenario: Event Recording Failure is Non-Fatal [SPEC-EVENT-005]
+- GIVEN a database error occurs during event recording.
+- WHEN the PipelineEventRecorder attempts to create an event.
+- THEN the error is silently rescued.
+- AND the pipeline continues execution without interruption.
+
 ### Requirement: CLI Commands
 The system SHALL provide a command-line interface via the `arnold_pipeline` executable.
 
@@ -279,7 +443,9 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 #### Command: spec
 - GIVEN a pipeline run ID.
 - WHEN `arnold_pipeline spec ID` is executed.
-- THEN the specification content is output with options: --output/-o (file path), --json (boolean for structured data).
+- THEN the specification content is output with options: --output/-o (file path), --json (boolean for structured data), --history (boolean, shows revision timeline with delta summaries), --version (number, shows spec content at a specific version).
+- WHEN `--history` is passed, the revision timeline is displayed showing each version's change_source, timestamp, and delta_summary entries.
+- WHEN `--version N` is passed, the spec content from SpecRevision version N is displayed (exit code 1 if version not found).
 - Exit code 0 on success, 1 if not found or no specification exists.
 
 #### Command: version
@@ -289,6 +455,19 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 #### Command: tree
 - WHEN `arnold_pipeline tree` is executed.
 - THEN a tree of all available commands is printed.
+
+#### Command: log [SPEC-CLI-008]
+- GIVEN a pipeline run with ID exists.
+- WHEN `arnold_pipeline log ID` is executed.
+- THEN the event timeline is displayed chronologically.
+- AND each event shows timestamp, stage, event_type, and formatted summary.
+- WHEN the --stage flag is provided (e.g., `arnold_pipeline log ID --stage analysis`).
+- THEN only events matching the specified stage are shown.
+- WHEN the --json flag is provided.
+- THEN events are output as a JSON array.
+- WHEN the --verbose flag is provided.
+- THEN full payload data is included in the output.
+- Exit code 0 on success, 1 if not found.
 
 ### Requirement: Configuration
 The system SHALL be configurable via a Ruby block (`ArnoldPipeline.configure`) or YAML config file.
@@ -308,6 +487,7 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | claude_code_model | String | "sonnet" | None |
 | claude_code_max_turns | Integer | nil | None |
 | claude_code_permission_mode | String | "bypassPermissions" | Must be one of: acceptEdits, bypassPermissions, default, delegate, dontAsk, plan |
+| claude_code_max_concurrency | Integer | 4 | 1-16 |
 | max_iterations | Integer | 3 | 1-10 |
 | library_path | String | nil (built-in library) | None |
 | polling_interval | Numeric | 30 | Positive |
@@ -318,6 +498,12 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | max_tier_retries | Integer | 2 | 0-5 |
 | workflow_status_enabled | Boolean | true | None |
 | workflow_branch_pattern | Regexp | /issue[-_]?\d+/i | None |
+| openspec_enabled | Boolean | true | None |
+| openspec_cli_path | String | "openspec" | None |
+| event_logging_enabled | Boolean | true | None |
+| verbose_event_logging | Boolean | false | None |
+| repo_context_scan_patterns | Array of Strings | nil (uses defaults) | None |
+| repo_context_scan_files | Array of Strings | nil (uses defaults) | None |
 
 ### PipelineRun State Machine
 

@@ -431,6 +431,163 @@ module ArnoldPipeline
       end
     end
 
+    test "spec --history shows revision timeline" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      spec = run_record.create_specification!(content: "# Spec v2", version: 2)
+      spec.spec_revisions.create!(version: 1, content: "# Spec v1", change_source: "spec_generation")
+      spec.spec_revisions.create!(
+        version: 2,
+        content: "# Spec v2",
+        change_source: "iterate_spec",
+        delta_summary: ["ADDED: Auth > Password Reset", "MODIFIED: Auth > Login"]
+      )
+
+      output = capture_output { Cli.start(["spec", run_record.id.to_s, "--history"]) }
+
+      assert_match(/Specification Revision History:/, output)
+      assert_match(/v1 \[spec_generation\]/, output)
+      assert_match(/v2 \[iterate_spec\]/, output)
+      assert_match(/ADDED: Auth > Password Reset/, output)
+      assert_match(/MODIFIED: Auth > Login/, output)
+    end
+
+    test "spec --history with no revisions shows message" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.create_specification!(content: "# Spec", version: 1)
+
+      output = capture_output { Cli.start(["spec", run_record.id.to_s, "--history"]) }
+
+      assert_match(/No revision history available/, output)
+    end
+
+    test "spec --version shows specific version content" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      spec = run_record.create_specification!(content: "# Spec v2", version: 2)
+      spec.spec_revisions.create!(version: 1, content: "# Spec version one content")
+      spec.spec_revisions.create!(version: 2, content: "# Spec version two content")
+
+      output = capture_output { Cli.start(["spec", run_record.id.to_s, "--version", "1"]) }
+
+      assert_match(/# Spec version one content/, output)
+      assert_no_match(/version two/, output)
+    end
+
+    test "spec --version with non-existent version exits with error" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.create_specification!(content: "# Spec", version: 1)
+
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start(["spec", run_record.id.to_s, "--version", "99"]) }
+      end
+    end
+
+    # --- Log command tests ---
+
+    test "log shows events for valid ID" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :library_selection, stage: "spec_generation",
+        summary: { "persona" => "Software Architect", "recipe" => "Web App", "domain_type" => "PRODUCTIVITY" }
+      )
+      run_record.pipeline_events.create!(
+        event_type: :spec_generated, stage: "spec_generation",
+        summary: { "spec_version" => 1, "content_length" => 4521 }, duration_ms: 3412.5
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/Event Timeline \(2 events\)/, output)
+      assert_match(/spec_generation \/ library_selection/, output)
+      assert_match(/Software Architect/, output)
+      assert_match(/spec_generation \/ spec_generated/, output)
+      assert_match(/3413ms/, output)
+    end
+
+    test "log filters by --stage" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.pipeline_events.create!(event_type: :library_selection, stage: "spec_generation", summary: {})
+      run_record.pipeline_events.create!(event_type: :tasks_broken, stage: "task_breakdown", summary: {})
+      run_record.pipeline_events.create!(event_type: :analysis_completed, stage: "analysis", summary: {})
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s, "--stage", "analysis"]) }
+
+      assert_match(/1 events/, output)
+      assert_match(/analysis \/ analysis_completed/, output)
+      assert_no_match(/spec_generation/, output)
+      assert_no_match(/task_breakdown/, output)
+    end
+
+    test "log --json outputs valid JSON array" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :spec_generated, stage: "spec_generation",
+        summary: { "content_length" => 100 }, duration_ms: 500.0
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s, "--json"]) }
+
+      parsed = JSON.parse(output)
+      assert_kind_of Array, parsed
+      assert_equal 1, parsed.length
+      assert_equal "spec_generated", parsed.first["event_type"]
+      assert_equal "spec_generation", parsed.first["stage"]
+      assert_equal({ "content_length" => 100 }, parsed.first["summary"])
+    end
+
+    test "log --verbose includes payloads" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :spec_generated, stage: "spec_generation",
+        summary: { "content_length" => 100 },
+        payload: { "full_response" => "test data" }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s, "--verbose"]) }
+
+      assert_match(/Payload:/, output)
+      assert_match(/full_response/, output)
+    end
+
+    test "log --json --verbose includes payload in JSON" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :spec_generated, stage: "spec_generation",
+        summary: { "content_length" => 100 },
+        payload: { "response" => "data" }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s, "--json", "--verbose"]) }
+
+      parsed = JSON.parse(output)
+      assert_equal({ "response" => "data" }, parsed.first["payload"])
+    end
+
+    test "log with non-existent ID exits with error" do
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start(["log", "99999"]) }
+      end
+    end
+
+    test "log with no events shows message" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/No events found/, output)
+    end
+
+    test "log formats lifecycle events" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :pipeline_completed, stage: "lifecycle",
+        summary: { "total_iterations" => 2, "total_tasks" => 10 }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/2 iterations, 10 tasks/, output)
+    end
+
     test "run --quiet suppresses informational output" do
       mock_run = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
 

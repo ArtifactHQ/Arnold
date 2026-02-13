@@ -19,6 +19,8 @@ module ArnoldPipeline
           @max_turns = max_turns
           @permission_mode = permission_mode
           @results = {}
+          @results_mutex = Mutex.new
+          @worktree_mutex = Mutex.new
         end
 
         def async? = false
@@ -46,6 +48,12 @@ module ArnoldPipeline
             raise ConfigurationError,
               "Invalid claude_code_permission_mode '#{mode}'. Must be one of: #{VALID_PERMISSION_MODES.join(', ')}"
           end
+
+          concurrency = config.claude_code_max_concurrency
+          if concurrency && !(concurrency.is_a?(Integer) && concurrency.between?(1, 16))
+            raise ConfigurationError,
+              "claude_code_max_concurrency must be an integer between 1 and 16"
+          end
         end
 
         def self.build_from_config(config, **options)
@@ -58,7 +66,7 @@ module ArnoldPipeline
         end
 
         def create_tasks(tasks:, pipeline_run:, prior_context: nil)
-          tasks.map do |task|
+          work_items = tasks.each_with_index.map do |task, index|
             title = task.respond_to?(:title) ? task.title : task["title"]
             description = task.respond_to?(:description) ? task.description : task["description"]
             labels = task.respond_to?(:labels) ? task.labels : (task["labels"] || [])
@@ -74,28 +82,19 @@ module ArnoldPipeline
               prior_context: prior_context
             )
 
-            result = execute_claude_code(
-              prompt: prompt,
-              branch: branch_name,
-              external_id: external_id
-            )
-
-            if result[:success]
-              worktree_path = File.join(repo_path, ".worktrees", branch_name)
-              normalize_worktree(worktree_path: worktree_path, title: title)
-            end
-
-            diff = capture_diff(branch: branch_name)
-
-            @results[external_id] = {
-              success: result[:success],
-              output: result[:output],
-              diff: diff,
-              branch: branch_name,
-              error: result[:error]
+            {
+              index: index,
+              title: title,
+              external_id: external_id,
+              branch_name: branch_name,
+              prompt: prompt
             }
+          end
 
-            { external_id: external_id, external_url: nil, title: title }
+          if work_items.size <= 1 || max_concurrency <= 1
+            work_items.map { |item| execute_work_item(item) }
+          else
+            execute_parallel(work_items)
           end
         end
 
@@ -127,7 +126,7 @@ module ArnoldPipeline
             next unless stored
             next unless stored[:success]
 
-            merge_branch(stored[:branch])
+            merge_branch(stored[:branch], task: task)
           end
 
           []
@@ -168,8 +167,66 @@ module ArnoldPipeline
           PROMPT
         end
 
+        def execute_work_item(item)
+          result = execute_claude_code(
+            prompt: item[:prompt],
+            branch: item[:branch_name],
+            external_id: item[:external_id]
+          )
+
+          if result[:success]
+            worktree_path = File.join(repo_path, ".worktrees", item[:branch_name])
+            normalize_worktree(worktree_path: worktree_path, title: item[:title])
+          end
+
+          diff = capture_diff(branch: item[:branch_name])
+
+          if result[:success] && diff.strip.empty?
+            result = result.merge(
+              success: false,
+              error: "Task completed with exit code 0 but produced no code changes"
+            )
+          end
+
+          @results_mutex.synchronize do
+            @results[item[:external_id]] = {
+              success: result[:success],
+              output: result[:output],
+              diff: diff,
+              branch: item[:branch_name],
+              error: result[:error]
+            }
+          end
+
+          { external_id: item[:external_id], external_url: nil, title: item[:title] }
+        end
+
+        def execute_parallel(work_items)
+          queue = Thread::Queue.new
+          work_items.each { |item| queue << item }
+
+          output = Array.new(work_items.size)
+          num_workers = [max_concurrency, work_items.size].min
+
+          workers = num_workers.times.map do
+            Thread.new do
+              loop do
+                item = begin; queue.pop(true); rescue ThreadError; break; end
+                output[item[:index]] = execute_work_item(item)
+              end
+            end
+          end
+
+          workers.each(&:join)
+          output
+        end
+
+        def max_concurrency
+          ArnoldPipeline.configuration.claude_code_max_concurrency || 4
+        end
+
         def execute_claude_code(prompt:, branch:, external_id:)
-          worktree_path = setup_worktree(branch)
+          worktree_path = @worktree_mutex.synchronize { setup_worktree(branch) }
 
           cmd = build_cli_command(prompt)
 
@@ -206,7 +263,23 @@ module ArnoldPipeline
           system("git", "-C", repo_path, "worktree", "add", "-b", branch, worktree_path,
             exception: true)
 
+          ensure_gitignore!(worktree_path)
+
           worktree_path
+        end
+
+        def ensure_gitignore!(worktree_path)
+          gitignore_path = File.join(worktree_path, ".gitignore")
+          return if File.exist?(gitignore_path)
+
+          File.write(gitignore_path, <<~GITIGNORE)
+            # Auto-generated by Arnold Pipeline
+            tmp/
+            log/
+            node_modules/
+            .bundle/
+            vendor/bundle/
+          GITIGNORE
         end
 
         def capture_diff(branch:)
@@ -216,11 +289,124 @@ module ArnoldPipeline
           output
         end
 
-        def merge_branch(branch)
-          system("git", "-C", repo_path, "merge", "--no-ff", "--no-edit", branch,
-            exception: true)
+        def merge_branch(branch, task: nil)
+          output, status = Open3.capture2e("git", "-C", repo_path, "merge", "--no-ff", "--no-edit", branch)
+          return if status.success?
+
+          if merge_conflict?(status) && conflict_resolution_enabled?
+            resolve_merge_conflicts(branch: branch, task: task)
+          else
+            abort_merge_if_needed
+            raise MergeError, "Failed to merge branch '#{branch}': #{output}"
+          end
+        rescue MergeError
+          raise
         rescue => e
+          abort_merge_if_needed
           raise MergeError, "Failed to merge branch '#{branch}': #{e.message}"
+        end
+
+        def merge_conflict?(status)
+          return false unless status.exitstatus == 1
+
+          conflicted = list_conflicted_files
+          conflicted.any?
+        end
+
+        def abort_merge_if_needed
+          merge_head = File.join(repo_path, ".git", "MERGE_HEAD")
+          return unless File.exist?(merge_head)
+
+          system("git", "-C", repo_path, "merge", "--abort")
+        end
+
+        def resolve_merge_conflicts(branch:, task:)
+          conflicted_files = list_conflicted_files
+
+          if conflicted_files.size > ArnoldPipeline.configuration.merge_conflict_max_files
+            abort_merge_if_needed
+            raise MergeError,
+              "Too many conflicted files (#{conflicted_files.size}) merging '#{branch}' — skipping resolution"
+          end
+
+          prompt = build_conflict_resolution_prompt(
+            branch: branch,
+            task: task,
+            conflicted_files: conflicted_files
+          )
+
+          cmd = build_cli_command(prompt)
+          _output, status = Open3.capture2(cmd, chdir: repo_path)
+
+          unless status.success?
+            abort_merge_if_needed
+            raise MergeError, "Claude CLI failed to resolve merge conflicts for '#{branch}'"
+          end
+
+          # Verify all conflict markers are gone
+          remaining = conflicted_files.select { |f| file_has_conflict_markers?(f) }
+          if remaining.any?
+            abort_merge_if_needed
+            raise MergeError,
+              "Conflict markers remain after resolution in: #{remaining.join(', ')}"
+          end
+
+          complete_merge_after_resolution(conflicted_files, branch)
+        end
+
+        def list_conflicted_files
+          output, _status = Open3.capture2(
+            "git", "-C", repo_path, "diff", "--name-only", "--diff-filter=U"
+          )
+          output.strip.split("\n").reject(&:empty?)
+        end
+
+        def file_has_conflict_markers?(relative_path)
+          full_path = File.join(repo_path, relative_path)
+          return false unless File.exist?(full_path)
+
+          content = File.read(full_path)
+          content.include?("<<<<<<<") && content.include?(">>>>>>>")
+        end
+
+        def complete_merge_after_resolution(files, branch)
+          files.each do |f|
+            system("git", "-C", repo_path, "add", f, exception: true)
+          end
+          system("git", "-C", repo_path, "commit", "--no-edit", exception: true)
+        end
+
+        def conflict_resolution_enabled?
+          ArnoldPipeline.configuration.merge_conflict_resolution_enabled
+        end
+
+        def build_conflict_resolution_prompt(branch:, task:, conflicted_files:)
+          file_sections = conflicted_files.map do |file_path|
+            full_path = File.join(repo_path, file_path)
+            content = File.exist?(full_path) ? File.read(full_path) : "(file not found)"
+            "### #{file_path}\n```\n#{content}\n```"
+          end.join("\n\n")
+
+          task_title = task.respond_to?(:title) ? task.title : (task&.dig("title") || "unknown")
+          task_desc = task.respond_to?(:description) ? task.description : (task&.dig("description") || "")
+
+          <<~PROMPT
+            You are resolving git merge conflicts. The branch '#{branch}' is being merged.
+
+            ## Branch Context
+            - Task: #{task_title}
+            - Description: #{task_desc}
+
+            ## Conflicted Files
+            #{file_sections}
+
+            ## Rules
+            - Edit ONLY the conflicted files listed above
+            - Remove ALL conflict markers (<<<<<<< ======= >>>>>>>)
+            - Preserve the intent of BOTH sides
+            - For config files (routes, Gemfile, etc.), combine entries from both sides
+            - Do NOT create new files or modify non-conflicted files
+          PROMPT
         end
 
         def normalize_worktree(worktree_path:, title:)
@@ -231,8 +417,13 @@ module ArnoldPipeline
             FileUtils.rm_rf(full_path) if File.directory?(full_path)
           end
 
-          # Stage any unstaged/untracked files
-          system("git", "-C", worktree_path, "add", "-A", exception: true)
+          # Stage any unstaged/untracked files.
+          # Noise directories are handled by .gitignore (either the repo's own or one
+          # created by ensure_gitignore!), so no pathspec exclusions are needed here.
+          output, status = Open3.capture2e("git", "-C", worktree_path, "add", "-A", ".")
+          unless status.success?
+            Rails.logger.warn { "[Arnold] git add exited #{status.exitstatus}: #{output.strip}" } if defined?(Rails)
+          end
 
           # Commit only if there are staged changes (exit 1 = changes exist)
           _output, status = Open3.capture2("git", "-C", worktree_path, "diff", "--cached", "--quiet")

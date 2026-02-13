@@ -149,5 +149,92 @@ module ArnoldPipeline
       assert_equal 1, results.size
       refute sleep_called, "Sync provider should not trigger polling sleep"
     end
+
+    test "merge conflict resolution resolves same-tier conflicts during execute_tiers" do
+      ArnoldPipeline.configure do |c|
+        c.merge_conflict_resolution_enabled = true
+        c.claude_code_max_concurrency = 1 # sequential — stub does real git ops
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :pending)
+
+      task_a = pipeline_run.tasks.create!(
+        title: "Add lead inquiries",
+        description: "Add lead inquiry routes",
+        position: 0,
+        tier: 0
+      )
+      task_b = pipeline_run.tasks.create!(
+        title: "Add landing page",
+        description: "Add landing page routes",
+        position: 1,
+        tier: 0
+      )
+
+      provider = Providers::Execution.build
+
+      # Stub execute_claude_code to create real branches with conflicting content.
+      # Both tasks modify the same routes.rb file.
+      call_count = 0
+      provider.stubs(:execute_claude_code).with { |prompt:, branch:, external_id:|
+        worktree_path = File.join(@repo_path, ".worktrees", branch)
+
+        # Create a base routes.rb on main if not present
+        routes_file = File.join(@repo_path, "routes.rb")
+        unless File.exist?(routes_file)
+          File.write(routes_file, "# Routes\n")
+          system("git", "-C", @repo_path, "add", "routes.rb", exception: true)
+          system("git", "-C", @repo_path, "commit", "-m", "Add routes.rb", exception: true)
+        end
+
+        # Set up real worktree
+        system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if Dir.exist?(worktree_path)
+        system("git", "-C", @repo_path, "branch", "-D", branch) rescue nil
+        system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
+
+        call_count += 1
+        if call_count == 1
+          File.write(File.join(worktree_path, "routes.rb"), "# Routes\nget '/leads'\n")
+        else
+          File.write(File.join(worktree_path, "routes.rb"), "# Routes\nroot 'landing#index'\n")
+        end
+
+        system("git", "-C", worktree_path, "add", "-A", exception: true)
+        system("git", "-C", worktree_path, "commit", "-m", "Implement: #{branch}", exception: true)
+
+        true
+      }.returns({ success: true, output: "Done", error: nil })
+
+      provider.stubs(:normalize_worktree)
+      provider.stubs(:setup_worktree).with { |branch|
+        File.join(@repo_path, ".worktrees", branch)
+      }
+
+      # Write a resolver script that the CLI command will execute
+      resolve_script_path = File.join(@repo_path, "_resolve.rb")
+      routes_path = File.join(@repo_path, "routes.rb")
+      File.write(resolve_script_path, <<~RUBY)
+        File.write(#{routes_path.inspect}, "# Routes\\nget '/leads'\\nroot 'landing#index'\\n")
+      RUBY
+      provider.stubs(:build_cli_command).returns("ruby #{resolve_script_path.shellescape}")
+
+      executor = Agents::Executor.new(provider:, logger: Logger.new(File::NULL))
+      tier_gate_check = stub(call: nil)
+      engine = TierExecutionEngine.new(
+        executor: executor,
+        tier_gate_check: tier_gate_check,
+        logger: Logger.new(File::NULL)
+      )
+
+      engine.execute_tiers!(pipeline_run)
+
+      # Verify the merged file contains both changes
+      content = File.read(File.join(@repo_path, "routes.rb"))
+      assert_includes content, "get '/leads'", "First task's route should be present"
+      assert_includes content, "root 'landing#index'", "Second task's route should be present"
+      refute_includes content, "<<<<<<<", "No conflict markers should remain"
+    ensure
+      ArnoldPipeline.reset_configuration!
+    end
   end
 end
