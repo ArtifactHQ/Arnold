@@ -59,7 +59,7 @@ module ArnoldPipeline
 
           # Output Format
 
-          Return a JSON block fenced with ```json containing:
+          Your response will be validated against a JSON schema. Return valid JSON matching this structure:
           {
             "decision": "done|iterate_tasks|iterate_spec",
             "confidence": 0-100,

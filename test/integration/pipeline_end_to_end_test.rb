@@ -73,28 +73,25 @@ module ArnoldPipeline
         role: "assistant"
       }
 
-      task_response = {
-        content: [{ type: "text", text: task_llm_response }],
-        role: "assistant"
-      }
-
-      analysis_response = {
-        content: [{ type: "text", text: analysis_done_response }],
-        role: "assistant"
-      }
-
       # Use a counter to return different responses based on the prompt content
       stub_request(:post, "https://api.anthropic.com/v1/messages")
         .to_return do |request|
           body = JSON.parse(request.body)
           user_msg = body["messages"]&.last&.dig("content") || ""
+          has_tools = body.key?("tools")
 
           response_body = if user_msg.include?("generate a detailed specification")
             spec_response
-          elsif user_msg.include?("Break down the following specification")
-            task_response
+          elsif has_tools
+            tool_name = body.dig("tool_choice", "name")
+            input = if tool_name == "task_breakdown_result"
+              task_structured_response
+            else
+              analysis_done_structured_response
+            end
+            { content: [{ type: "tool_use", id: "toolu_#{rand(1000)}", name: tool_name, input: input }], role: "assistant" }
           else
-            analysis_response
+            spec_response
           end
 
           { status: 200, headers: { "Content-Type" => "application/json" }, body: response_body.to_json }
@@ -105,25 +102,31 @@ module ArnoldPipeline
       WebMock.reset!
 
       spec_response = { content: [{ type: "text", text: spec_llm_response }], role: "assistant" }
-      task_response = { content: [{ type: "text", text: task_llm_response }], role: "assistant" }
 
       @analysis_call_count = 0
       stub_request(:post, "https://api.anthropic.com/v1/messages")
         .to_return do |request|
           body = JSON.parse(request.body)
           user_msg = body["messages"]&.last&.dig("content") || ""
+          has_tools = body.key?("tools")
 
           response_body = if user_msg.include?("generate a detailed specification")
             spec_response
-          elsif user_msg.include?("Break down the following specification")
-            task_response
-          else
-            @analysis_call_count += 1
-            if @analysis_call_count == 1
-              { content: [{ type: "text", text: analysis_iterate_tasks_response }], role: "assistant" }
+          elsif has_tools
+            tool_name = body.dig("tool_choice", "name")
+            input = if tool_name == "task_breakdown_result"
+              task_structured_response
             else
-              { content: [{ type: "text", text: analysis_done_response }], role: "assistant" }
+              @analysis_call_count += 1
+              if @analysis_call_count == 1
+                analysis_iterate_tasks_structured_response
+              else
+                analysis_done_structured_response
+              end
             end
+            { content: [{ type: "tool_use", id: "toolu_#{rand(1000)}", name: tool_name, input: input }], role: "assistant" }
+          else
+            spec_response
           end
 
           { status: 200, headers: { "Content-Type" => "application/json" }, body: response_body.to_json }
@@ -199,45 +202,51 @@ module ArnoldPipeline
       RESPONSE
     end
 
-    def task_llm_response
-      tasks = [
-        { "title" => "Setup Rails project", "description" => "Initialize Rails 8 project with PostgreSQL", "priority" => 0, "labels" => ["setup"], "position" => 0, "depends_on" => [] },
-        { "title" => "Create User model", "description" => "Generate User model with authentication", "priority" => 0, "labels" => ["backend", "database"], "position" => 1, "depends_on" => [0] },
-        { "title" => "Create Todo model", "description" => "Generate Todo model with associations", "priority" => 0, "labels" => ["backend", "database"], "position" => 2, "depends_on" => [1] },
-        { "title" => "Build authentication", "description" => "Implement signup/login/logout", "priority" => 1, "labels" => ["backend", "frontend"], "position" => 3, "depends_on" => [1] },
-        { "title" => "Build Todo CRUD", "description" => "Implement create/read/update/delete for todos", "priority" => 1, "labels" => ["backend", "frontend"], "position" => 4, "depends_on" => [2, 3] },
-        { "title" => "Add real-time updates", "description" => "Implement Turbo Streams for live updates", "priority" => 2, "labels" => ["frontend"], "position" => 5, "depends_on" => [4] },
-        { "title" => "Write tests", "description" => "System and unit tests", "priority" => 2, "labels" => ["testing"], "position" => 6, "depends_on" => [4, 5] }
-      ]
-      "```json\n#{JSON.generate(tasks)}\n```"
+    def task_structured_response
+      {
+        "tasks" => [
+          { "title" => "Setup Rails project", "description" => "Initialize Rails 8 project with PostgreSQL", "priority" => 0, "labels" => ["setup"], "position" => 0, "depends_on" => [], "section_ref" => "Setup" },
+          { "title" => "Create User model", "description" => "Generate User model with authentication", "priority" => 0, "labels" => ["backend", "database"], "position" => 1, "depends_on" => [0], "section_ref" => "Models" },
+          { "title" => "Create Todo model", "description" => "Generate Todo model with associations", "priority" => 0, "labels" => ["backend", "database"], "position" => 2, "depends_on" => [1], "section_ref" => "Models" },
+          { "title" => "Build authentication", "description" => "Implement signup/login/logout", "priority" => 1, "labels" => ["backend", "frontend"], "position" => 3, "depends_on" => [1], "section_ref" => "Authentication" },
+          { "title" => "Build Todo CRUD", "description" => "Implement create/read/update/delete for todos", "priority" => 1, "labels" => ["backend", "frontend"], "position" => 4, "depends_on" => [2, 3], "section_ref" => "CRUD" },
+          { "title" => "Add real-time updates", "description" => "Implement Turbo Streams for live updates", "priority" => 2, "labels" => ["frontend"], "position" => 5, "depends_on" => [4], "section_ref" => "Real-time" },
+          { "title" => "Write tests", "description" => "System and unit tests", "priority" => 2, "labels" => ["testing"], "position" => 6, "depends_on" => [4, 5], "section_ref" => "Testing" }
+        ]
+      }
     end
 
-    def analysis_done_response
-      analysis = {
+    def analysis_done_structured_response
+      {
         "decision" => "done",
         "confidence" => 92,
         "reasoning" => "All features implemented correctly. Authentication, CRUD operations, and real-time updates are present.",
-        "corrective_data" => {}
+        "completeness_scores" => { "new_reader_test" => 90, "coding_agent_test" => 92, "change_request_test" => 88 },
+        "anti_patterns_found" => [],
+        "corrective_data" => { "tasks" => nil, "deltas" => nil },
+        "requirement_coverage" => nil
       }
-      "```json\n#{JSON.generate(analysis)}\n```"
     end
 
-    def analysis_iterate_tasks_response
-      analysis = {
+    def analysis_iterate_tasks_structured_response
+      {
         "decision" => "iterate_tasks",
         "confidence" => 72,
         "reasoning" => "Missing error handling in authentication flow",
+        "completeness_scores" => { "new_reader_test" => 70, "coding_agent_test" => 65, "change_request_test" => 60 },
+        "anti_patterns_found" => [],
         "corrective_data" => {
           "tasks" => [
-            { "title" => "Fix auth error handling", "description" => "Add proper error messages", "priority" => 0, "labels" => ["backend"], "position" => 0, "depends_on" => [] },
-            { "title" => "Add input validation", "description" => "Validate todo inputs", "priority" => 0, "labels" => ["backend"], "position" => 1, "depends_on" => [0] },
-            { "title" => "Fix test coverage", "description" => "Add missing test cases", "priority" => 1, "labels" => ["testing"], "position" => 2, "depends_on" => [0, 1] },
-            { "title" => "Update error pages", "description" => "Custom error pages", "priority" => 1, "labels" => ["frontend"], "position" => 3, "depends_on" => [0] },
-            { "title" => "Integration tests", "description" => "End-to-end flow tests", "priority" => 2, "labels" => ["testing"], "position" => 4, "depends_on" => [2, 3] }
-          ]
-        }
+            { "title" => "Fix auth error handling", "description" => "Add proper error messages", "priority" => 0, "labels" => ["backend"], "depends_on" => [] },
+            { "title" => "Add input validation", "description" => "Validate todo inputs", "priority" => 0, "labels" => ["backend"], "depends_on" => [] },
+            { "title" => "Fix test coverage", "description" => "Add missing test cases", "priority" => 1, "labels" => ["testing"], "depends_on" => [] },
+            { "title" => "Update error pages", "description" => "Custom error pages", "priority" => 1, "labels" => ["frontend"], "depends_on" => [] },
+            { "title" => "Integration tests", "description" => "End-to-end flow tests", "priority" => 2, "labels" => ["testing"], "depends_on" => [] }
+          ],
+          "deltas" => nil
+        },
+        "requirement_coverage" => nil
       }
-      "```json\n#{JSON.generate(analysis)}\n```"
     end
   end
 end

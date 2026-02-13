@@ -7,6 +7,28 @@ module ArnoldPipeline
       MIN_TASKS = 5
       MAX_TASKS = 20
 
+      RESPONSE_SCHEMA = {
+        name: "task_breakdown_result",
+        schema: {
+          type: "object", additionalProperties: false, required: ["tasks"],
+          properties: {
+            tasks: { type: "array", items: {
+              type: "object", additionalProperties: false,
+              required: ["title", "description", "priority", "labels", "position", "depends_on", "section_ref"],
+              properties: {
+                title: { type: "string" },
+                description: { type: "string" },
+                priority: { type: "integer" },
+                labels: { type: "array", items: { type: "string" } },
+                position: { type: "integer" },
+                depends_on: { type: "array", items: { type: "integer" } },
+                section_ref: { type: "string" }
+              }
+            } }
+          }
+        }
+      }.freeze
+
       def call(spec_content:, recipe: nil, supporting_recipes: [])
         if recipe
           logger.info { "Breaking spec into tasks (recipe: #{recipe.name})" }
@@ -17,12 +39,13 @@ module ArnoldPipeline
         system = Prompts::TaskBreakdown.system_prompt(recipe:, supporting_recipes:)
         user = Prompts::TaskBreakdown.user_prompt(spec_content:)
 
-        response = chat(
+        result = chat_json(
           messages: [{ role: :user, content: user }],
-          system: system
+          system: system,
+          schema: RESPONSE_SCHEMA
         )
 
-        tasks = parse_json(response)
+        tasks = result["tasks"]
         validate_tasks!(tasks)
         tasks
       end

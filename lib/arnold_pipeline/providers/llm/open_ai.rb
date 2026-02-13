@@ -27,6 +27,26 @@ module ArnoldPipeline
           raise
         end
 
+        def chat_json(messages:, system: nil, schema:)
+          all_messages = []
+          all_messages << { role: "system", content: system } if system
+          all_messages.concat(normalize_messages(messages))
+
+          response = @client.chat(parameters: {
+            model: @model,
+            messages: all_messages,
+            response_format: {
+              type: "json_schema",
+              json_schema: { name: schema[:name], strict: true, schema: schema[:schema] }
+            }
+          })
+
+          parse_json_content(response)
+        rescue Faraday::ClientError => e
+          log_api_error("OpenAI", e)
+          raise
+        end
+
         private
 
         def normalize_messages(messages)
@@ -37,6 +57,15 @@ module ArnoldPipeline
 
         def extract_text(response)
           response.dig("choices", 0, "message", "content") || ""
+        end
+
+        def parse_json_content(response)
+          content = response.dig("choices", 0, "message", "content")
+          raise ArnoldPipeline::Error, "No content in structured output response" unless content
+
+          JSON.parse(content)
+        rescue JSON::ParserError => e
+          raise ArnoldPipeline::Error, "Failed to parse structured output JSON: #{e.message}"
         end
       end
     end

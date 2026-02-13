@@ -14,6 +14,10 @@ module ArnoldPipeline
           raise NotImplementedError, "#{self.class}#chat must be implemented"
         end
 
+        def chat_json(messages:, system: nil, schema:)
+          raise NotImplementedError, "#{self.class}#chat_json must be implemented"
+        end
+
         private
 
         def log_api_error(provider_name, error)

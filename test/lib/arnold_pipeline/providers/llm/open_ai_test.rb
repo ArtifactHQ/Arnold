@@ -85,6 +85,52 @@ module ArnoldPipeline
 
           assert_match(/OpenAI API 400: invalid request/, log_output.string)
         end
+
+        # -- chat_json tests --
+
+        test "chat_json returns parsed hash from structured output response" do
+          schema = { name: "test_schema", schema: { type: "object", properties: { key: { type: "string" } } } }
+
+          stub_request(:post, "https://api.openai.com/v1/chat/completions")
+            .with { |req|
+              body = JSON.parse(req.body)
+              body["response_format"]["type"] == "json_schema" &&
+                body["response_format"]["json_schema"]["name"] == "test_schema" &&
+                body["response_format"]["json_schema"]["strict"] == true
+            }
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: {
+                choices: [{ message: { role: "assistant", content: '{"key": "value"}' } }]
+              }.to_json
+            )
+
+          result = @provider.chat_json(
+            messages: [{ role: :user, content: "Hello" }],
+            schema: schema
+          )
+          assert_instance_of Hash, result
+          assert_equal "value", result["key"]
+        end
+
+        test "chat_json raises when content is missing" do
+          schema = { name: "test_schema", schema: { type: "object", properties: {} } }
+
+          stub_request(:post, "https://api.openai.com/v1/chat/completions")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: {
+                choices: [{ message: { role: "assistant", content: nil } }]
+              }.to_json
+            )
+
+          error = assert_raises(ArnoldPipeline::Error) do
+            @provider.chat_json(messages: [{ role: :user, content: "Hi" }], schema: schema)
+          end
+          assert_match(/No content in structured output/, error.message)
+        end
       end
     end
   end

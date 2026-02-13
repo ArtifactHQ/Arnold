@@ -6,6 +6,83 @@ module ArnoldPipeline
     class Analyzer < BaseAgent
       VALID_DECISIONS = %w[done iterate_tasks iterate_spec].freeze
 
+      RESPONSE_SCHEMA = {
+        name: "analysis_result",
+        schema: {
+          type: "object", additionalProperties: false,
+          required: ["decision", "confidence", "reasoning", "completeness_scores", "anti_patterns_found", "corrective_data", "requirement_coverage"],
+          properties: {
+            decision: { type: "string" },
+            confidence: { type: "integer" },
+            reasoning: { type: "string" },
+            completeness_scores: {
+              type: "object", additionalProperties: false,
+              required: ["new_reader_test", "coding_agent_test", "change_request_test"],
+              properties: {
+                new_reader_test: { type: "integer" },
+                coding_agent_test: { type: "integer" },
+                change_request_test: { type: "integer" }
+              }
+            },
+            anti_patterns_found: { type: "array", items: { type: "string" } },
+            corrective_data: {
+              type: "object", additionalProperties: false,
+              required: ["tasks", "deltas"],
+              properties: {
+                tasks: {
+                  anyOf: [
+                    { type: "array", items: {
+                      type: "object", additionalProperties: false,
+                      required: ["title", "description", "priority", "labels", "depends_on"],
+                      properties: {
+                        title: { type: "string" },
+                        description: { type: "string" },
+                        priority: { type: "integer" },
+                        labels: { type: "array", items: { type: "string" } },
+                        depends_on: { type: "array", items: { type: "integer" } }
+                      }
+                    } },
+                    { type: "null" }
+                  ]
+                },
+                deltas: {
+                  anyOf: [
+                    { type: "array", items: {
+                      type: "object", additionalProperties: false,
+                      required: ["operation", "section", "requirement", "content", "before_content", "after_content", "rationale"],
+                      properties: {
+                        operation: { type: "string" },
+                        section: { type: "string" },
+                        requirement: { anyOf: [{ type: "string" }, { type: "null" }] },
+                        content: { anyOf: [{ type: "string" }, { type: "null" }] },
+                        before_content: { anyOf: [{ type: "string" }, { type: "null" }] },
+                        after_content: { anyOf: [{ type: "string" }, { type: "null" }] },
+                        rationale: { type: "string" }
+                      }
+                    } },
+                    { type: "null" }
+                  ]
+                }
+              }
+            },
+            requirement_coverage: {
+              anyOf: [
+                { type: "array", items: {
+                  type: "object", additionalProperties: false,
+                  required: ["id", "status", "notes"],
+                  properties: {
+                    id: { type: "string" },
+                    status: { type: "string" },
+                    notes: { type: "string" }
+                  }
+                } },
+                { type: "null" }
+              ]
+            }
+          }
+        }
+      }.freeze
+
       def call(spec_content:, diffs:, iteration_number:, persona:, comments: "")
         logger.info { "Analyzing iteration #{iteration_number}" }
 
@@ -17,12 +94,12 @@ module ArnoldPipeline
           comments:
         )
 
-        response = chat(
+        result = chat_json(
           messages: [{ role: :user, content: user }],
-          system: system
+          system: system,
+          schema: RESPONSE_SCHEMA
         )
 
-        result = parse_json(response)
         validate_result!(result)
         result
       end
