@@ -260,7 +260,8 @@ module ArnoldPipeline
       def self.sections_detail(recipe)
         return "" if recipe.sections.empty?
 
-        recipe.sections.map { |s| format_section(s) }.join("\n\n")
+        pipeline_sections = recipe.sections.reject { |s| s["phase"] == "post_pipeline" }
+        pipeline_sections.map { |s| format_section(s) }.join("\n\n")
       end
 
       def self.format_section(section)

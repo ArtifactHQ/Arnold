@@ -132,7 +132,7 @@ module ArnoldPipeline
       end
 
       test "system_prompt handles recipe with empty framework" do
-        recipe = Library::Recipe.new(name: "Test", type: "test", keywords: [], description: "A test", framework: {}, sections: [])
+        recipe = Library::Recipe.new(name: "Test", type: "test", keywords: [], description: "A test", framework: {}, sections: [], verification: {})
         prompt = SpecGeneration.system_prompt(persona: @persona, recipe: recipe, domain_type: @domain_type)
         refute_includes prompt, "Framework stack:"
         assert_includes prompt, "Recipe: Test"
@@ -160,6 +160,12 @@ module ArnoldPipeline
       test "user_prompt includes nl_input" do
         prompt = SpecGeneration.user_prompt(nl_input: "Build a fitness tracker")
         assert_includes prompt, "Build a fitness tracker"
+      end
+
+      test "system_prompt excludes post_pipeline sections" do
+        prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, domain_type: @domain_type)
+        refute_includes prompt, "### Deployment & Infrastructure"
+        assert_includes prompt, "### Models & Database"
       end
     end
   end

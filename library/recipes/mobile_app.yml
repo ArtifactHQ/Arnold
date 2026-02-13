@@ -28,6 +28,11 @@ framework:
   deployment_backend: Kamal 2
   deployment_mobile: App Store / Google Play
 
+verification:
+  setup_command: "bin/setup"
+  run_command: "bin/dev"
+  health_check: "http://localhost:3000/up"
+
 sections:
   - name: API Backend
     description: >
@@ -111,6 +116,24 @@ sections:
       - Compress images client-side before upload on slow connections
       - Plan for large file uploads with resumable upload support
 
+  - name: Local Development
+    description: >
+      Bootstrapping scripts, development database, and single-command
+      startup for immediate local execution of the API backend.
+    rails_tools:
+      - bin/setup (first-time dependency install and database preparation)
+      - bin/dev with Procfile.dev (multi-process startup)
+      - db/seeds.rb (demo data)
+    guidance:
+      - Use SQLite for development database — zero external dependencies
+      - Use Solid Queue, Solid Cache, Solid Cable — no Redis needed
+      - bin/setup must handle bundle install, db:prepare, and asset compilation
+      - Procfile.dev must list all processes (web, job worker)
+      - Create .env.example documenting any optional environment variables
+      - Include meaningful seed data with documented demo credentials
+      - Development MUST work with zero environment variables configured
+      - Note that this covers API backend only — mobile frontend setup is separate
+
   - name: Testing
     description: >
       Backend API tests and mobile-specific testing strategy.
@@ -123,6 +146,7 @@ sections:
       - Test offline sync scenarios explicitly
       - Test push notification registration and delivery flow
       - Test on real devices, not just simulators
+    tier_placement: final
 
   - name: Distribution
     description: >
@@ -133,3 +157,4 @@ sections:
       - Implement over-the-air updates for JS bundle (React Native) where possible
       - Handle forced update flow for breaking API changes
       - Plan app signing and certificate management from the start
+    phase: post_pipeline

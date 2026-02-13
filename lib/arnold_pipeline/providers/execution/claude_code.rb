@@ -19,6 +19,8 @@ module ArnoldPipeline
           @max_turns = max_turns
           @permission_mode = permission_mode
           @results = {}
+          @results_mutex = Mutex.new
+          @worktree_mutex = Mutex.new
         end
 
         def async? = false
@@ -46,6 +48,12 @@ module ArnoldPipeline
             raise ConfigurationError,
               "Invalid claude_code_permission_mode '#{mode}'. Must be one of: #{VALID_PERMISSION_MODES.join(', ')}"
           end
+
+          concurrency = config.claude_code_max_concurrency
+          if concurrency && !(concurrency.is_a?(Integer) && concurrency.between?(1, 16))
+            raise ConfigurationError,
+              "claude_code_max_concurrency must be an integer between 1 and 16"
+          end
         end
 
         def self.build_from_config(config, **options)
@@ -58,7 +66,7 @@ module ArnoldPipeline
         end
 
         def create_tasks(tasks:, pipeline_run:, prior_context: nil)
-          tasks.map do |task|
+          work_items = tasks.each_with_index.map do |task, index|
             title = task.respond_to?(:title) ? task.title : task["title"]
             description = task.respond_to?(:description) ? task.description : task["description"]
             labels = task.respond_to?(:labels) ? task.labels : (task["labels"] || [])
@@ -74,28 +82,19 @@ module ArnoldPipeline
               prior_context: prior_context
             )
 
-            result = execute_claude_code(
-              prompt: prompt,
-              branch: branch_name,
-              external_id: external_id
-            )
-
-            if result[:success]
-              worktree_path = File.join(repo_path, ".worktrees", branch_name)
-              normalize_worktree(worktree_path: worktree_path, title: title)
-            end
-
-            diff = capture_diff(branch: branch_name)
-
-            @results[external_id] = {
-              success: result[:success],
-              output: result[:output],
-              diff: diff,
-              branch: branch_name,
-              error: result[:error]
+            {
+              index: index,
+              title: title,
+              external_id: external_id,
+              branch_name: branch_name,
+              prompt: prompt
             }
+          end
 
-            { external_id: external_id, external_url: nil, title: title }
+          if work_items.size <= 1 || max_concurrency <= 1
+            work_items.map { |item| execute_work_item(item) }
+          else
+            execute_parallel(work_items)
           end
         end
 
@@ -168,8 +167,66 @@ module ArnoldPipeline
           PROMPT
         end
 
+        def execute_work_item(item)
+          result = execute_claude_code(
+            prompt: item[:prompt],
+            branch: item[:branch_name],
+            external_id: item[:external_id]
+          )
+
+          if result[:success]
+            worktree_path = File.join(repo_path, ".worktrees", item[:branch_name])
+            normalize_worktree(worktree_path: worktree_path, title: item[:title])
+          end
+
+          diff = capture_diff(branch: item[:branch_name])
+
+          if result[:success] && diff.strip.empty?
+            result = result.merge(
+              success: false,
+              error: "Task completed with exit code 0 but produced no code changes"
+            )
+          end
+
+          @results_mutex.synchronize do
+            @results[item[:external_id]] = {
+              success: result[:success],
+              output: result[:output],
+              diff: diff,
+              branch: item[:branch_name],
+              error: result[:error]
+            }
+          end
+
+          { external_id: item[:external_id], external_url: nil, title: item[:title] }
+        end
+
+        def execute_parallel(work_items)
+          queue = Thread::Queue.new
+          work_items.each { |item| queue << item }
+
+          output = Array.new(work_items.size)
+          num_workers = [max_concurrency, work_items.size].min
+
+          workers = num_workers.times.map do
+            Thread.new do
+              loop do
+                item = begin; queue.pop(true); rescue ThreadError; break; end
+                output[item[:index]] = execute_work_item(item)
+              end
+            end
+          end
+
+          workers.each(&:join)
+          output
+        end
+
+        def max_concurrency
+          ArnoldPipeline.configuration.claude_code_max_concurrency || 4
+        end
+
         def execute_claude_code(prompt:, branch:, external_id:)
-          worktree_path = setup_worktree(branch)
+          worktree_path = @worktree_mutex.synchronize { setup_worktree(branch) }
 
           cmd = build_cli_command(prompt)
 
@@ -360,10 +417,13 @@ module ArnoldPipeline
             FileUtils.rm_rf(full_path) if File.directory?(full_path)
           end
 
-          # Stage any unstaged/untracked files, excluding noise directories
-          system("git", "-C", worktree_path, "add", "-A",
-            "--", ".", ":!tmp/", ":!log/", ":!node_modules/", ":!.bundle/", ":!vendor/bundle/",
-            exception: true)
+          # Stage any unstaged/untracked files.
+          # Noise directories are handled by .gitignore (either the repo's own or one
+          # created by ensure_gitignore!), so no pathspec exclusions are needed here.
+          output, status = Open3.capture2e("git", "-C", worktree_path, "add", "-A", ".")
+          unless status.success?
+            Rails.logger.warn { "[Arnold] git add exited #{status.exitstatus}: #{output.strip}" } if defined?(Rails)
+          end
 
           # Commit only if there are staged changes (exit 1 = changes exist)
           _output, status = Open3.capture2("git", "-C", worktree_path, "diff", "--cached", "--quiet")

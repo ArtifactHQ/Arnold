@@ -358,6 +358,67 @@ module ArnoldPipeline
           @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
         end
 
+        # --- Empty-diff detection tests ---
+
+        test "create_tasks marks successful execution with empty diff as failed" do
+          tasks = [{ "title" => "Setup project", "description" => "Initialize" }]
+          @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("")
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+
+          @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          results = @provider.instance_variable_get(:@results)
+          stored = results.values.first
+          assert_equal false, stored[:success]
+          assert_match(/produced no code changes/, stored[:error])
+        end
+
+        test "fetch_results returns :failed for empty-diff task" do
+          tasks = [{ "title" => "Setup", "description" => "Init" }]
+          @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("")
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+
+          created = @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+          ext_id = created.first[:external_id]
+          task = @pipeline_run.tasks.create!(title: "Setup", position: 0, external_id: ext_id)
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run, tasks: [task])
+          assert_equal :failed, results.first[:status]
+        end
+
+        test "create_tasks preserves success when diff is non-empty" do
+          tasks = [{ "title" => "Setup project", "description" => "Initialize" }]
+          @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("diff --git a/file.rb b/file.rb\n+hello")
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+
+          @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          results = @provider.instance_variable_get(:@results)
+          stored = results.values.first
+          assert_equal true, stored[:success]
+          assert_nil stored[:error]
+        end
+
+        test "create_tasks preserves original failure when CLI fails" do
+          tasks = [{ "title" => "Setup project", "description" => "Initialize" }]
+          @provider.stubs(:execute_claude_code).returns({ success: false, output: "", error: "CLI exited with code 1" })
+          @provider.stubs(:capture_diff).returns("")
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+
+          @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          results = @provider.instance_variable_get(:@results)
+          stored = results.values.first
+          assert_equal false, stored[:success]
+          assert_equal "CLI exited with code 1", stored[:error]
+        end
+
         # --- Configuration tests ---
 
         test "validate_configuration! raises when repo_path blank" do
@@ -536,6 +597,148 @@ module ArnoldPipeline
           end
         end
 
+        # --- Concurrency tests ---
+
+        test "create_tasks executes multiple tasks concurrently" do
+          ArnoldPipeline.configure { |c| c.claude_code_max_concurrency = 4 }
+
+          tasks = 3.times.map { |i| { "title" => "Task #{i}", "description" => "Desc #{i}" } }
+          mu = Mutex.new
+          thread_ids = []
+
+          @provider.stubs(:execute_claude_code).with { |**_kwargs|
+            mu.synchronize { thread_ids << Thread.current.object_id }
+            sleep 0.05
+            true
+          }.returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("diff --git a/f.rb b/f.rb\n+x")
+
+          results = @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          assert_equal 3, results.size
+          assert thread_ids.uniq.size > 1, "Expected multiple threads, got #{thread_ids.uniq.size}"
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "create_tasks with concurrency 1 stays sequential" do
+          ArnoldPipeline.configure { |c| c.claude_code_max_concurrency = 1 }
+
+          tasks = 2.times.map { |i| { "title" => "Task #{i}", "description" => "Desc #{i}" } }
+          thread_ids = []
+
+          @provider.stubs(:execute_claude_code).with { |**_kwargs|
+            thread_ids << Thread.current.object_id
+            true
+          }.returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("diff --git a/f.rb b/f.rb\n+x")
+
+          @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          assert_equal 1, thread_ids.uniq.size, "Expected single thread for concurrency=1"
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "create_tasks stores results correctly under concurrent execution" do
+          ArnoldPipeline.configure { |c| c.claude_code_max_concurrency = 4 }
+
+          tasks = 5.times.map { |i|
+            @pipeline_run.tasks.create!(title: "Task #{i}", description: "Desc #{i}", position: i)
+          }
+
+          @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("diff --git a/f.rb b/f.rb\n+x")
+
+          results = @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          assert_equal 5, results.size
+          stored = @provider.instance_variable_get(:@results)
+          assert_equal 5, stored.size
+
+          # Verify ordering: results[i] corresponds to tasks[i]
+          results.each_with_index do |r, i|
+            assert_equal "Task #{i}", r[:title]
+            assert_match(/cc-#{@pipeline_run.id}-#{tasks[i].id}/, r[:external_id])
+          end
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "create_tasks handles per-thread failures gracefully" do
+          ArnoldPipeline.configure { |c| c.claude_code_max_concurrency = 3 }
+
+          tasks = 3.times.map { |i| { "title" => "Task #{i}", "description" => "Desc #{i}" } }
+          mu = Mutex.new
+          call_count = 0
+
+          @provider.stubs(:execute_claude_code).with { |**_kwargs|
+            mu.synchronize { call_count += 1 }
+            true
+          }.returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("diff --git a/f.rb b/f.rb\n+x")
+
+          results = @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          assert_equal 3, results.size
+          assert_equal 3, call_count
+          results.each do |r|
+            assert r.key?(:external_id)
+            assert r.key?(:title)
+          end
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "create_tasks with single task skips thread pool" do
+          tasks = [{ "title" => "Solo Task", "description" => "Only one" }]
+
+          @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("diff --git a/f.rb b/f.rb\n+x")
+
+          @provider.expects(:execute_parallel).never
+
+          results = @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+          assert_equal 1, results.size
+        end
+
+        test "claude_code_max_concurrency defaults to 4" do
+          config = ArnoldPipeline::Configuration.new
+          assert_equal 4, config.claude_code_max_concurrency
+        end
+
+        test "validate_configuration! rejects invalid concurrency values" do
+          config = ArnoldPipeline::Configuration.new
+          config.execution_provider = :claude_code
+          config.claude_code_repo_path = @repo_path
+          ClaudeCode.stubs(:claude_cli_available?).returns(true)
+
+          [0, -1, 17, 1.5, "4"].each do |bad_value|
+            config.claude_code_max_concurrency = bad_value
+            error = assert_raises(ArnoldPipeline::ConfigurationError) do
+              ClaudeCode.validate_configuration!(config)
+            end
+            assert_match(/claude_code_max_concurrency/, error.message)
+          end
+        end
+
+        test "validate_configuration! accepts valid concurrency values" do
+          config = ArnoldPipeline::Configuration.new
+          config.execution_provider = :claude_code
+          config.claude_code_repo_path = @repo_path
+          ClaudeCode.stubs(:claude_cli_available?).returns(true)
+
+          [1, 4, 8, 16, nil].each do |good_value|
+            config.claude_code_max_concurrency = good_value
+            assert_nothing_raised { ClaudeCode.validate_configuration!(config) }
+          end
+        end
+
         # --- Constructor tests ---
 
         test "constructor sets defaults" do
@@ -565,6 +768,9 @@ module ArnoldPipeline
           worktree_path = File.join(@repo_path, ".worktrees", branch)
           system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
 
+          # ensure_gitignore! runs before normalize_worktree in production
+          File.write(File.join(worktree_path, ".gitignore"), "tmp/\n")
+
           # Create a file in tmp/ that should be excluded
           FileUtils.mkdir_p(File.join(worktree_path, "tmp", "cache", "bootsnap"))
           File.write(File.join(worktree_path, "tmp", "cache", "bootsnap", "compiled.bin"), "binary data")
@@ -587,6 +793,9 @@ module ArnoldPipeline
           worktree_path = File.join(@repo_path, ".worktrees", branch)
           system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
 
+          # ensure_gitignore! runs before normalize_worktree in production
+          File.write(File.join(worktree_path, ".gitignore"), "log/\n")
+
           FileUtils.mkdir_p(File.join(worktree_path, "log"))
           File.write(File.join(worktree_path, "log", "development.log"), "log line")
           File.write(File.join(worktree_path, "app.rb"), "class App; end")
@@ -605,6 +814,9 @@ module ArnoldPipeline
           worktree_path = File.join(@repo_path, ".worktrees", branch)
           system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
 
+          # ensure_gitignore! runs before normalize_worktree in production
+          File.write(File.join(worktree_path, ".gitignore"), "node_modules/\n")
+
           FileUtils.mkdir_p(File.join(worktree_path, "node_modules", "express"))
           File.write(File.join(worktree_path, "node_modules", "express", "index.js"), "module.exports = {}")
           File.write(File.join(worktree_path, "index.js"), "console.log('hello')")
@@ -613,7 +825,53 @@ module ArnoldPipeline
 
           diff = @provider.send(:capture_diff, branch: branch)
           assert_includes diff, "index.js"
-          refute_includes diff, "node_modules"
+          refute_includes diff, "node_modules/express"
+        ensure
+          system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
+        end
+
+        test "normalize_worktree handles repos with existing .gitignore gracefully" do
+          branch = "test-normalize-existing-gitignore"
+          worktree_path = File.join(@repo_path, ".worktrees", branch)
+          system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
+
+          # Simulate a Rails repo's .gitignore that already excludes log/ and tmp/
+          File.write(File.join(worktree_path, ".gitignore"), "log/\ntmp/\n")
+
+          # Create files only in gitignored directories (the trigger scenario)
+          FileUtils.mkdir_p(File.join(worktree_path, "log"))
+          FileUtils.mkdir_p(File.join(worktree_path, "tmp"))
+          File.write(File.join(worktree_path, "log", "development.log"), "log data")
+          File.write(File.join(worktree_path, "tmp", "cache.bin"), "cache data")
+
+          # Should NOT raise — this is the bug fix
+          @provider.send(:normalize_worktree, worktree_path: worktree_path, title: "Handle gitignore")
+
+          # Verify no commit was made for the title (only gitignored files changed, plus .gitignore itself)
+          log_output, = Open3.capture2("git", "-C", worktree_path, "log", "--oneline")
+          # The .gitignore change will be committed, but the ignored files won't be
+          diff = @provider.send(:capture_diff, branch: branch)
+          refute_includes diff, "development.log"
+          refute_includes diff, "cache.bin"
+        ensure
+          system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
+        end
+
+        test "normalize_worktree stages non-ignored files when repo has .gitignore" do
+          branch = "test-normalize-mixed-gitignore"
+          worktree_path = File.join(@repo_path, ".worktrees", branch)
+          system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
+
+          File.write(File.join(worktree_path, ".gitignore"), "log/\ntmp/\n")
+          FileUtils.mkdir_p(File.join(worktree_path, "log"))
+          File.write(File.join(worktree_path, "log", "dev.log"), "log")
+          File.write(File.join(worktree_path, "app.rb"), "class App; end")
+
+          @provider.send(:normalize_worktree, worktree_path: worktree_path, title: "Mixed files")
+
+          diff = @provider.send(:capture_diff, branch: branch)
+          assert_includes diff, "app.rb"
+          refute_includes diff, "dev.log"
         ensure
           system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
         end

@@ -7,9 +7,9 @@ module ArnoldPipeline
       class Anthropic < Base
         DEFAULT_MAX_TOKENS = 4096
 
-        def initialize(api_key:, model:, logger: nil)
+        def initialize(api_key:, model:, request_timeout: 600, logger: nil)
           super(logger:)
-          @client = ::Anthropic::Client.new(access_token: api_key)
+          @client = ::Anthropic::Client.new(access_token: api_key, request_timeout: request_timeout)
           @model = model
         end
 
@@ -28,6 +28,24 @@ module ArnoldPipeline
           raise
         end
 
+        def chat_json(messages:, system: nil, schema:)
+          tool_name = schema[:name]
+          params = {
+            model: @model,
+            max_tokens: DEFAULT_MAX_TOKENS,
+            messages: normalize_messages(messages),
+            tools: [{ name: tool_name, input_schema: schema[:schema] }],
+            tool_choice: { type: "tool", name: tool_name }
+          }
+          params[:system] = system if system
+
+          response = @client.messages(parameters: params)
+          extract_tool_input(response, tool_name)
+        rescue Faraday::ClientError => e
+          log_api_error("Anthropic", e)
+          raise
+        end
+
         private
 
         def normalize_messages(messages)
@@ -38,6 +56,14 @@ module ArnoldPipeline
 
         def extract_text(response)
           response.dig("content", 0, "text") || ""
+        end
+
+        def extract_tool_input(response, tool_name)
+          blocks = response["content"] || []
+          tool_block = blocks.find { |b| b["type"] == "tool_use" && b["name"] == tool_name }
+          raise ArnoldPipeline::Error, "No tool_use block for '#{tool_name}' in response" unless tool_block
+
+          tool_block["input"]
         end
       end
     end

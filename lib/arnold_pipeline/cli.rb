@@ -70,6 +70,7 @@ module ArnoldPipeline
 
         stop_after = validate_stop_after(options[:stop_after])
         logger = build_logger(options[:verbose])
+        ArnoldPipeline.configuration.verbose_event_logging = true if options[:verbose]
         orchestrator = Orchestrator.new(logger:)
 
         quiet_say "Starting pipeline for: #{description}", :green
@@ -127,6 +128,7 @@ module ArnoldPipeline
 
         stop_after = validate_stop_after(options[:stop_after])
         logger = build_logger(options[:verbose])
+        ArnoldPipeline.configuration.verbose_event_logging = true if options[:verbose]
         orchestrator = Orchestrator.new(logger:)
 
         quiet_say "Resuming pipeline run ##{id}...", :green
@@ -259,6 +261,50 @@ module ArnoldPipeline
       end
     end
 
+    desc "log ID", "Show the event audit trail for a pipeline run"
+    option :json, type: :boolean, default: false, desc: "Output as JSON"
+    option :stage, type: :string, desc: "Filter events by stage"
+    option :verbose, type: :boolean, default: false, desc: "Include full payloads"
+    def log(id)
+      setup_standalone!
+
+      run_record = PipelineRun.find_by(id:)
+      unless run_record
+        say_error "Pipeline run ##{id} not found", :red
+        raise SystemExit.new(1)
+      end
+
+      events = run_record.pipeline_events.chronological
+      events = events.for_stage(options[:stage]) if options[:stage]
+
+      if events.empty?
+        say "No events found for pipeline run ##{id}", :yellow
+        return
+      end
+
+      if options[:json]
+        data = events.map { |e| event_to_hash(e, include_payload: options[:verbose]) }
+        say JSON.pretty_generate(data)
+        return
+      end
+
+      say "Pipeline Run ##{run_record.id} — Event Timeline (#{events.size} events)\n", :green
+
+      events.each do |event|
+        timestamp = event.created_at.strftime("%H:%M:%S")
+        duration = event.duration_ms ? " (#{event.duration_ms.round(0)}ms)" : ""
+        say "[#{timestamp}] #{event.stage} / #{event.event_type}#{duration}"
+
+        format_event_summary(event)
+
+        if options[:verbose] && event.payload.present?
+          say "  Payload: #{JSON.pretty_generate(event.payload).gsub("\n", "\n  ")}"
+        end
+
+        say ""
+      end
+    end
+
     desc "tasks ID", "Export the tasks for a pipeline run"
     option :output, type: :string, aliases: "-o", desc: "Write to file instead of stdout"
     option :json, type: :boolean, default: false, desc: "Output as JSON"
@@ -372,6 +418,8 @@ module ArnoldPipeline
         c.claude_code_permission_mode = yaml_config[:claude_code_permission_mode] if yaml_config[:claude_code_permission_mode]
         c.openspec_enabled = yaml_config[:openspec_enabled] unless yaml_config[:openspec_enabled].nil?
         c.openspec_cli_path = yaml_config[:openspec_cli_path] if yaml_config[:openspec_cli_path]
+        c.event_logging_enabled = yaml_config[:event_logging_enabled] unless yaml_config[:event_logging_enabled].nil?
+        c.verbose_event_logging = yaml_config[:verbose_event_logging] unless yaml_config[:verbose_event_logging].nil?
         if yaml_config[:workflow_branch_pattern]
           begin
             c.workflow_branch_pattern = Regexp.new(yaml_config[:workflow_branch_pattern])
@@ -479,6 +527,62 @@ module ArnoldPipeline
         $stderr.puts "Specification v#{version_number} written to #{options[:output]}"
       else
         say revision.content
+      end
+    end
+
+    def event_to_hash(event, include_payload: false)
+      hash = {
+        event_type: event.event_type,
+        stage: event.stage,
+        summary: event.summary,
+        duration_ms: event.duration_ms,
+        iteration_number: event.iteration_number,
+        tier_number: event.tier_number,
+        created_at: event.created_at.iso8601
+      }
+      hash[:payload] = event.payload if include_payload && event.payload.present?
+      hash
+    end
+
+    def format_event_summary(event)
+      summary = event.summary || {}
+      case event.event_type
+      when "library_selection"
+        say "  Persona: #{summary['persona']} | Recipe: #{summary['recipe']} | Domain: #{summary['domain_type']}"
+      when "spec_generated"
+        say "  Spec v#{summary['spec_version']}, #{summary['content_length']} chars"
+      when "tasks_broken"
+        say "  #{summary['task_count']} tasks across #{summary['tier_count']} tiers, #{summary['dependency_edge_count']} dependency edges"
+      when "tier_execution_started"
+        say "  Tier #{summary['tier_number']}, #{summary['task_count']} tasks: #{(summary['task_titles'] || []).join(', ')}"
+      when "tier_execution_completed"
+        say "  Tier #{summary['tier_number']}: #{summary['resolved_count']} resolved, #{summary['failed_count']} failed"
+      when "tier_gate_evaluated"
+        status = summary["pass"] ? "PASSED" : "FAILED"
+        issues = (summary["issues"] || []).join("; ")
+        say "  Gate: #{status}#{issues.present? ? " — #{issues}" : ""}"
+      when "analysis_completed"
+        say "  Decision: #{summary['decision']} (#{summary['confidence']}% confidence)"
+        say "  Reasoning: #{summary['reasoning_excerpt']}" if summary["reasoning_excerpt"].present?
+      when "iteration_decision"
+        say "  Decision: #{summary['decision']}"
+      when "spec_delta_merged"
+        say "  Strategy: #{summary['merge_strategy']}, #{summary['delta_count']} deltas, new version: v#{summary['new_version']}"
+      when "pipeline_paused"
+        say "  Status: #{summary['status']}, reason: #{summary['reason']}"
+      when "pipeline_failed"
+        say "  #{summary['error_class']}: #{summary['error_message']}"
+        say "  Stage: #{summary['failed_stage']}" if summary["failed_stage"]
+        say "  Provider: #{summary['llm_provider']} / #{summary['llm_model']}" if summary["llm_provider"]
+        say "  Execution: #{summary['execution_provider']}" if summary["execution_provider"]
+        if options[:verbose] && summary["backtrace"]
+          say "  Backtrace:"
+          summary["backtrace"].each { |frame| say "    #{frame}" }
+        end
+      when "pipeline_completed"
+        say "  #{summary['total_iterations']} iterations, #{summary['total_tasks']} tasks"
+      else
+        say "  #{summary.inspect}"
       end
     end
 

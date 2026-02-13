@@ -72,6 +72,16 @@ module ArnoldPipeline
           assert_match(/Anthropic API 400: prompt is too long/, log_output.string)
         end
 
+        test "passes request_timeout to client" do
+          ::Anthropic::Client.expects(:new).with(access_token: "sk-test-key", request_timeout: 300).returns(stub(messages: {}))
+          Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-20250514", request_timeout: 300)
+        end
+
+        test "defaults request_timeout to 600" do
+          ::Anthropic::Client.expects(:new).with(access_token: "sk-test-key", request_timeout: 600).returns(stub(messages: {}))
+          Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-20250514")
+        end
+
         test "chat logs response body on 429 error" do
           log_output = StringIO.new
           provider = Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-20250514",
@@ -89,6 +99,53 @@ module ArnoldPipeline
           end
 
           assert_match(/Anthropic API 429: rate limit exceeded/, log_output.string)
+        end
+
+        # -- chat_json tests --
+
+        test "chat_json returns parsed hash from tool_use response" do
+          schema = { name: "test_tool", schema: { type: "object", properties: { key: { type: "string" } } } }
+
+          stub_request(:post, "https://api.anthropic.com/v1/messages")
+            .with { |req|
+              body = JSON.parse(req.body)
+              body["tools"].first["name"] == "test_tool" &&
+                body["tool_choice"] == { "type" => "tool", "name" => "test_tool" }
+            }
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: {
+                content: [{ type: "tool_use", id: "toolu_123", name: "test_tool", input: { "key" => "value" } }],
+                role: "assistant"
+              }.to_json
+            )
+
+          result = @provider.chat_json(
+            messages: [{ role: :user, content: "Hello" }],
+            schema: schema
+          )
+          assert_instance_of Hash, result
+          assert_equal "value", result["key"]
+        end
+
+        test "chat_json raises when no tool_use block in response" do
+          schema = { name: "test_tool", schema: { type: "object", properties: {} } }
+
+          stub_request(:post, "https://api.anthropic.com/v1/messages")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: {
+                content: [{ type: "text", text: "No tool use here" }],
+                role: "assistant"
+              }.to_json
+            )
+
+          error = assert_raises(ArnoldPipeline::Error) do
+            @provider.chat_json(messages: [{ role: :user, content: "Hi" }], schema: schema)
+          end
+          assert_match(/No tool_use block/, error.message)
         end
       end
     end

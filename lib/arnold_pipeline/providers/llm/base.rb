@@ -14,6 +14,10 @@ module ArnoldPipeline
           raise NotImplementedError, "#{self.class}#chat must be implemented"
         end
 
+        def chat_json(messages:, system: nil, schema:)
+          raise NotImplementedError, "#{self.class}#chat_json must be implemented"
+        end
+
         private
 
         def log_api_error(provider_name, error)
@@ -34,6 +38,7 @@ module ArnoldPipeline
         provider ||= config.llm_provider
         api_key  ||= config.llm_api_key
         model    ||= config.llm_model
+        request_timeout = config.llm_request_timeout
 
         if api_key.nil? || api_key.to_s.empty?
           env_var = Configuration::PROVIDER_DEFAULTS.dig(provider, :env_key)
@@ -44,10 +49,10 @@ module ArnoldPipeline
         case provider
         when :anthropic
           require_relative "anthropic"
-          Anthropic.new(api_key:, model:)
+          Anthropic.new(api_key:, model:, request_timeout:)
         when :openai
           require_relative "open_ai"
-          OpenAi.new(api_key:, model:)
+          OpenAi.new(api_key:, model:, request_timeout:)
         else
           raise ConfigurationError, "Unknown LLM provider: #{provider}"
         end

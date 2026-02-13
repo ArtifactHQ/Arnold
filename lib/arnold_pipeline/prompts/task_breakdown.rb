@@ -48,17 +48,31 @@ module ArnoldPipeline
           - For each spec section, name the specific tools and libraries that apply to
             that section's tasks (e.g., ActiveRecord for models, Turbo Streams for real-time)
 
+          # Local Execution Requirements
+
+          The generated project MUST be immediately runnable after setup:
+          - The bootstrap task MUST produce a working `bin/setup` that installs all
+            dependencies and prepares the database in one command
+          - Use SQLite for the development database (Rails 8 default) — zero external dependencies
+          - Use Solid Queue, Solid Cache, Solid Cable — no Redis or Memcached
+          - All external integrations MUST work without configuration in development
+            (use test/mock modes or graceful degradation)
+
           # Output Format
 
-          Return a JSON array fenced with ```json, where each element has:
+          Your response will be validated against a JSON schema. Return valid JSON matching this structure:
           {
-            "title": "Short descriptive title",
-            "description": "Detailed description with acceptance criteria",
-            "priority": 0,
-            "labels": ["backend", "database"],
-            "position": 0,
-            "depends_on": [],
-            "section_ref": "Features > Authentication"
+            "tasks": [
+              {
+                "title": "Short descriptive title",
+                "description": "Detailed description with acceptance criteria",
+                "priority": 0,
+                "labels": ["backend", "database"],
+                "position": 0,
+                "depends_on": [],
+                "section_ref": "Features > Authentication"
+              }
+            ]
           }
 
           The "position" field determines execution order (0-indexed).
@@ -95,6 +109,9 @@ module ArnoldPipeline
         sr = supporting_recipes_brief(supporting_recipes)
         parts << "" << sr unless sr.empty?
 
+        vc = verification_context(recipe)
+        parts << "" << vc unless vc.empty?
+
         parts << ""
         parts << "Use these tools, gems, generators, and framework patterns when writing task descriptions."
         parts.join("\n")
@@ -113,7 +130,8 @@ module ArnoldPipeline
       def self.sections_detail(recipe)
         return "" if recipe.sections.empty?
 
-        recipe.sections.map { |s| format_section(s) }.join("\n\n")
+        pipeline_sections = recipe.sections.reject { |s| s["phase"] == "post_pipeline" }
+        pipeline_sections.map { |s| format_section(s) }.join("\n\n")
       end
 
       def self.format_section(section)
@@ -132,6 +150,11 @@ module ArnoldPipeline
           parts << ""
           parts << "Implementation guidance:"
           guidance.each { |g| parts << "- #{g}" }
+        end
+
+        if section["tier_placement"]
+          parts << ""
+          parts << "Tier placement: #{section['tier_placement']} (tasks from this section should be placed in the #{section['tier_placement']} execution tier)"
         end
 
         parts.join("\n")
@@ -153,7 +176,20 @@ module ArnoldPipeline
         parts.join("\n")
       end
 
-      private_class_method :technology_context, :framework_section, :sections_detail, :format_section, :supporting_recipes_brief
+      def self.verification_context(recipe)
+        return "" if recipe.verification.nil? || recipe.verification.empty?
+
+        parts = ["## Verification"]
+        parts << "After all tasks complete, the project should be verifiable with:"
+        parts << "- Setup: `#{recipe.verification['setup_command']}`" if recipe.verification["setup_command"]
+        parts << "- Run: `#{recipe.verification['run_command']}`" if recipe.verification["run_command"]
+        parts << "- Health check: `#{recipe.verification['health_check']}`" if recipe.verification["health_check"]
+        parts << ""
+        parts << "Ensure the bootstrap task produces a project that passes these verification steps."
+        parts.join("\n")
+      end
+
+      private_class_method :technology_context, :framework_section, :sections_detail, :format_section, :supporting_recipes_brief, :verification_context
     end
   end
 end

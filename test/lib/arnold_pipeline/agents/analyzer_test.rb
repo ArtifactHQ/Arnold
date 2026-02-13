@@ -1,6 +1,7 @@
 require "test_helper"
 require "arnold_pipeline/agents/analyzer"
 require "arnold_pipeline/library/manager"
+require "json_schemer"
 
 module ArnoldPipeline
   module Agents
@@ -16,9 +17,12 @@ module ArnoldPipeline
           "decision" => "done",
           "confidence" => 95,
           "reasoning" => "All features implemented correctly",
-          "corrective_data" => {}
+          "completeness_scores" => { "new_reader_test" => 90, "coding_agent_test" => 95, "change_request_test" => 85 },
+          "anti_patterns_found" => [],
+          "corrective_data" => { "tasks" => nil, "deltas" => nil },
+          "requirement_coverage" => nil
         }
-        @llm.expects(:chat).returns("```json\n#{JSON.generate(analysis)}\n```")
+        @llm.expects(:chat_json).returns(analysis)
 
         result = @agent.call(
           spec_content: "# Spec", diffs: "diff content",
@@ -34,11 +38,15 @@ module ArnoldPipeline
           "decision" => "iterate_tasks",
           "confidence" => 75,
           "reasoning" => "Missing error handling",
+          "completeness_scores" => { "new_reader_test" => 70, "coding_agent_test" => 65, "change_request_test" => 60 },
+          "anti_patterns_found" => [],
           "corrective_data" => {
-            "tasks" => [{ "title" => "Add error handling", "description" => "..." }]
-          }
+            "tasks" => [{ "title" => "Add error handling", "description" => "...", "priority" => 0, "labels" => ["bugfix"], "depends_on" => [] }],
+            "deltas" => nil
+          },
+          "requirement_coverage" => nil
         }
-        @llm.expects(:chat).returns("```json\n#{JSON.generate(analysis)}\n```")
+        @llm.expects(:chat_json).returns(analysis)
 
         result = @agent.call(
           spec_content: "# Spec", diffs: "diff content",
@@ -50,8 +58,13 @@ module ArnoldPipeline
       end
 
       test "raises on invalid decision" do
-        analysis = { "decision" => "invalid", "confidence" => 50, "reasoning" => "test" }
-        @llm.expects(:chat).returns("```json\n#{JSON.generate(analysis)}\n```")
+        analysis = {
+          "decision" => "invalid", "confidence" => 50, "reasoning" => "test",
+          "completeness_scores" => { "new_reader_test" => 50, "coding_agent_test" => 50, "change_request_test" => 50 },
+          "anti_patterns_found" => [], "corrective_data" => { "tasks" => nil, "deltas" => nil },
+          "requirement_coverage" => nil
+        }
+        @llm.expects(:chat_json).returns(analysis)
 
         assert_raises(ArnoldPipeline::Error) do
           @agent.call(spec_content: "spec", diffs: "diff", iteration_number: 1, persona: @persona)
@@ -59,8 +72,13 @@ module ArnoldPipeline
       end
 
       test "raises on invalid confidence" do
-        analysis = { "decision" => "done", "confidence" => 150, "reasoning" => "test" }
-        @llm.expects(:chat).returns("```json\n#{JSON.generate(analysis)}\n```")
+        analysis = {
+          "decision" => "done", "confidence" => 150, "reasoning" => "test",
+          "completeness_scores" => { "new_reader_test" => 50, "coding_agent_test" => 50, "change_request_test" => 50 },
+          "anti_patterns_found" => [], "corrective_data" => { "tasks" => nil, "deltas" => nil },
+          "requirement_coverage" => nil
+        }
+        @llm.expects(:chat_json).returns(analysis)
 
         assert_raises(ArnoldPipeline::Error) do
           @agent.call(spec_content: "spec", diffs: "diff", iteration_number: 1, persona: @persona)
@@ -78,9 +96,10 @@ module ArnoldPipeline
             "change_request_test" => 80
           },
           "anti_patterns_found" => [],
-          "corrective_data" => {}
+          "corrective_data" => { "tasks" => nil, "deltas" => nil },
+          "requirement_coverage" => nil
         }
-        @llm.expects(:chat).returns("```json\n#{JSON.generate(analysis)}\n```")
+        @llm.expects(:chat_json).returns(analysis)
 
         result = @agent.call(spec_content: "spec", diffs: "diff", iteration_number: 1, persona: @persona)
 
@@ -89,32 +108,21 @@ module ArnoldPipeline
         assert_equal 80, result["completeness_scores"]["change_request_test"]
       end
 
-      test "warns but does not raise on invalid completeness_scores" do
-        analysis = {
-          "decision" => "done",
-          "confidence" => 90,
-          "reasoning" => "test",
-          "completeness_scores" => "not a hash",
-          "corrective_data" => {}
-        }
-        @llm.expects(:chat).returns("```json\n#{JSON.generate(analysis)}\n```")
-
-        result = @agent.call(spec_content: "spec", diffs: "diff", iteration_number: 1, persona: @persona)
-        assert_equal "done", result["decision"]
-      end
-
       test "passes comments through to prompt" do
         analysis = {
           "decision" => "done",
           "confidence" => 90,
           "reasoning" => "Analysis complete",
-          "corrective_data" => {}
+          "completeness_scores" => { "new_reader_test" => 90, "coding_agent_test" => 90, "change_request_test" => 90 },
+          "anti_patterns_found" => [],
+          "corrective_data" => { "tasks" => nil, "deltas" => nil },
+          "requirement_coverage" => nil
         }
-        @llm.expects(:chat).with { |params|
+        @llm.expects(:chat_json).with { |params|
           user_msg = params[:messages].first[:content]
           user_msg.include?("## Task Comments / Agent Feedback") &&
             user_msg.include?("Missing Gemfile")
-        }.returns("```json\n#{JSON.generate(analysis)}\n```")
+        }.returns(analysis)
 
         @agent.call(
           spec_content: "# Spec",
@@ -130,13 +138,62 @@ module ArnoldPipeline
           "decision" => "done",
           "confidence" => 95,
           "reasoning" => "All good",
-          "corrective_data" => {}
+          "completeness_scores" => { "new_reader_test" => 95, "coding_agent_test" => 95, "change_request_test" => 95 },
+          "anti_patterns_found" => [],
+          "corrective_data" => { "tasks" => nil, "deltas" => nil },
+          "requirement_coverage" => nil
         }
-        @llm.expects(:chat).returns("```json\n#{JSON.generate(analysis)}\n```")
+        @llm.expects(:chat_json).returns(analysis)
 
         result = @agent.call(spec_content: "spec", diffs: "diff", iteration_number: 1, persona: @persona)
         assert_equal "done", result["decision"]
-        assert_nil result["completeness_scores"]
+      end
+
+      # -- Schema validation --
+
+      test "RESPONSE_SCHEMA validates a done response" do
+        schemer = JSONSchemer.schema(Analyzer::RESPONSE_SCHEMA[:schema])
+        data = {
+          "decision" => "done", "confidence" => 95, "reasoning" => "All good",
+          "completeness_scores" => { "new_reader_test" => 90, "coding_agent_test" => 95, "change_request_test" => 85 },
+          "anti_patterns_found" => [],
+          "corrective_data" => { "tasks" => nil, "deltas" => nil },
+          "requirement_coverage" => nil
+        }
+        assert schemer.valid?(data), "Expected valid, got: #{schemer.validate(data).map(&:to_h)}"
+      end
+
+      test "RESPONSE_SCHEMA validates an iterate_tasks response" do
+        schemer = JSONSchemer.schema(Analyzer::RESPONSE_SCHEMA[:schema])
+        data = {
+          "decision" => "iterate_tasks", "confidence" => 70, "reasoning" => "Missing features",
+          "completeness_scores" => { "new_reader_test" => 60, "coding_agent_test" => 50, "change_request_test" => 55 },
+          "anti_patterns_found" => ["ORPHANED_REFERENCE: User model referenced but not defined"],
+          "corrective_data" => {
+            "tasks" => [{ "title" => "Fix auth", "description" => "Add login", "priority" => 0, "labels" => ["backend"], "depends_on" => [] }],
+            "deltas" => nil
+          },
+          "requirement_coverage" => [{ "id" => "REQ-AUTH-001", "status" => "partial", "notes" => "Missing OAuth" }]
+        }
+        assert schemer.valid?(data), "Expected valid, got: #{schemer.validate(data).map(&:to_h)}"
+      end
+
+      test "RESPONSE_SCHEMA validates an iterate_spec response with deltas" do
+        schemer = JSONSchemer.schema(Analyzer::RESPONSE_SCHEMA[:schema])
+        data = {
+          "decision" => "iterate_spec", "confidence" => 60, "reasoning" => "Spec is ambiguous",
+          "completeness_scores" => { "new_reader_test" => 40, "coding_agent_test" => 35, "change_request_test" => 45 },
+          "anti_patterns_found" => [],
+          "corrective_data" => {
+            "tasks" => nil,
+            "deltas" => [{
+              "operation" => "modified", "section" => "Auth", "requirement" => "Login",
+              "content" => nil, "before_content" => "old", "after_content" => "new", "rationale" => "Clarify"
+            }]
+          },
+          "requirement_coverage" => nil
+        }
+        assert schemer.valid?(data), "Expected valid, got: #{schemer.validate(data).map(&:to_h)}"
       end
     end
   end

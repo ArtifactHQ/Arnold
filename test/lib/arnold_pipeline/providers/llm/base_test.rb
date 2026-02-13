@@ -50,6 +50,20 @@ module ArnoldPipeline
           assert_match(/LLM API key is required/, error.message)
         end
 
+        test "build passes llm_request_timeout to provider" do
+          ArnoldPipeline.configure do |c|
+            c.llm_provider = :anthropic
+            c.llm_api_key = "sk-test"
+            c.llm_model = "claude-sonnet-4-20250514"
+            c.llm_request_timeout = 900
+          end
+
+          Anthropic.expects(:new).with(api_key: "sk-test", model: "claude-sonnet-4-20250514", request_timeout: 900).returns(stub)
+          Llm.build
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
         test "base class raises NotImplementedError" do
           assert_raises(NotImplementedError) do
             Base.new.chat(messages: [])

@@ -25,6 +25,11 @@ framework:
   docs: Rswag (OpenAPI/Swagger) or manual OpenAPI spec
   deployment: Kamal 2
 
+verification:
+  setup_command: "bin/setup"
+  run_command: "bin/dev"
+  health_check: "http://localhost:3000/up"
+
 sections:
   - name: Endpoints & Routing
     description: >
@@ -112,6 +117,23 @@ sections:
       - Document error codes and their meanings
       - Provide a Postman collection or equivalent for quick testing
 
+  - name: Local Development
+    description: >
+      Bootstrapping scripts, development database, and single-command
+      startup for immediate local execution.
+    rails_tools:
+      - bin/setup (first-time dependency install and database preparation)
+      - bin/dev with Procfile.dev (multi-process startup)
+      - db/seeds.rb (demo data)
+    guidance:
+      - Use SQLite for development database — zero external dependencies
+      - Use Solid Queue, Solid Cache, Solid Cable — no Redis needed
+      - bin/setup must handle bundle install, db:prepare, and asset compilation
+      - Procfile.dev must list all processes (web, job worker)
+      - Create .env.example documenting any optional environment variables
+      - Include meaningful seed data with documented demo credentials
+      - Development MUST work with zero environment variables configured
+
   - name: Testing
     description: >
       Request specs, contract testing, and integration tests for
@@ -125,6 +147,7 @@ sections:
       - Test authentication and authorization edge cases explicitly
       - Validate JSON response structure, not just status codes
       - Test rate limiting behavior under load
+    tier_placement: final
 
   - name: Deployment & Infrastructure
     description: >
@@ -138,3 +161,4 @@ sections:
       - Use Kamal for rolling deploys with health check gates
       - Plan horizontal scaling strategy (stateless controllers)
       - Monitor API response times and error rates from day one
+    phase: post_pipeline

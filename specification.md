@@ -153,6 +153,24 @@ The system SHOULD support dynamic selection based on NL input keyword matching. 
 - WHEN keyword matching is performed against the library's persona and recipe keywords.
 - THEN the most relevant persona (e.g., Domain Expert for fintech) and recipe (e.g., API Service) are retrieved and injected into prompts.
 
+### Requirement: Recipe Structural Metadata [SPEC-LIBRARY-002]
+Recipes MAY include structural metadata on their sections to guide task breakdown and execution ordering.
+
+#### Scenario: Phase Filtering Excludes Post-Pipeline Sections
+- GIVEN a recipe with a section tagged `phase: post_pipeline` (e.g., Deployment & Infrastructure).
+- WHEN the task breakdown prompt is constructed.
+- THEN sections with `phase: post_pipeline` are excluded from the prompt, so the agent does not generate deployment tasks that cannot be executed in the pipeline.
+
+#### Scenario: Tier Placement Hints Guide Task Ordering
+- GIVEN a recipe section with `tier_placement: final` (e.g., Testing & Quality).
+- WHEN the task breakdown prompt includes that section.
+- THEN the prompt instructs the agent to place tasks from that section in the final execution tier, after all other implementation tiers.
+
+#### Scenario: Verification Criteria Inform Bootstrap Tasks
+- GIVEN a recipe with a `verification` block containing `setup_command`, `run_command`, and/or `health_check`.
+- WHEN the task breakdown prompt is constructed.
+- THEN the verification steps are included in the prompt so the agent ensures the bootstrap task produces a project that passes those checks.
+
 ### Requirement: OpenSpec Integration [SPEC-OPENSPEC-001]
 The system SHALL support integration with the OpenSpec CLI (`@fission-ai/openspec`) for structured spec merging during `iterate_spec` decisions.
 The system MUST gracefully degrade when the OpenSpec CLI is not installed, falling back to the structured append or legacy append merge strategies.
@@ -226,16 +244,50 @@ After each tier completes, results are merged before the next tier begins.
 - WHEN the TierGateCheck agent evaluates the merged diffs and task summaries.
 - THEN it returns a pass/fail verdict, a context_summary, and optionally corrective_tasks.
 
-#### Scenario: Tier Gate Failure with Retry
+#### Scenario: Tier Gate Failure with Retry [SPEC-TIER-004]
 - GIVEN a tier that failed the gate check.
 - AND retry_count is less than max_tier_retries (default 2, range 0-5).
 - WHEN the system retries.
-- THEN corrective tasks from the gate result are created at the same tier, executed, merged, and re-evaluated.
+- THEN corrective tasks from the gate result are created at the same tier, executed sequentially (one at a time with merge between each), and re-evaluated.
+- AND each corrective task branches from the updated master branch (including changes from the previous corrective task's merge).
+- AND task summaries sent to the tier gate reviewer are annotated with `[FAILED - EMPTY DIFF]` for tasks that completed with exit code 0 but no code changes, or `[FAILED]` for other failures.
 
 #### Scenario: Tier Gate Retry Exhaustion
 - GIVEN a tier that has failed the gate check max_tier_retries times.
 - WHEN the retry limit is reached.
 - THEN the pipeline is paused with status "paused", metadata records the tier_gate_failure details, and a TierGateError is raised.
+
+#### Scenario: Empty Diff Detection (Claude Code Provider) [SPEC-TIER-005]
+- GIVEN a task executed by the Claude Code provider.
+- AND the Claude CLI exits with code 0 (success).
+- WHEN the captured diff from the worktree branch is empty.
+- THEN the task result is marked as `success: false` with error "Task completed with exit code 0 but produced no code changes".
+- AND the task is eligible for tier gate corrective task generation.
+
+#### Scenario: Baseline-Aware Tier Gate [SPEC-TIER-006]
+- GIVEN a pipeline runs on a repository with existing files from a prior pipeline run.
+- AND `claude_code_repo_path` is configured with a valid git repository path.
+- WHEN the Orchestrator's `execute!` method begins.
+- THEN the baseline commit SHA is recorded in pipeline metadata via `record_baseline_sha!` using `git rev-parse HEAD`.
+- AND when a tier gate check evaluates diffs, the TierExecutionEngine invokes `RepoContextScanner.call(repo_path:)` to scan existing tracked files.
+- AND the scanner uses `git ls-tree` to list files matching `repo_context_scan_patterns` (default: db/migrate/, config/, app/models/, app/controllers/, lib/) and `repo_context_scan_files` (default: Gemfile, config/routes.rb, config/database.yml, db/schema.rb, db/structure.sql).
+- AND the scanned file list is formatted with grouped directories (max 20 files shown per directory) and passed to `TierGateCheck` via the `repo_context:` parameter.
+- AND the tier gate prompt includes a "Repository Baseline" section instructing the gate reviewer to NOT flag existing files as missing.
+- AND a `repo_context_scanned` event is recorded in the pipeline audit trail with file_count and directory summary.
+
+#### Scenario: Baseline Recording is Idempotent
+- GIVEN a pipeline run already has `baseline_commit_sha` in its metadata (e.g., from a prior execution before pause).
+- WHEN `execute!` is called again during resume.
+- THEN `record_baseline_sha!` detects the existing SHA and does NOT overwrite it.
+- AND the same baseline SHA is preserved across resume cycles.
+
+#### Scenario: Graceful Degradation Without Repo Context
+- GIVEN `claude_code_repo_path` is nil or points to a non-existent directory.
+- OR `RepoContextScanner.call` fails (e.g., git command error).
+- WHEN tier gate check runs.
+- THEN the `repo_context:` parameter is nil.
+- AND the tier gate operates normally without a "Repository Baseline" section.
+- AND the pipeline continues execution without interruption.
 
 #### Scenario: Merge Conflict Resolution (Claude Code Provider)
 - GIVEN two tasks in the same tier that modify the same file (e.g., both adding routes to `config/routes.rb`).
@@ -326,6 +378,41 @@ Resume SHALL be idempotent: re-publishing already-published tasks is safely skip
 - WHEN TierExecutionEngine iterates through tiers.
 - THEN tiers where all tasks are resolved (have results or are failed) are skipped entirely.
 
+### Requirement: Pipeline Event Audit Trail
+The system SHALL record structured pipeline execution events to provide observability into decision points and execution flow.
+The system MUST support configurable event recording modes: disabled, summary-only (default), and verbose (full payloads).
+Event recording SHALL be non-fatal: database errors during event creation do not interrupt pipeline execution.
+
+#### Scenario: Pipeline Event Audit Trail [SPEC-EVENT-001]
+- GIVEN the pipeline event system is enabled.
+- WHEN a pipeline run executes through its stages.
+- THEN structured PipelineEvent records are created capturing decisions at each stage.
+- AND each event has an event_type, stage, summary, optional payload, and optional duration_ms.
+
+#### Scenario: Default Event Recording [SPEC-EVENT-002]
+- GIVEN event_logging_enabled is true (default).
+- AND verbose_event_logging is false (default).
+- WHEN a pipeline run completes.
+- THEN events are recorded with summary data for each stage.
+- AND payload fields are NULL (not stored).
+
+#### Scenario: Verbose Event Recording [SPEC-EVENT-003]
+- GIVEN event_logging_enabled is true.
+- AND verbose_event_logging is true (set via --verbose CLI flag).
+- WHEN a pipeline run completes.
+- THEN events are recorded with both summary and full LLM payload data.
+
+#### Scenario: Event Recording Disabled [SPEC-EVENT-004]
+- GIVEN event_logging_enabled is false.
+- WHEN a pipeline run completes.
+- THEN no PipelineEvent records are created.
+
+#### Scenario: Event Recording Failure is Non-Fatal [SPEC-EVENT-005]
+- GIVEN a database error occurs during event recording.
+- WHEN the PipelineEventRecorder attempts to create an event.
+- THEN the error is silently rescued.
+- AND the pipeline continues execution without interruption.
+
 ### Requirement: CLI Commands
 The system SHALL provide a command-line interface via the `arnold_pipeline` executable.
 
@@ -369,6 +456,19 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 - WHEN `arnold_pipeline tree` is executed.
 - THEN a tree of all available commands is printed.
 
+#### Command: log [SPEC-CLI-008]
+- GIVEN a pipeline run with ID exists.
+- WHEN `arnold_pipeline log ID` is executed.
+- THEN the event timeline is displayed chronologically.
+- AND each event shows timestamp, stage, event_type, and formatted summary.
+- WHEN the --stage flag is provided (e.g., `arnold_pipeline log ID --stage analysis`).
+- THEN only events matching the specified stage are shown.
+- WHEN the --json flag is provided.
+- THEN events are output as a JSON array.
+- WHEN the --verbose flag is provided.
+- THEN full payload data is included in the output.
+- Exit code 0 on success, 1 if not found.
+
 ### Requirement: Configuration
 The system SHALL be configurable via a Ruby block (`ArnoldPipeline.configure`) or YAML config file.
 When multiple sources provide the same key, CLI flags take precedence over YAML config, which takes precedence over defaults (CLI > YAML > defaults).
@@ -387,6 +487,7 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | claude_code_model | String | "sonnet" | None |
 | claude_code_max_turns | Integer | nil | None |
 | claude_code_permission_mode | String | "bypassPermissions" | Must be one of: acceptEdits, bypassPermissions, default, delegate, dontAsk, plan |
+| claude_code_max_concurrency | Integer | 4 | 1-16 |
 | max_iterations | Integer | 3 | 1-10 |
 | library_path | String | nil (built-in library) | None |
 | polling_interval | Numeric | 30 | Positive |
@@ -399,6 +500,10 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | workflow_branch_pattern | Regexp | /issue[-_]?\d+/i | None |
 | openspec_enabled | Boolean | true | None |
 | openspec_cli_path | String | "openspec" | None |
+| event_logging_enabled | Boolean | true | None |
+| verbose_event_logging | Boolean | false | None |
+| repo_context_scan_patterns | Array of Strings | nil (uses defaults) | None |
+| repo_context_scan_files | Array of Strings | nil (uses defaults) | None |
 
 ### PipelineRun State Machine
 

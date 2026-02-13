@@ -14,13 +14,17 @@ module ArnoldPipeline
                   :github_issue_mention,
                   :claude_code_repo_path, :claude_code_model,
                   :claude_code_max_turns, :claude_code_permission_mode,
+                  :claude_code_max_concurrency,
                   :max_iterations, :library_path,
                   :polling_interval, :polling_timeout, :polling_max_interval,
                   :tier_gate_enabled, :context_propagation_enabled, :max_tier_retries,
                   :workflow_status_enabled, :workflow_branch_pattern,
                   :openspec_enabled, :openspec_cli_path,
                   :max_diff_chars, :max_diff_per_file_chars,
-                  :merge_conflict_resolution_enabled, :merge_conflict_max_files
+                  :merge_conflict_resolution_enabled, :merge_conflict_max_files,
+                  :event_logging_enabled, :verbose_event_logging,
+                  :llm_request_timeout,
+                  :repo_context_scan_patterns, :repo_context_scan_files
     attr_writer   :llm_provider, :llm_api_key, :llm_model
 
     def initialize
@@ -35,6 +39,7 @@ module ArnoldPipeline
       @claude_code_model          = "sonnet"
       @claude_code_max_turns      = nil
       @claude_code_permission_mode = "bypassPermissions"
+      @claude_code_max_concurrency = 4
       @max_iterations     = 3
       @library_path       = nil
       @polling_interval     = 30
@@ -51,6 +56,11 @@ module ArnoldPipeline
       @max_diff_per_file_chars    = 10_000
       @merge_conflict_resolution_enabled = true
       @merge_conflict_max_files          = 10
+      @event_logging_enabled             = true
+      @verbose_event_logging             = false
+      @llm_request_timeout               = 600
+      @repo_context_scan_patterns        = nil
+      @repo_context_scan_files           = nil
     end
 
     def llm_provider

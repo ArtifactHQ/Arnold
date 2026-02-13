@@ -1,11 +1,15 @@
+require "arnold_pipeline/diff_summarizer"
+require "arnold_pipeline/repo_context_scanner"
+
 module ArnoldPipeline
   class TierExecutionEngine
-    attr_reader :executor, :tier_gate_check, :logger
+    attr_reader :executor, :tier_gate_check, :logger, :event_recorder
 
-    def initialize(executor:, tier_gate_check:, logger:)
+    def initialize(executor:, tier_gate_check:, logger:, event_recorder: nil)
       @executor = executor
       @tier_gate_check = tier_gate_check
       @logger = logger
+      @event_recorder = event_recorder
     end
 
     def execute_tiers!(pipeline_run)
@@ -26,6 +30,12 @@ module ArnoldPipeline
 
         logger.info { "[Arnold] Executing tier #{tier_num + 1}/#{max_tier + 1} (#{tier_tasks.size} tasks)..." }
 
+        event_recorder&.record(
+          event_type: :tier_execution_started, stage: "execution",
+          summary: { tier_number: tier_num, task_count: tier_tasks.size, task_titles: tier_tasks.map(&:title) },
+          tier_number: tier_num
+        )
+
         prior_context = build_prior_context(accumulated_context)
 
         # Publish (executor skips tasks with existing external_id)
@@ -45,6 +55,16 @@ module ArnoldPipeline
 
         # Merge this tier before next tier starts
         merge_tier_results!(pipeline_run, tier_tasks)
+
+        tier_tasks.each(&:reload)
+        resolved = tier_tasks.count { |t| tier_task_resolved?(t) }
+        failed = tier_tasks.count(&:failed?)
+        event_recorder&.record(
+          event_type: :tier_execution_completed, stage: "execution",
+          summary: { tier_number: tier_num, resolved_count: resolved, failed_count: failed },
+          tier_number: tier_num
+        )
+
         logger.info { "[Arnold] Tier #{tier_num + 1}/#{max_tier + 1} complete. Running gate check..." }
 
         # Gate check + context (when either feature is enabled)
@@ -114,16 +134,38 @@ module ArnoldPipeline
     def run_tier_gate!(pipeline_run, tier_num, tier_tasks)
       tier_tasks.each(&:reload)
 
-      task_summaries = tier_tasks.map { |t| "- **#{t.title}**: #{t.description}" }.join("\n")
-      diffs = tier_tasks.map(&:result_diff).compact.join("\n\n")
+      task_summaries = tier_tasks.map { |t|
+        suffix = if t.failed? && (t.result_diff.blank? || t.result_diff == "[]")
+          " **[FAILED - EMPTY DIFF]**"
+        elsif t.failed?
+          " **[FAILED]**"
+        else
+          ""
+        end
+        "- **#{t.title}**: #{t.description}#{suffix}"
+      }.join("\n")
+      diffs = DiffSummarizer.call(tier_tasks.map(&:result_diff).compact)
       comments = format_task_comments(tier_tasks)
+      repo_context = build_repo_context(pipeline_run)
 
-      result = tier_gate_check.call(
-        tier_number: tier_num,
-        task_summaries: task_summaries,
-        diffs: diffs,
-        comments: comments
-      )
+      result = if event_recorder
+        event_recorder.timed(
+          event_type: :tier_gate_evaluated, stage: "tier_gate",
+          summary: ->(r) {
+            {
+              pass: r&.dig("pass"),
+              issues: r&.dig("issues") || [],
+              corrective_task_count: (r&.dig("corrective_tasks") || []).size
+            }
+          },
+          payload: ->(r) { { diffs: diffs, gate_response: r } },
+          tier_number: tier_num
+        ) do
+          tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:, repo_context:)
+        end
+      else
+        tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:, repo_context:)
+      end
 
       if result
         status = result["pass"] ? "PASSED" : "FAILED"
@@ -172,20 +214,23 @@ module ArnoldPipeline
 
         return if created_tasks.empty?
 
-        # Execute corrective tasks
+        # Execute corrective tasks sequentially — each branches from updated master
         prior_context = build_prior_context(accumulated_context)
         pipeline_run.update!(status: :executing)
-        executor.call(tasks: created_tasks, pipeline_run:, prior_context:)
 
-        if executor.provider.async?
-          pipeline_run.update!(status: :awaiting_results)
-          executor.await_results(pipeline_run:, tasks: created_tasks)
-        else
-          created_tasks.each(&:reload)
-          executor.fetch_results(pipeline_run:, tasks: created_tasks)
+        created_tasks.each do |task|
+          executor.call(tasks: [task], pipeline_run:, prior_context:)
+
+          if executor.provider.async?
+            pipeline_run.update!(status: :awaiting_results)
+            executor.await_results(pipeline_run:, tasks: [task])
+          else
+            task.reload
+            executor.fetch_results(pipeline_run:, tasks: [task])
+          end
+
+          merge_tier_results!(pipeline_run, [task])
         end
-
-        merge_tier_results!(pipeline_run, created_tasks)
 
         # Re-run gate check
         all_tier_tasks = pipeline_run.tasks.in_tier(tier_num).to_a
@@ -226,6 +271,41 @@ module ArnoldPipeline
 
     def load_accumulated_context(pipeline_run)
       (pipeline_run.metadata || {})["tier_contexts"] || []
+    end
+
+    def build_repo_context(pipeline_run)
+      repo_path = ArnoldPipeline.configuration.claude_code_repo_path
+      return nil unless repo_path
+
+      file_list = RepoContextScanner.call(repo_path:)
+      return nil if file_list.nil? || file_list.empty?
+
+      formatted = format_repo_context(file_list)
+
+      event_recorder&.record(
+        event_type: :repo_context_scanned, stage: "tier_gate",
+        summary: { file_count: file_list.size, directories: file_list.map { |f| File.dirname(f) }.uniq },
+        payload: { file_list: file_list }
+      )
+
+      formatted
+    rescue => e
+      logger.warn { "[Arnold] Failed to build repo context: #{e.message}" }
+      nil
+    end
+
+    def format_repo_context(file_list)
+      grouped = file_list.group_by { |f| File.dirname(f) }
+      grouped.sort_by(&:first).map do |dir, files|
+        filenames = files.map { |f| File.basename(f) }.sort
+        if filenames.size > RepoContextScanner::MAX_FILES_PER_DIR
+          shown = filenames.first(RepoContextScanner::MAX_FILES_PER_DIR)
+          remaining = filenames.size - RepoContextScanner::MAX_FILES_PER_DIR
+          "  #{dir}/ (#{filenames.size} files): #{shown.join(', ')} ... and #{remaining} more"
+        else
+          "  #{dir}/ (#{filenames.size} files): #{filenames.join(', ')}"
+        end
+      end.join("\n")
     end
 
     def build_prior_context(tier_contexts)

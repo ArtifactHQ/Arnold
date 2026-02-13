@@ -131,6 +131,24 @@ module ArnoldPipeline
       run_record = PipelineRun.last
       assert_equal "failed", run_record.status
       assert_equal "LLM is down", run_record.metadata["error"]
+      assert_equal "StandardError", run_record.metadata["error_class"]
+      assert_equal "generate_spec", run_record.metadata["failed_stage"]
+    end
+
+    test "pipeline_failed event includes provider and stage context" do
+      @spec_generator.expects(:call).raises(StandardError, "Net::ReadTimeout")
+
+      assert_raises(StandardError) do
+        @orchestrator.call(nl_input: "Build a todo app")
+      end
+
+      event = PipelineRun.last.pipeline_events.find_by(event_type: :pipeline_failed)
+      assert_not_nil event
+      assert_equal "generate_spec", event.summary["failed_stage"]
+      assert_equal ArnoldPipeline.configuration.llm_provider.to_s, event.summary["llm_provider"]
+      assert_equal ArnoldPipeline.configuration.llm_model, event.summary["llm_model"]
+      assert_equal ArnoldPipeline.configuration.execution_provider.to_s, event.summary["execution_provider"]
+      assert event.summary["backtrace"].is_a?(Array)
     end
 
     test "call validates configuration before running" do
@@ -238,6 +256,84 @@ module ArnoldPipeline
       }.returns(sample_tasks)
 
       @orchestrator.call(nl_input: "Build a todo app", stop_after: :tasks)
+    end
+
+    test "execute! records baseline_commit_sha in metadata" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = File.expand_path("../../..", __dir__)
+      end
+
+      stub_spec_generation!
+      stub_task_breakdown!(times: 1)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      result = @orchestrator.call(nl_input: "Build a todo app")
+
+      result.reload
+      assert result.metadata["baseline_commit_sha"].present?,
+        "Expected baseline_commit_sha to be recorded"
+      assert_match(/\A[0-9a-f]{40}\z/, result.metadata["baseline_commit_sha"],
+        "Expected a valid 40-char git SHA")
+    end
+
+    test "execute! does not overwrite baseline_commit_sha on resume" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = File.expand_path("../../..", __dir__)
+      end
+
+      existing_sha = "a" * 40
+      pipeline_run = PipelineRun.create!(
+        nl_input: "Build a todo app",
+        status: :paused,
+        metadata: { "paused_at" => "executed", "baseline_commit_sha" => existing_sha }
+      )
+      pipeline_run.create_specification!(content: "Spec", version: 1)
+      pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      @orchestrator.resume(pipeline_run:)
+
+      pipeline_run.reload
+      assert_equal existing_sha, pipeline_run.metadata["baseline_commit_sha"],
+        "Should not overwrite existing baseline SHA on resume"
+    end
+
+    test "execute! handles missing repo_path gracefully for baseline SHA" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = nil
+      end
+
+      stub_spec_generation!
+      stub_task_breakdown!(times: 1)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      result = @orchestrator.call(nl_input: "Build a todo app")
+
+      result.reload
+      assert_nil result.metadata["baseline_commit_sha"],
+        "Should not record SHA when no repo_path configured"
     end
 
     test "break_tasks works without recipe in structured_data" do
