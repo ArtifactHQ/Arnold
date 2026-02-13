@@ -269,6 +269,46 @@ module ArnoldPipeline
       refute_includes result, "[truncated]"
     end
 
+    # --- Deduplication ---
+
+    test "deduplicates files by filename, keeping the latest entry" do
+      diff1 = [{ filename: "app/services/token_service.rb", patch: "+class TokenService\n+  # no expiry\n+end", status: "added" }].to_json
+      diff2 = [{ filename: "app/services/token_service.rb", patch: "+  def verify\n+    check_expiry!\n+  end", status: "modified" }].to_json
+
+      result = DiffSummarizer.call([diff1, diff2])
+
+      assert_includes result, "check_expiry!"
+      refute_includes result, "no expiry"
+    end
+
+    test "deduplication preserves unique files across tasks" do
+      diff1 = [
+        { filename: "app/models/user.rb", patch: "+class User; end", status: "added" },
+        { filename: "app/models/post.rb", patch: "+class Post; end", status: "added" }
+      ].to_json
+      diff2 = [
+        { filename: "app/models/comment.rb", patch: "+class Comment; end", status: "added" }
+      ].to_json
+
+      result = DiffSummarizer.call([diff1, diff2])
+
+      assert_includes result, "user.rb"
+      assert_includes result, "post.rb"
+      assert_includes result, "comment.rb"
+    end
+
+    test "deduplication keeps latest when same file appears in multiple tasks" do
+      diff1 = [{ filename: "db/schema.rb", patch: "+create_table :users", status: "added" }].to_json
+      diff2 = [{ filename: "db/schema.rb", patch: "+create_table :users\n+create_table :posts", status: "modified" }].to_json
+      diff3 = [{ filename: "config/routes.rb", patch: "+root 'home#index'", status: "added" }].to_json
+
+      result = DiffSummarizer.call([diff1, diff2, diff3])
+
+      assert_includes result, "create_table :posts"
+      assert_equal 1, result.scan("schema.rb").count
+      assert_includes result, "routes.rb"
+    end
+
     # --- Mixed scenarios ---
 
     test "mixed JSON and legacy diffs in same call" do

@@ -53,9 +53,10 @@ module ArnoldPipeline
 
     def call
       all_files = parse_all_diffs
-      filtered = filter_noise(all_files)
+      deduped = deduplicate_files(all_files)
+      filtered = filter_noise(deduped)
       sorted = prioritize(filtered)
-      excluded_count = all_files.size - filtered.size
+      excluded_count = deduped.size - filtered.size
 
       build_output(sorted, excluded_count)
     end
@@ -93,6 +94,17 @@ module ArnoldPipeline
       end
     rescue JSON::ParserError
       nil
+    end
+
+    # When multiple entries exist for the same filename (e.g., original task
+    # created a file, corrective task modified it), keep only the last entry.
+    # Tasks are ordered by position/id, so the last entry is the most recent.
+    def deduplicate_files(files)
+      seen = {}
+      files.each_with_index do |file, index|
+        seen[file[:filename]] = index
+      end
+      seen.values.sort.map { |i| files[i] }
     end
 
     def filter_noise(files)
