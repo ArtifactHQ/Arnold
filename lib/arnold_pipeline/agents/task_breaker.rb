@@ -29,7 +29,7 @@ module ArnoldPipeline
                   properties: {
                     type: { type: "string", enum: %w[file_exists test_exists model_has route_exists http command_exits] },
                     description: { type: "string" },
-                    params: { type: "object" }
+                    params: { type: "string", description: "JSON-encoded parameters object" }
                   }
                 } }
               }
@@ -55,11 +55,23 @@ module ArnoldPipeline
         )
 
         tasks = result["tasks"]
+        decode_criteria_params!(tasks)
         validate_tasks!(tasks)
         tasks
       end
 
       private
+
+      def decode_criteria_params!(tasks)
+        tasks.each do |task|
+          (task["acceptance_criteria"] || []).each do |ac|
+            next unless ac["params"].is_a?(String)
+            ac["params"] = JSON.parse(ac["params"])
+          rescue JSON::ParserError
+            ac["params"] = {}
+          end
+        end
+      end
 
       def validate_tasks!(tasks)
         raise Error, "Expected array of tasks, got #{tasks.class}" unless tasks.is_a?(Array)

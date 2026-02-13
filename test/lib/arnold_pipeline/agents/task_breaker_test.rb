@@ -104,7 +104,7 @@ module ArnoldPipeline
             { "title" => "Setup", "description" => "Bootstrap", "priority" => 0,
               "labels" => ["setup"], "position" => 0, "depends_on" => [], "section_ref" => "Setup",
               "acceptance_criteria" => [
-                { "type" => "file_exists", "description" => "Project exists", "params" => { "pattern" => "Gemfile" } }
+                { "type" => "file_exists", "description" => "Project exists", "params" => '{"pattern": "Gemfile"}' }
               ] }
           ]
         }

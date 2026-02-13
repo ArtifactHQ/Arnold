@@ -103,17 +103,17 @@ module ArnoldPipeline
                   {
                     "type": "file_exists",
                     "description": "User model exists",
-                    "params": { "pattern": "app/models/user.rb" }
+                    "params": "{\"pattern\": \"app/models/user.rb\"}"
                   },
                   {
                     "type": "route_exists",
                     "description": "Login endpoint is routed",
-                    "params": { "method": "POST", "path": "/api/sessions" }
+                    "params": "{\"method\": \"POST\", \"path\": \"/api/sessions\"}"
                   },
                   {
                     "type": "test_exists",
                     "description": "Session tests exist",
-                    "params": { "pattern": "test/**/*session*", "min_assertions": 2 }
+                    "params": "{\"pattern\": \"test/**/*session*\", \"min_assertions\": 2}"
                   }
                 ]
               }
@@ -128,6 +128,8 @@ module ArnoldPipeline
           traceability between tasks and specific requirements.
           The "acceptance_criteria" array contains structured assertions for automated verification.
           Every task MUST have at least one acceptance criterion.
+          IMPORTANT: The "params" field must be a JSON-encoded STRING, not a raw object.
+          Example: "params": "{\"pattern\": \"app/models/user.rb\"}" (not "params": {"pattern": "..."})
         PROMPT
       end
 
