@@ -492,6 +492,181 @@ module ArnoldPipeline
       assert_includes result, "... and 10 more"
     end
 
+    # --- Verbose logging tests ---
+
+    test "handle_tier_gate_failure! logs gate issues at debug level" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 1
+        c.tier_gate_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      log_output = StringIO.new
+      debug_logger = Logger.new(log_output, level: Logger::DEBUG)
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check, logger: debug_logger
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      gate_fail = {
+        "pass" => false,
+        "issues" => ["Missing routes file", "No database migration"],
+        "corrective_tasks" => [
+          { "title" => "Add routes", "description" => "Create config/routes.rb", "labels" => ["routing", "corrective"] }
+        ],
+        "context_summary" => "context"
+      }
+      gate_pass = { "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => [] }
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @tier_gate_check.stubs(:call).returns(gate_pass)
+
+      engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [], gate_fail, [])
+
+      log_content = log_output.string
+      assert_match(/Gate issues triggering correction:/, log_content)
+      assert_match(/1\. Missing routes file/, log_content)
+      assert_match(/2\. No database migration/, log_content)
+      assert_match(/Task: Add routes/, log_content)
+      assert_match(/Description: Create config\/routes.rb/, log_content)
+      assert_match(/Labels: routing, corrective/, log_content)
+    end
+
+    test "run_criteria_check! logs per-criterion details at debug level" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = File.expand_path("../../..", __dir__)
+      end
+
+      log_output = StringIO.new
+      debug_logger = Logger.new(log_output, level: Logger::DEBUG)
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check, logger: debug_logger
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        acceptance_criteria: [
+          { "type" => "file_exists", "description" => "Gemfile exists", "path" => "Gemfile" }
+        ]
+      )
+
+      verified_criterion = ArnoldPipeline::AcceptanceCriterion.new(
+        type: "file_exists", description: "Gemfile exists", params: { "path" => "Gemfile" }
+      )
+      ArnoldPipeline::CriteriaChecker.stubs(:call).returns({
+        verified: [verified_criterion], failed: [], unverified: []
+      })
+
+      engine.send(:run_criteria_check!, pipeline_run, [task])
+
+      log_content = log_output.string
+      assert_match(/\[file_exists\] Gemfile exists/, log_content)
+      assert_match(/Criteria results: 1 verified, 0 failed, 0 unverified/, log_content)
+      assert_match(/PASS: Gemfile exists \(file_exists\)/, log_content)
+    end
+
+    test "run_criteria_check! enriches event summary with criteria array" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = File.expand_path("../../..", __dir__)
+      end
+
+      # Use a real object to avoid Mocha block/kwargs issues
+      event_recorder = build_recording_event_recorder
+
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        acceptance_criteria: [
+          { "type" => "file_exists", "description" => "Gemfile exists", "path" => "Gemfile" },
+          { "type" => "route_exists", "description" => "Health check route", "path" => "config/routes.rb", "pattern" => "up" }
+        ]
+      )
+
+      verified = ArnoldPipeline::AcceptanceCriterion.new(type: "file_exists", description: "Gemfile exists", params: {})
+      failed = ArnoldPipeline::AcceptanceCriterion.new(type: "route_exists", description: "Health check route", params: {})
+      ArnoldPipeline::CriteriaChecker.stubs(:call).returns({
+        verified: [verified], failed: [failed], unverified: []
+      })
+
+      engine.send(:run_criteria_check!, pipeline_run, [task])
+
+      criteria_event = event_recorder.events.find { |e| e[:event_type] == :criteria_check }
+      assert_not_nil criteria_event, "Expected a criteria_check event to be recorded"
+      summary = criteria_event[:summary]
+      assert_equal 1, summary[:verified_count]
+      assert_equal 1, summary[:failed_count]
+      assert_equal 0, summary[:unverified_count]
+
+      criteria = summary[:criteria]
+      assert_equal 2, criteria.size
+      assert_equal({ type: "file_exists", description: "Gemfile exists", result: "verified" }, criteria[0])
+      assert_equal({ type: "route_exists", description: "Health check route", result: "failed" }, criteria[1])
+    end
+
+    test "run_tier_gate! enriches event summary with corrective_tasks" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      event_recorder = build_recording_event_recorder
+
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, description: "Set up the database",
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      @tier_gate_check.stubs(:call).returns({
+        "pass" => false,
+        "issues" => ["Missing route"],
+        "corrective_tasks" => [
+          { "title" => "Add route", "description" => "Add GET /up to routes.rb" }
+        ],
+        "context_summary" => "Issues found."
+      })
+
+      engine.send(:run_tier_gate!, pipeline_run, 0, [task])
+
+      timed_event = event_recorder.events.find { |e| e[:event_type] == :tier_gate_evaluated }
+      assert_not_nil timed_event, "Expected a tier_gate_evaluated event to be recorded"
+
+      summary = timed_event[:summary]
+      assert_equal false, summary[:pass]
+      assert_equal 1, summary[:corrective_task_count]
+      assert_equal [{ title: "Add route", description: "Add GET /up to routes.rb" }], summary[:corrective_tasks]
+
+      payload = timed_event[:payload]
+      assert payload.key?(:task_summaries)
+      assert payload.key?(:diffs)
+      assert payload.key?(:gate_response)
+    end
+
     # --- Existing gate failure tests ---
 
     test "handle_tier_gate_failure! retries up to max_tier_retries then pauses" do
@@ -563,6 +738,33 @@ module ArnoldPipeline
 
       pipeline_run.reload
       assert_equal "paused", pipeline_run.status
+    end
+
+    private
+
+    def build_recording_event_recorder
+      recorder = Object.new
+      recorder.instance_variable_set(:@events, [])
+
+      def recorder.events
+        @events
+      end
+
+      def recorder.record(**kwargs)
+        @events << kwargs
+      end
+
+      def recorder.timed(**kwargs, &block)
+        result = block.call
+        summary_val = kwargs[:summary]
+        resolved_summary = summary_val.is_a?(Proc) ? summary_val.call(result) : summary_val
+        payload_val = kwargs[:payload]
+        resolved_payload = payload_val.is_a?(Proc) ? payload_val.call(result) : payload_val
+        @events << kwargs.merge(summary: resolved_summary, payload: resolved_payload)
+        result
+      end
+
+      recorder
     end
   end
 end

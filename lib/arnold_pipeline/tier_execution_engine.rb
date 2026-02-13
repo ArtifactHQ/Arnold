@@ -199,10 +199,13 @@ module ArnoldPipeline
             {
               pass: r&.dig("pass"),
               issues: r&.dig("issues") || [],
-              corrective_task_count: (r&.dig("corrective_tasks") || []).size
+              corrective_task_count: (r&.dig("corrective_tasks") || []).size,
+              corrective_tasks: (r&.dig("corrective_tasks") || []).map { |t|
+                { title: t["title"], description: t["description"] }
+              }
             }
           },
-          payload: ->(r) { { diffs: diffs, gate_response: r } },
+          payload: ->(r) { { diffs: diffs, task_summaries: task_summaries, gate_response: r } },
           tier_number: tier_num
         ) do
           tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:, repo_context:,
@@ -241,6 +244,12 @@ module ArnoldPipeline
 
         logger.info { "[Arnold] Tier #{tier_num} gate failed (retry #{retry_count}/#{max_retries}), creating corrective tasks" }
 
+        gate_issues = gate_result["issues"] || []
+        if gate_issues.any?
+          logger.debug { "[Arnold] Gate issues triggering correction:" }
+          gate_issues.each_with_index { |issue, i| logger.debug { "[Arnold]   #{i + 1}. #{issue}" } }
+        end
+
         # Create corrective tasks at the same tier
         corrective_tasks = gate_result["corrective_tasks"] || []
         max_position = pipeline_run.tasks.maximum(:position) || 0
@@ -259,6 +268,11 @@ module ArnoldPipeline
         if created_tasks.any?
           titles = created_tasks.map(&:title).join(", ")
           logger.info { "[Arnold] Created #{created_tasks.size} corrective tasks for tier #{tier_num}: #{titles}" }
+          created_tasks.each do |ct|
+            logger.debug { "[Arnold]   Task: #{ct.title}" }
+            logger.debug { "[Arnold]     Description: #{ct.description}" } if ct.description.present?
+            logger.debug { "[Arnold]     Labels: #{ct.labels.join(', ')}" } if ct.labels.any?
+          end
         end
 
         return if created_tasks.empty?
@@ -565,15 +579,27 @@ module ArnoldPipeline
       return nil unless repo_path
 
       logger.info { "[Arnold] Running criteria check (#{all_criteria.size} criteria)..." }
+      all_criteria.each { |c| logger.debug { "[Arnold]   [#{c.type}] #{c.description}" } }
 
       check_result = CriteriaChecker.call(criteria: all_criteria, repo_path:)
+
+      logger.info { "[Arnold] Criteria results: #{check_result[:verified].size} verified, #{check_result[:failed].size} failed, #{check_result[:unverified].size} unverified" }
+      check_result[:verified].each { |c| logger.debug { "[Arnold]   PASS: #{c.description} (#{c.type})" } }
+      check_result[:failed].each { |c| logger.debug { "[Arnold]   FAIL: #{c.description} (#{c.type})" } }
+      check_result[:unverified].each { |c| logger.debug { "[Arnold]   UNVERIFIED: #{c.description} (#{c.type})" } }
+
+      criteria_details = []
+      check_result[:verified].each { |c| criteria_details << { type: c.type, description: c.description, result: "verified" } }
+      check_result[:failed].each { |c| criteria_details << { type: c.type, description: c.description, result: "failed" } }
+      check_result[:unverified].each { |c| criteria_details << { type: c.type, description: c.description, result: "unverified" } }
 
       event_recorder&.record(
         event_type: :criteria_check, stage: "tier_gate",
         summary: {
           verified_count: check_result[:verified].size,
           failed_count: check_result[:failed].size,
-          unverified_count: check_result[:unverified].size
+          unverified_count: check_result[:unverified].size,
+          criteria: criteria_details
         }
       )
 

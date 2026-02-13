@@ -561,6 +561,31 @@ module ArnoldPipeline
         status = summary["pass"] ? "PASSED" : "FAILED"
         issues = (summary["issues"] || []).join("; ")
         say "  Gate: #{status}#{issues.present? ? " — #{issues}" : ""}"
+        if options[:verbose]
+          corrective = summary["corrective_tasks"] || []
+          if corrective.any?
+            say "  Corrective tasks:"
+            corrective.each_with_index do |t, i|
+              say "    #{i + 1}. #{t['title']}"
+              say "       #{t['description']}" if t["description"].present?
+            end
+          end
+        end
+      when "criteria_check"
+        v = summary["verified_count"] || 0
+        f = summary["failed_count"] || 0
+        u = summary["unverified_count"] || 0
+        say "  Criteria: #{v} verified, #{f} failed, #{u} unverified"
+        if options[:verbose] && summary["criteria"]
+          summary["criteria"].each do |c|
+            label = case c["result"]
+            when "verified" then "PASS"
+            when "failed" then "FAIL"
+            else "UNVERIFIED"
+            end
+            say "    #{label}: #{c['description']} (#{c['type']})"
+          end
+        end
       when "analysis_completed"
         say "  Decision: #{summary['decision']} (#{summary['confidence']}% confidence)"
         say "  Reasoning: #{summary['reasoning_excerpt']}" if summary["reasoning_excerpt"].present?
