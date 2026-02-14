@@ -5,7 +5,7 @@ module ArnoldPipeline
   module Providers
     module Llm
       class Anthropic < Base
-        DEFAULT_MAX_TOKENS = 4096
+        DEFAULT_MAX_TOKENS = 8192
 
         def initialize(api_key:, model:, request_timeout: 600, logger: nil)
           super(logger:)
@@ -59,6 +59,13 @@ module ArnoldPipeline
         end
 
         def extract_tool_input(response, tool_name)
+          if response["stop_reason"] == "max_tokens"
+            usage = response["usage"] || {}
+            raise ArnoldPipeline::Error,
+              "Response truncated (max_tokens: #{DEFAULT_MAX_TOKENS}, used: #{usage['output_tokens'] || '?'}). " \
+              "The structured output for '#{tool_name}' exceeded the token limit."
+          end
+
           blocks = response["content"] || []
           tool_block = blocks.find { |b| b["type"] == "tool_use" && b["name"] == tool_name }
           raise ArnoldPipeline::Error, "No tool_use block for '#{tool_name}' in response" unless tool_block

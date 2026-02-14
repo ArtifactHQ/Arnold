@@ -55,6 +55,8 @@ module ArnoldPipeline
         )
 
         tasks = result["tasks"]
+        raise Error, "LLM returned no tasks (got #{result.keys.inspect})" unless tasks.is_a?(Array)
+
         decode_criteria_params!(tasks)
         validate_tasks!(tasks)
         tasks
