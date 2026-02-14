@@ -25,10 +25,8 @@ module ArnoldPipeline
                   :event_logging_enabled, :verbose_event_logging,
                   :llm_request_timeout,
                   :repo_context_scan_patterns, :repo_context_scan_files,
-                  :verification_enabled, :verification_timeout,
-                  :verification_health_check_retries, :verification_health_check_interval,
-                  :test_execution_enabled, :test_command, :test_timeout,
-                  :test_boot_command, :test_boot_timeout,
+                  :test_timeout,
+                  :post_merge_hooks, :verification_checks,
                   :spec_test_generation_enabled, :spec_test_directory, :spec_test_persona
     attr_writer   :llm_provider, :llm_api_key, :llm_model
 
@@ -67,15 +65,9 @@ module ArnoldPipeline
       @llm_request_timeout               = 600
       @repo_context_scan_patterns        = nil
       @repo_context_scan_files           = nil
-      @verification_enabled                    = false
-      @verification_timeout                    = 120
-      @verification_health_check_retries       = 10
-      @verification_health_check_interval      = 3
-      @test_execution_enabled                  = false
-      @test_command                            = nil
       @test_timeout                            = 120
-      @test_boot_command                       = nil
-      @test_boot_timeout                       = 60
+      @post_merge_hooks                        = []
+      @verification_checks                     = []
       @spec_test_generation_enabled             = false
       @spec_test_directory                       = "test/spec_integration"
       @spec_test_persona                         = "testing_specialist"
@@ -103,8 +95,7 @@ module ArnoldPipeline
       validate_polling_config!
       validate_max_tier_retries!
       validate_workflow_branch_pattern!
-      validate_verification_config!
-      validate_test_execution_config!
+      validate_test_timeout!
       true
     end
 
@@ -170,27 +161,9 @@ module ArnoldPipeline
       raise ConfigurationError, "workflow_branch_pattern must be a Regexp"
     end
 
-    def validate_verification_config!
-      unless @verification_timeout.is_a?(Integer) && @verification_timeout > 0
-        raise ConfigurationError, "verification_timeout must be a positive integer."
-      end
-
-      unless @verification_health_check_retries.is_a?(Integer) && @verification_health_check_retries > 0
-        raise ConfigurationError, "verification_health_check_retries must be a positive integer."
-      end
-
-      unless @verification_health_check_interval.is_a?(Integer) && @verification_health_check_interval > 0
-        raise ConfigurationError, "verification_health_check_interval must be a positive integer."
-      end
-    end
-
-    def validate_test_execution_config!
+    def validate_test_timeout!
       unless @test_timeout.is_a?(Integer) && @test_timeout > 0
         raise ConfigurationError, "test_timeout must be a positive integer."
-      end
-
-      unless @test_boot_timeout.is_a?(Integer) && @test_boot_timeout > 0
-        raise ConfigurationError, "test_boot_timeout must be a positive integer."
       end
     end
 

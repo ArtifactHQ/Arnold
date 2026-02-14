@@ -61,25 +61,17 @@ module ArnoldPipeline
           Focus your evaluation on the specific acceptance criteria rather than making
           open-ended judgments about alignment.
 
-          ## Verification Results
+          ## Empirical Verification Results
 
-          When verification results (boot/health check) are provided, treat them as
-          empirical evidence:
-          - If verification PASSED: the application boots and responds correctly.
-          - If verification FAILED: this is a critical issue — the application does not
-            work. Create corrective tasks targeting the specific failure (setup, boot, or
-            health check).
-
-          ## Test Execution Results
-
-          When test results are provided, they represent the project's own test suite
-          running after this tier's merge. Treat them as empirical evidence:
-          - If tests PASSED: the implementation satisfies its own test suite.
-          - If tests FAILED: focus corrective tasks on fixing specific test failures
-            rather than vague alignment concerns. Each failure includes the test name,
-            message, and location — use these to create targeted corrective tasks.
-          - If test execution had an error (timeout, boot failure, no test suite):
-            evaluate whether this is a critical issue or expected for the current tier.
+          When verification results are provided, they represent configurable checks
+          (boot, test suite, custom commands) run after this tier's merge. Treat them
+          as empirical evidence:
+          - Each check reports PASSED or FAILED with its output
+          - If all checks PASSED: the implementation satisfies its verification suite
+          - If any check FAILED: evaluate whether the failure is critical based on the
+            check type and output. Create corrective tasks targeting specific failures.
+          - Required checks that fail are particularly important — they indicate
+            fundamental issues that must be resolved.
 
           ## Spec-Scenario Test Progression
 
@@ -110,8 +102,8 @@ module ArnoldPipeline
       end
 
       def self.user_prompt(tier_number:, task_summaries:, diffs:, comments: "", repo_context: nil,
-                           acceptance_criteria_summary: nil, verification_summary: nil,
-                           test_execution_summary: nil, spec_test_progress_summary: nil)
+                           acceptance_criteria_summary: nil, verification_results: nil,
+                           spec_test_progress_summary: nil)
         prompt = <<~PROMPT
           ## Tier #{tier_number} Gate Review
 
@@ -130,20 +122,12 @@ module ArnoldPipeline
           CRITERIA
         end
 
-        if verification_summary.present?
+        if verification_results.present?
           prompt += <<~VERIFICATION
 
-            ### Verification Results
-            #{verification_summary}
+            ### Empirical Verification Results
+            #{format_verification_results(verification_results)}
           VERIFICATION
-        end
-
-        if test_execution_summary.present?
-          prompt += <<~TEST_EXECUTION
-
-            ### Test Execution Results
-            #{test_execution_summary}
-          TEST_EXECUTION
         end
 
         if spec_test_progress_summary.present?
@@ -173,6 +157,34 @@ module ArnoldPipeline
 
         prompt += "\nEvaluate this tier and provide your gate assessment.\n"
         prompt
+      end
+
+      def self.format_verification_results(results)
+        return "No verification results available." unless results.is_a?(Hash)
+
+        lines = []
+        lines << "**Overall: #{results[:all_passed] ? 'ALL PASSED' : 'SOME FAILED'}**"
+        lines << "Summary: #{results[:summary]}"
+
+        checks = results[:checks] || []
+        checks.each do |check|
+          status = check[:success] ? "PASSED" : "FAILED"
+          lines << ""
+          lines << "- **#{check[:name]}** (#{check[:type]}): #{status}"
+          unless check[:success]
+            output = check[:stderr].to_s.strip
+            output = check[:stdout].to_s.strip if output.empty?
+            unless output.empty?
+              # Cap failure output at 50 lines
+              output_lines = output.lines.first(50).join
+              lines << "  ```"
+              lines << "  #{output_lines.strip}"
+              lines << "  ```"
+            end
+          end
+        end
+
+        lines.join("\n")
       end
     end
   end

@@ -151,6 +151,32 @@ ArnoldPipeline.configure do |config|
   config.claude_code_model         = "sonnet"  # default
   config.claude_code_max_turns     = nil       # use Claude Code default
   config.claude_code_permission_mode = "auto"  # non-interactive pipeline use
+
+  # Optional: Post-merge hooks and verification checks
+  config.post_merge_hooks = [
+    {
+      name: "Regenerate schema",
+      trigger_paths: ["db/migrate/**/*.rb"],
+      command: "bin/rails db:prepare && bin/rails db:schema:dump",
+      commit_paths: ["db/schema.rb"],
+      commit_message: "Regenerate schema.rb after tier merge"
+    }
+  ]
+
+  config.verification_checks = [
+    {
+      name: "Boot check",
+      command: "bin/rails runner 'puts :ok'",
+      type: :boot,
+      required: true
+    },
+    {
+      name: "Test suite",
+      command: "bin/rails test",
+      type: :test_suite,
+      required: false
+    }
+  ]
 end
 ```
 
@@ -281,6 +307,8 @@ Each task includes position, title, tier, priority, status, labels, dependencies
 | `workflow_branch_pattern` | `/issue[-_]?\d+/i` | — | Regex to match branch names when checking workflow runs |
 | `openspec_enabled` | `true` | — | Use OpenSpec CLI for spec merging when available. Set `false` to use append fallback (no Node.js needed) |
 | `openspec_cli_path` | `"openspec"` | — | Path to OpenSpec CLI binary |
+| `post_merge_hooks` | `[]` | — | Array of hook definitions (see [Post-Merge Hooks](#post-merge-hooks--verification-checks)) |
+| `verification_checks` | `[]` | — | Array of check definitions (see [Verification Checks](#post-merge-hooks--verification-checks)) |
 | `library_path` | built-in | — | Custom personas/recipes dir |
 
 ## Architecture
@@ -298,14 +326,21 @@ Spec Generator ── NL + persona + recipe --> OpenSpec-format Markdown (### Re
 Task Breaker ── spec --> 5-20 ordered tasks (JSON)
   |
   v
-Executor ── tasks --> execution provider
+Executor ── tasks --> execution provider (tier-by-tier)
   |            GitHub: create Issues, poll for PR diffs (exponential backoff)
   |            Claude Code: run CLI in worktrees, capture diffs immediately
   |            (receives prior tier context when context_propagation_enabled)
   v
-Tier Gate Check ── diffs --> pass/fail + context summary (per tier)
-  |                          fail --> corrective tasks + retry (up to max_tier_retries)
-  |                          still failing --> pause for human review
+[After each tier merge:]
+  Post-Merge Hooks ── fix derived files (e.g., regenerate schema.rb, bundle install)
+  |
+  v
+  Verification Checks ── empirical validation (boot check, test suite, custom commands)
+  |                       required checks short-circuit on failure
+  v
+  Tier Gate Check ── diffs + verification results --> pass/fail + context summary
+  |                   fail --> corrective tasks + retry (up to max_tier_retries)
+  |                   still failing --> pause for human review
   v
 Analyzer ── diffs + spec --> decision + confidence
   |
@@ -360,6 +395,135 @@ config.context_propagation_enabled = true
 # Zero retries = pause immediately on first gate failure
 config.max_tier_retries = 0
 ```
+
+## Post-Merge Hooks & Verification Checks
+
+After each tier merges, Arnold can run **post-merge hooks** to fix derived files and **verification checks** to validate the build. This feature applies to the **Claude Code execution provider** — hooks and checks run locally in the repository. For the GitHub provider, these features are available but require `claude_code_repo_path` to be configured (so the local repo can be updated in sync with the remote).
+
+### Post-Merge Hooks
+
+Hooks trigger when changed files match configured glob patterns. Use them to regenerate derived files after tier merges (e.g., `db/schema.rb` after migrations, lock files after dependency changes).
+
+Each hook runs a shell command. If the command succeeds (exit code 0) and `commit_paths` are specified, changed files at those paths are committed automatically.
+
+**Configuration:**
+
+```ruby
+config.post_merge_hooks = [
+  {
+    name: "Regenerate database schema",
+    trigger_paths: ["db/migrate/**/*.rb"],
+    command: "bin/rails db:prepare && bin/rails db:schema:dump",
+    commit_paths: ["db/schema.rb"],
+    commit_message: "Regenerate schema.rb after tier merge"
+  },
+  {
+    name: "Bundle install on Gemfile changes",
+    trigger_paths: ["Gemfile", "Gemfile.lock"],
+    command: "bundle install",
+    commit_paths: ["Gemfile.lock"],
+    commit_message: "Update Gemfile.lock after tier merge"
+  }
+]
+```
+
+**YAML config:**
+
+```yaml
+post_merge_hooks:
+  - name: "Regenerate database schema"
+    trigger_paths:
+      - "db/migrate/**/*.rb"
+    command: "bin/rails db:prepare && bin/rails db:schema:dump"
+    commit_paths:
+      - "db/schema.rb"
+    commit_message: "Regenerate schema.rb after tier merge"
+
+  - name: "Bundle install on Gemfile changes"
+    trigger_paths:
+      - "Gemfile"
+      - "Gemfile.lock"
+    command: "bundle install"
+    commit_paths:
+      - "Gemfile.lock"
+    commit_message: "Update Gemfile.lock after tier merge"
+```
+
+**Fields:**
+- `name` — Human-readable hook name (for logging)
+- `trigger_paths` — Array of glob patterns. Hook runs if any changed file matches any pattern (uses `File.fnmatch` with `File::FNM_PATHNAME`)
+- `command` — Shell command to execute in the repo directory
+- `commit_paths` — (Optional) Array of file paths to commit if they changed after the command
+- `commit_message` — (Optional) Git commit message for auto-committed files
+
+Hooks run sequentially after tier merge, before verification checks and tier gate.
+
+### Verification Checks
+
+Checks run shell commands to verify application health. Use them to catch build-breaking issues before the analysis loop (e.g., boot failures, test regressions).
+
+Each check has a `type` (`:boot`, `:test_suite`, or `:custom`) and can be marked `required`. Required checks short-circuit the sequence on failure — if a required check fails, subsequent checks are skipped.
+
+Check results (pass/fail, stdout/stderr, exit code) are passed to the tier gate check agent via the `verification_results:` parameter, so the gate can factor empirical evidence into its decision.
+
+**Configuration:**
+
+```ruby
+config.verification_checks = [
+  {
+    name: "Boot check",
+    command: "bin/rails runner 'puts Rails.version'",
+    type: :boot,
+    required: true  # Pipeline pauses if this fails
+  },
+  {
+    name: "Database migrations up to date",
+    command: "bin/rails db:migrate:status",
+    type: :custom,
+    required: false
+  },
+  {
+    name: "Test suite",
+    command: "bin/rails test",
+    type: :test_suite,
+    required: false  # Gate sees results but doesn't auto-fail on test failures
+  }
+]
+```
+
+**YAML config:**
+
+```yaml
+verification_checks:
+  - name: "Boot check"
+    command: "bin/rails runner 'puts Rails.version'"
+    type: boot
+    required: true
+
+  - name: "Database migrations up to date"
+    command: "bin/rails db:migrate:status"
+    type: custom
+    required: false
+
+  - name: "Test suite"
+    command: "bin/rails test"
+    type: test_suite
+    required: false
+```
+
+**Fields:**
+- `name` — Human-readable check name
+- `command` — Shell command to execute in the repo directory
+- `type` — `:boot`, `:test_suite`, or `:custom` (informational, for logging clarity)
+- `required` — Boolean (default: `false`). If `true`, failure stops the check sequence immediately
+
+**Short-circuiting example:**
+
+If the boot check (required) fails, database migration and test suite checks are skipped. The tier gate receives partial results indicating the boot failure, and the gate agent can decide whether to create corrective tasks or pass the tier.
+
+### Non-Fatal by Design
+
+Hook and check failures do not crash the pipeline. Results are captured and passed to the tier gate check agent, which decides whether to fail the tier (triggering corrective tasks) or pass despite issues. This keeps the feedback loop intact even when empirical validation finds problems.
 
 ## Setting Up a Coding Agent
 

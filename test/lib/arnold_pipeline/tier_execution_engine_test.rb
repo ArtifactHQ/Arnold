@@ -667,6 +667,122 @@ module ArnoldPipeline
       assert payload.key?(:gate_response)
     end
 
+    # --- Config flag independence: tier_gate_enabled vs context_propagation_enabled ---
+
+    test "tier_gate disabled + context_propagation enabled: skips criteria check, runs LLM gate, does not block on failure" do
+      ArnoldPipeline.configure do |c|
+        c.tier_gate_enabled = false
+        c.context_propagation_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = File.expand_path("../../..", __dir__)
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        acceptance_criteria: [
+          { "type" => "file_exists", "description" => "Gemfile exists", "path" => "Gemfile" }
+        ]
+      )
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      # Gate returns failure — should NOT block since tier_gate_enabled is false
+      @tier_gate_check.stubs(:call).returns({
+        "pass" => false,
+        "issues" => ["something wrong"],
+        "context_summary" => "Tier 0 context for propagation.",
+        "corrective_tasks" => []
+      })
+
+      # Criteria check should NOT be called
+      ArnoldPipeline::CriteriaChecker.expects(:call).never
+
+      assert_nothing_raised do
+        @engine.execute_tiers!(pipeline_run)
+      end
+
+      # Context should still be propagated
+      pipeline_run.reload
+      tier_contexts = pipeline_run.metadata["tier_contexts"]
+      assert_not_nil tier_contexts, "Context should be propagated even with tier_gate disabled"
+      assert_equal "Tier 0 context for propagation.", tier_contexts.first["summary"]
+    end
+
+    test "tier_gate disabled + context_propagation disabled: skips criteria check and LLM gate entirely" do
+      ArnoldPipeline.configure do |c|
+        c.tier_gate_enabled = false
+        c.context_propagation_enabled = false
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = File.expand_path("../../..", __dir__)
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        acceptance_criteria: [
+          { "type" => "file_exists", "description" => "Gemfile exists", "path" => "Gemfile" }
+        ]
+      )
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      # Neither criteria check nor LLM gate should be called
+      ArnoldPipeline::CriteriaChecker.expects(:call).never
+      @tier_gate_check.expects(:call).never
+
+      @engine.execute_tiers!(pipeline_run)
+    end
+
+    test "tier_gate enabled + context_propagation enabled: runs criteria check, LLM gate, and propagates context" do
+      ArnoldPipeline.configure do |c|
+        c.tier_gate_enabled = true
+        c.context_propagation_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = File.expand_path("../../..", __dir__)
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        acceptance_criteria: [
+          { "type" => "file_exists", "description" => "Gemfile exists", "path" => "Gemfile" }
+        ]
+      )
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      verified = ArnoldPipeline::AcceptanceCriterion.new(type: "file_exists", description: "Gemfile exists", params: {})
+      ArnoldPipeline::CriteriaChecker.stubs(:call).returns({ verified: [verified], failed: [], unverified: [] })
+
+      @tier_gate_check.stubs(:call).returns({
+        "pass" => true,
+        "issues" => [],
+        "context_summary" => "All good.",
+        "corrective_tasks" => []
+      })
+
+      @engine.execute_tiers!(pipeline_run)
+
+      # Both criteria check and context propagation should have happened
+      pipeline_run.reload
+      tier_contexts = pipeline_run.metadata["tier_contexts"]
+      assert_not_nil tier_contexts
+      assert_equal "All good.", tier_contexts.first["summary"]
+    end
+
     # --- Existing gate failure tests ---
 
     test "handle_tier_gate_failure! retries up to max_tier_retries then pauses" do
@@ -703,6 +819,268 @@ module ArnoldPipeline
       pipeline_run.reload
       assert_equal "paused", pipeline_run.status
       assert_equal 2, (pipeline_run.metadata["tier_retries"] || {})["0"]
+    end
+
+    # --- Post-merge hooks and verification checks ---
+
+    test "runs post-merge hooks after merge and before gate check" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = "/tmp/test_repo"
+        c.post_merge_hooks = [
+          { name: "lint", trigger_paths: ["*.rb"], command: "rubocop" }
+        ]
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      ArnoldPipeline::PostMergeHookRunner.stubs(:call).returns([
+        { name: "lint", triggered: true, success: true, stdout: "ok", stderr: "", exit_code: 0 }
+      ])
+
+      @engine.execute_tiers!(pipeline_run)
+    end
+
+    test "skips hooks when post_merge_hooks config is empty" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.post_merge_hooks = []
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      ArnoldPipeline::PostMergeHookRunner.expects(:call).never
+
+      @engine.execute_tiers!(pipeline_run)
+    end
+
+    test "runs verification checks after hooks and before gate check" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = "/tmp/test_repo"
+        c.verification_checks = [
+          { name: "boot", command: "bin/rails runner 'true'", type: :boot, required: true }
+        ]
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      ArnoldPipeline::VerificationRunner.stubs(:call).returns({
+        checks: [{ name: "boot", type: :boot, success: true }],
+        all_passed: true,
+        summary: "1 passed, 0 failed: boot=OK"
+      })
+
+      @engine.execute_tiers!(pipeline_run)
+    end
+
+    test "skips verification when verification_checks config is empty" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.verification_checks = []
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      ArnoldPipeline::VerificationRunner.expects(:call).never
+
+      @engine.execute_tiers!(pipeline_run)
+    end
+
+    test "passes verification_results to tier gate check" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = "/tmp/test_repo"
+        c.verification_checks = [
+          { name: "boot", command: "bin/rails runner 'true'", type: :boot }
+        ]
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      verification_results = {
+        checks: [{ name: "boot", type: :boot, success: true }],
+        all_passed: true,
+        summary: "1 passed, 0 failed: boot=OK"
+      }
+      ArnoldPipeline::VerificationRunner.stubs(:call).returns(verification_results)
+
+      captured_kwargs = nil
+      @tier_gate_check.stubs(:call).with { |**kwargs|
+        captured_kwargs = kwargs
+        true
+      }.returns({
+        "pass" => true,
+        "issues" => [],
+        "context_summary" => "Done.",
+        "corrective_tasks" => []
+      })
+
+      @engine.execute_tiers!(pipeline_run)
+
+      assert_not_nil captured_kwargs
+      assert_equal verification_results, captured_kwargs[:verification_results]
+    end
+
+    test "records post_merge_hooks PipelineEvent" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = "/tmp/test_repo"
+        c.post_merge_hooks = [
+          { name: "lint", trigger_paths: ["*.rb"], command: "rubocop" }
+        ]
+      end
+
+      event_recorder = build_recording_event_recorder
+
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      ArnoldPipeline::PostMergeHookRunner.stubs(:call).returns([
+        { name: "lint", triggered: true, success: true }
+      ])
+
+      engine.execute_tiers!(pipeline_run)
+
+      hook_event = event_recorder.events.find { |e| e[:event_type] == :post_merge_hooks }
+      assert_not_nil hook_event, "Expected a post_merge_hooks event to be recorded"
+      assert_equal "execution", hook_event[:stage]
+      assert_equal 1, hook_event[:summary][:hook_count]
+    end
+
+    test "records verification_checks PipelineEvent" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = "/tmp/test_repo"
+        c.verification_checks = [
+          { name: "boot", command: "bin/rails runner 'true'", type: :boot }
+        ]
+      end
+
+      event_recorder = build_recording_event_recorder
+
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      ArnoldPipeline::VerificationRunner.stubs(:call).returns({
+        checks: [{ name: "boot", type: :boot, success: true }],
+        all_passed: true,
+        summary: "1 passed, 0 failed: boot=OK"
+      })
+
+      engine.execute_tiers!(pipeline_run)
+
+      check_event = event_recorder.events.find { |e| e[:event_type] == :verification_checks }
+      assert_not_nil check_event, "Expected a verification_checks event to be recorded"
+      assert_equal "execution", check_event[:stage]
+      assert_equal true, check_event[:summary][:all_passed]
+    end
+
+    test "non-fatal: hook runner failure does not crash pipeline" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = "/tmp/test_repo"
+        c.post_merge_hooks = [
+          { name: "lint", trigger_paths: ["*.rb"], command: "rubocop" }
+        ]
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      ArnoldPipeline::PostMergeHookRunner.stubs(:call).raises(RuntimeError, "hook explosion")
+
+      assert_nothing_raised do
+        @engine.execute_tiers!(pipeline_run)
+      end
+    end
+
+    test "non-fatal: verification runner failure does not crash pipeline" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = "/tmp/test_repo"
+        c.verification_checks = [
+          { name: "boot", command: "bin/rails runner 'true'", type: :boot }
+        ]
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      ArnoldPipeline::VerificationRunner.stubs(:call).raises(RuntimeError, "check explosion")
+
+      assert_nothing_raised do
+        @engine.execute_tiers!(pipeline_run)
+      end
     end
 
     test "handle_tier_gate_failure! pauses from executing with sync provider" do

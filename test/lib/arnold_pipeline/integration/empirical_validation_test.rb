@@ -4,13 +4,11 @@ require "faraday"
 require "arnold_pipeline/tier_execution_engine"
 require "arnold_pipeline/acceptance_criterion"
 require "arnold_pipeline/criteria_checker"
-require "arnold_pipeline/verification/verification_result"
-require "arnold_pipeline/verification/verification_runner"
-require "arnold_pipeline/verification/recipe_verification_extractor"
+require "arnold_pipeline/post_merge_hook"
+require "arnold_pipeline/post_merge_hook_runner"
+require "arnold_pipeline/verification_check"
+require "arnold_pipeline/verification_runner"
 require "arnold_pipeline/prompts/tier_gate"
-require "arnold_pipeline/test_execution/test_result"
-require "arnold_pipeline/test_execution/test_result_parser"
-require "arnold_pipeline/test_execution/test_runner"
 
 module ArnoldPipeline
   class EmpiricalValidationIntegrationTest < ActiveSupport::TestCase
@@ -41,8 +39,6 @@ module ArnoldPipeline
         c.github_token = "test"
         c.github_repo = "owner/repo"
         c.tier_gate_enabled = true
-        c.verification_enabled = false
-        c.test_execution_enabled = false
       end
     end
 
@@ -52,68 +48,39 @@ module ArnoldPipeline
 
     # --- Configuration defaults ---
 
-    test "verification_enabled defaults to false" do
+    test "post_merge_hooks defaults to empty array" do
       config = Configuration.new
-      assert_equal false, config.verification_enabled
+      assert_equal [], config.post_merge_hooks
     end
 
-    test "verification_timeout defaults to 120" do
+    test "verification_checks defaults to empty array" do
       config = Configuration.new
-      assert_equal 120, config.verification_timeout
+      assert_equal [], config.verification_checks
     end
 
-    test "verification_health_check_retries defaults to 10" do
+    test "test_timeout defaults to 120" do
       config = Configuration.new
-      assert_equal 10, config.verification_health_check_retries
+      assert_equal 120, config.test_timeout
     end
 
-    test "verification_health_check_interval defaults to 3" do
-      config = Configuration.new
-      assert_equal 3, config.verification_health_check_interval
-    end
-
-    test "validate! raises on invalid verification_timeout" do
+    test "validate! raises on invalid test_timeout" do
       config = Configuration.new
       config.llm_api_key = "test"
       config.github_token = "test"
       config.github_repo = "owner/repo"
-      config.verification_timeout = 0
+      config.test_timeout = 0
 
       error = assert_raises(ConfigurationError) { config.validate! }
-      assert_match(/verification_timeout/, error.message)
+      assert_match(/test_timeout/, error.message)
     end
 
-    test "validate! raises on invalid verification_health_check_retries" do
+    test "validate! passes with valid config" do
       config = Configuration.new
       config.llm_api_key = "test"
       config.github_token = "test"
       config.github_repo = "owner/repo"
-      config.verification_health_check_retries = -1
-
-      error = assert_raises(ConfigurationError) { config.validate! }
-      assert_match(/verification_health_check_retries/, error.message)
-    end
-
-    test "validate! raises on invalid verification_health_check_interval" do
-      config = Configuration.new
-      config.llm_api_key = "test"
-      config.github_token = "test"
-      config.github_repo = "owner/repo"
-      config.verification_health_check_interval = 0
-
-      error = assert_raises(ConfigurationError) { config.validate! }
-      assert_match(/verification_health_check_interval/, error.message)
-    end
-
-    test "validate! passes with valid verification config" do
-      config = Configuration.new
-      config.llm_api_key = "test"
-      config.github_token = "test"
-      config.github_repo = "owner/repo"
-      config.verification_enabled = true
-      config.verification_timeout = 60
-      config.verification_health_check_retries = 5
-      config.verification_health_check_interval = 2
+      config.post_merge_hooks = [{ name: "lint", trigger_paths: ["*.rb"], command: "rubocop" }]
+      config.verification_checks = [{ name: "boot", command: "bin/rails runner 'true'", type: :boot }]
 
       assert config.validate!
     end
@@ -132,19 +99,31 @@ module ArnoldPipeline
       assert_equal 15, PipelineEvent.event_types["criteria_check"]
     end
 
-    test "verification_execution event type exists" do
+    test "post_merge_hooks event type exists" do
       pipeline_run = PipelineRun.create!(nl_input: "test")
       event = pipeline_run.pipeline_events.create!(
-        event_type: :verification_execution,
+        event_type: :post_merge_hooks,
         stage: "execution",
-        summary: { setup_passed: true, boot_passed: true, health_check_passed: true }
+        summary: { hook_count: 1, results: [{ name: "lint", success: true }] }
       )
 
-      assert event.verification_execution?
-      assert_equal 16, PipelineEvent.event_types["verification_execution"]
+      assert event.post_merge_hooks?
+      assert_equal 19, PipelineEvent.event_types["post_merge_hooks"]
     end
 
-    # --- Tier gate prompt includes new sections ---
+    test "verification_checks event type exists" do
+      pipeline_run = PipelineRun.create!(nl_input: "test")
+      event = pipeline_run.pipeline_events.create!(
+        event_type: :verification_checks,
+        stage: "execution",
+        summary: { all_passed: true, summary: "1 passed, 0 failed: boot=OK" }
+      )
+
+      assert event.verification_checks?
+      assert_equal 20, PipelineEvent.event_types["verification_checks"]
+    end
+
+    # --- Tier gate prompt includes updated sections ---
 
     test "tier gate prompt includes acceptance criteria section" do
       prompt = ArnoldPipeline::Prompts::TierGate.system_prompt
@@ -154,11 +133,11 @@ module ArnoldPipeline
       assert_includes prompt, "Unverified"
     end
 
-    test "tier gate prompt includes verification results section" do
+    test "tier gate prompt includes empirical verification results section" do
       prompt = ArnoldPipeline::Prompts::TierGate.system_prompt
-      assert_includes prompt, "Verification Results"
-      assert_includes prompt, "verification PASSED"
-      assert_includes prompt, "verification FAILED"
+      assert_includes prompt, "Empirical Verification Results"
+      assert_includes prompt, "PASSED"
+      assert_includes prompt, "FAILED"
     end
 
     test "user_prompt includes acceptance criteria when provided" do
@@ -182,42 +161,51 @@ module ArnoldPipeline
       refute_includes prompt, "Acceptance Criteria Results"
     end
 
-    test "user_prompt includes verification summary when provided" do
+    test "user_prompt includes verification results when provided" do
+      results = {
+        all_passed: true,
+        summary: "1 passed, 0 failed: boot=OK",
+        checks: [{ name: "boot", type: :boot, success: true, stdout: "", stderr: "" }]
+      }
       prompt = ArnoldPipeline::Prompts::TierGate.user_prompt(
         tier_number: 0,
         task_summaries: "- Setup DB",
         diffs: "diff",
-        verification_summary: "## Verification Results\n| Setup | PASSED |"
+        verification_results: results
       )
-      assert_includes prompt, "### Verification Results"
-      assert_includes prompt, "| Setup | PASSED |"
+      assert_includes prompt, "### Empirical Verification Results"
+      assert_includes prompt, "ALL PASSED"
+      assert_includes prompt, "boot"
     end
 
-    test "user_prompt omits verification summary when nil" do
+    test "user_prompt omits verification results when nil" do
       prompt = ArnoldPipeline::Prompts::TierGate.user_prompt(
         tier_number: 0,
         task_summaries: "- Setup DB",
         diffs: "diff",
-        verification_summary: nil
+        verification_results: nil
       )
-      # The system prompt has "## Verification Results" but the user prompt shouldn't
-      # have the "### Verification Results" section
-      refute_includes prompt, "### Verification Results"
+      refute_includes prompt, "Empirical Verification Results"
     end
 
     test "user_prompt places acceptance criteria and verification before repo baseline" do
+      results = {
+        all_passed: true,
+        summary: "1 passed, 0 failed: boot=OK",
+        checks: [{ name: "boot", type: :boot, success: true, stdout: "", stderr: "" }]
+      }
       prompt = ArnoldPipeline::Prompts::TierGate.user_prompt(
         tier_number: 0,
         task_summaries: "- Setup DB",
         diffs: "diff",
         acceptance_criteria_summary: "criteria data",
-        verification_summary: "verification data",
+        verification_results: results,
         repo_context: "  config/ (1 files): routes.rb",
         comments: "some comments"
       )
 
       criteria_pos = prompt.index("Acceptance Criteria Results")
-      verification_pos = prompt.index("Verification Results")
+      verification_pos = prompt.index("Empirical Verification Results")
       baseline_pos = prompt.index("Repository Baseline")
       comments_pos = prompt.index("Task Comments / Agent Feedback")
 
@@ -228,7 +216,7 @@ module ArnoldPipeline
 
     # --- TierGateCheck agent passes new params ---
 
-    test "tier_gate_check.call accepts acceptance_criteria_summary and verification_summary" do
+    test "tier_gate_check.call accepts acceptance_criteria_summary and verification_results" do
       captured_kwargs = nil
       @tier_gate_check.stubs(:call).with { |**kwargs|
         captured_kwargs = kwargs
@@ -247,12 +235,13 @@ module ArnoldPipeline
         result_diff: '[{"filename":"schema.rb"}]'
       )
 
+      verification_results = { all_passed: true, summary: "ok", checks: [] }
       @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
-                   acceptance_criteria_summary: "criteria", verification_summary: "verification")
+                   acceptance_criteria_summary: "criteria", verification_results: verification_results)
 
       assert_not_nil captured_kwargs
       assert_equal "criteria", captured_kwargs[:acceptance_criteria_summary]
-      assert_equal "verification", captured_kwargs[:verification_summary]
+      assert_equal verification_results, captured_kwargs[:verification_results]
     end
 
     # --- Criteria check integration ---
@@ -321,80 +310,50 @@ module ArnoldPipeline
       assert_nil result
     end
 
-    # --- Verification integration ---
+    # --- Post-merge hooks integration ---
 
-    test "run_verification! returns nil when verification_enabled is false" do
-      ArnoldPipeline.configure do |c|
-        c.llm_api_key = "test"
-        c.verification_enabled = false
-      end
+    test "run_post_merge_hooks returns empty array when no hooks configured" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
 
-      refute @engine.send(:verification_enabled?)
+      result = @engine.send(:run_post_merge_hooks, [task])
+      assert_equal [], result
     end
 
-    test "run_verification! returns gate summary when verification passes" do
+    test "run_post_merge_hooks returns empty array when no repo_path" do
       ArnoldPipeline.configure do |c|
         c.llm_api_key = "test"
         c.github_token = "test"
         c.github_repo = "owner/repo"
-        c.verification_enabled = true
-        c.claude_code_repo_path = "/tmp/test_repo"
+        c.claude_code_repo_path = nil
+        c.post_merge_hooks = [{ name: "lint", trigger_paths: ["*.rb"], command: "rubocop" }]
       end
 
-      pipeline_run = PipelineRun.create!(nl_input: "Build a web app")
-      pipeline_run.create_specification!(
-        content: "test spec",
-        version: 1,
-        structured_data: { "recipe_type" => "web_app" }
-      )
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
 
-      Dir.stubs(:exist?).returns(true)
-
-      passed_result = Verification::VerificationResult.new(
-        setup_passed: true, boot_passed: true, health_check_passed: true
-      )
-      Verification::VerificationRunner.stubs(:call).returns(passed_result)
-
-      summary = @engine.send(:run_verification!, pipeline_run)
-
-      assert_not_nil summary
-      assert_includes summary, "PASSED"
+      result = @engine.send(:run_post_merge_hooks, [task])
+      assert_equal [], result
     end
 
-    test "run_verification! returns nil when no recipe verification config" do
+    # --- Verification checks integration ---
+
+    test "run_verification_checks returns nil when no checks configured" do
+      result = @engine.send(:run_verification_checks)
+      assert_nil result
+    end
+
+    test "run_verification_checks returns nil when no repo_path" do
       ArnoldPipeline.configure do |c|
         c.llm_api_key = "test"
         c.github_token = "test"
         c.github_repo = "owner/repo"
-        c.verification_enabled = true
-        c.claude_code_repo_path = "/tmp/test_repo"
+        c.claude_code_repo_path = nil
+        c.verification_checks = [{ name: "boot", command: "bin/rails runner 'true'" }]
       end
 
-      pipeline_run = PipelineRun.create!(nl_input: "Build something unusual")
-      # No specification => extractor falls back to nl_input matching.
-      # But this should still return a recipe match and verification config.
-      # Let's stub the extractor to return nil for this test
-      Verification::RecipeVerificationExtractor.stubs(:call).returns(nil)
-
-      summary = @engine.send(:run_verification!, pipeline_run)
-      assert_nil summary
-    end
-
-    test "run_verification! rescues errors and returns nil" do
-      ArnoldPipeline.configure do |c|
-        c.llm_api_key = "test"
-        c.github_token = "test"
-        c.github_repo = "owner/repo"
-        c.verification_enabled = true
-        c.claude_code_repo_path = "/tmp/test_repo"
-      end
-
-      pipeline_run = PipelineRun.create!(nl_input: "Build a web app")
-
-      Verification::RecipeVerificationExtractor.stubs(:call).raises(RuntimeError, "unexpected error")
-
-      summary = @engine.send(:run_verification!, pipeline_run)
-      assert_nil summary
+      result = @engine.send(:run_verification_checks)
+      assert_nil result
     end
 
     # --- format_criteria_summary ---
@@ -425,284 +384,38 @@ module ArnoldPipeline
       assert_nil result
     end
 
-    # --- Test execution configuration defaults ---
+    # --- format_verification_results ---
 
-    test "test_execution_enabled defaults to false" do
-      config = Configuration.new
-      assert_equal false, config.test_execution_enabled
+    test "format_verification_results formats passing results" do
+      results = {
+        all_passed: true,
+        summary: "2 passed, 0 failed: boot=OK, tests=OK",
+        checks: [
+          { name: "boot", type: :boot, success: true, stdout: "", stderr: "" },
+          { name: "tests", type: :test_suite, success: true, stdout: "all green", stderr: "" }
+        ]
+      }
+
+      formatted = Prompts::TierGate.format_verification_results(results)
+      assert_includes formatted, "ALL PASSED"
+      assert_includes formatted, "boot"
+      assert_includes formatted, "tests"
     end
 
-    test "test_command defaults to nil" do
-      config = Configuration.new
-      assert_nil config.test_command
-    end
+    test "format_verification_results includes failure output" do
+      results = {
+        all_passed: false,
+        summary: "1 passed, 1 failed: boot=OK, tests=FAIL",
+        checks: [
+          { name: "boot", type: :boot, success: true, stdout: "", stderr: "" },
+          { name: "tests", type: :test_suite, success: false, stdout: "", stderr: "3 failures\ntest_auth: Expected 200" }
+        ]
+      }
 
-    test "test_timeout defaults to 120" do
-      config = Configuration.new
-      assert_equal 120, config.test_timeout
-    end
-
-    test "test_boot_command defaults to nil" do
-      config = Configuration.new
-      assert_nil config.test_boot_command
-    end
-
-    test "test_boot_timeout defaults to 60" do
-      config = Configuration.new
-      assert_equal 60, config.test_boot_timeout
-    end
-
-    test "validate! raises on invalid test_timeout" do
-      config = Configuration.new
-      config.llm_api_key = "test"
-      config.github_token = "test"
-      config.github_repo = "owner/repo"
-      config.test_timeout = 0
-
-      error = assert_raises(ConfigurationError) { config.validate! }
-      assert_match(/test_timeout/, error.message)
-    end
-
-    test "validate! raises on invalid test_boot_timeout" do
-      config = Configuration.new
-      config.llm_api_key = "test"
-      config.github_token = "test"
-      config.github_repo = "owner/repo"
-      config.test_boot_timeout = -1
-
-      error = assert_raises(ConfigurationError) { config.validate! }
-      assert_match(/test_boot_timeout/, error.message)
-    end
-
-    test "validate! passes with valid test execution config" do
-      config = Configuration.new
-      config.llm_api_key = "test"
-      config.github_token = "test"
-      config.github_repo = "owner/repo"
-      config.test_execution_enabled = true
-      config.test_command = "bin/rails test"
-      config.test_timeout = 180
-      config.test_boot_timeout = 30
-
-      assert config.validate!
-    end
-
-    # --- Test execution event type ---
-
-    test "test_execution event type exists" do
-      pipeline_run = PipelineRun.create!(nl_input: "test")
-      event = pipeline_run.pipeline_events.create!(
-        event_type: :test_execution,
-        stage: "execution",
-        summary: { passed: true, exit_code: 0, framework: "minitest", failure_count: 0 }
-      )
-
-      assert event.test_execution?
-      assert_equal 17, PipelineEvent.event_types["test_execution"]
-    end
-
-    # --- Test execution prompt integration ---
-
-    test "tier gate system prompt includes test execution section" do
-      prompt = ArnoldPipeline::Prompts::TierGate.system_prompt
-      assert_includes prompt, "Test Execution Results"
-      assert_includes prompt, "focus corrective tasks on fixing specific test failures"
-    end
-
-    test "user_prompt includes test execution summary when provided" do
-      prompt = ArnoldPipeline::Prompts::TierGate.user_prompt(
-        tier_number: 1,
-        task_summaries: "- Build auth",
-        diffs: "diff",
-        test_execution_summary: "## Test Execution Results\n**Overall: FAILED**\n- test_login: Expected 200, got 401"
-      )
-      assert_includes prompt, "### Test Execution Results"
-      assert_includes prompt, "test_login"
-    end
-
-    test "user_prompt omits test execution summary when nil" do
-      prompt = ArnoldPipeline::Prompts::TierGate.user_prompt(
-        tier_number: 1,
-        task_summaries: "- Build auth",
-        diffs: "diff",
-        test_execution_summary: nil
-      )
-      refute_includes prompt, "### Test Execution Results"
-    end
-
-    # --- TierGateCheck agent passes test_execution_summary ---
-
-    test "tier_gate_check.call accepts test_execution_summary" do
-      captured_kwargs = nil
-      @tier_gate_check.stubs(:call).with { |**kwargs|
-        captured_kwargs = kwargs
-        true
-      }.returns({
-        "pass" => true,
-        "issues" => [],
-        "context_summary" => "Done.",
-        "corrective_tasks" => []
-      })
-
-      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
-      task = pipeline_run.tasks.create!(
-        title: "Setup DB", position: 0, tier: 0,
-        external_id: "42", status: :completed,
-        result_diff: '[{"filename":"schema.rb"}]'
-      )
-
-      @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
-                   test_execution_summary: "## Test Execution Results\n**Overall: PASSED**")
-
-      assert_not_nil captured_kwargs
-      assert_equal "## Test Execution Results\n**Overall: PASSED**", captured_kwargs[:test_execution_summary]
-    end
-
-    # --- Test execution engine integration ---
-
-    test "test_execution_enabled? returns false by default" do
-      refute @engine.send(:test_execution_enabled?)
-    end
-
-    test "test_execution_enabled? returns true when configured" do
-      ArnoldPipeline.configure do |c|
-        c.llm_api_key = "test"
-        c.test_execution_enabled = true
-      end
-
-      assert @engine.send(:test_execution_enabled?)
-    end
-
-    test "run_test_execution! returns gate summary when tests pass" do
-      ArnoldPipeline.configure do |c|
-        c.llm_api_key = "test"
-        c.github_token = "test"
-        c.github_repo = "owner/repo"
-        c.test_execution_enabled = true
-        c.claude_code_repo_path = "/tmp/test_repo"
-      end
-
-      Dir.stubs(:exist?).returns(true)
-
-      passed_result = TestExecution::TestResult.new(
-        passed: true, exit_code: 0, summary: "14 tests, 0 failures", framework: "minitest"
-      )
-      TestExecution::TestRunner.stubs(:call).returns(passed_result)
-
-      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
-      summary = @engine.send(:run_test_execution!, pipeline_run)
-
-      assert_not_nil summary
-      assert_includes summary, "PASSED"
-      assert_includes summary, "14 tests, 0 failures"
-    end
-
-    test "run_test_execution! returns gate summary when tests fail" do
-      ArnoldPipeline.configure do |c|
-        c.llm_api_key = "test"
-        c.github_token = "test"
-        c.github_repo = "owner/repo"
-        c.test_execution_enabled = true
-        c.claude_code_repo_path = "/tmp/test_repo"
-      end
-
-      Dir.stubs(:exist?).returns(true)
-
-      failed_result = TestExecution::TestResult.new(
-        passed: false, exit_code: 1,
-        summary: "14 tests, 2 failures",
-        failures: [{ name: "test_login", message: "Expected 200", location: "test/auth.rb:42" }],
-        framework: "minitest"
-      )
-      TestExecution::TestRunner.stubs(:call).returns(failed_result)
-
-      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
-      summary = @engine.send(:run_test_execution!, pipeline_run)
-
-      assert_not_nil summary
-      assert_includes summary, "FAILED"
-      assert_includes summary, "test_login"
-    end
-
-    test "run_test_execution! returns nil when repo_path not configured" do
-      ArnoldPipeline.configure do |c|
-        c.llm_api_key = "test"
-        c.github_token = "test"
-        c.github_repo = "owner/repo"
-        c.test_execution_enabled = true
-        c.claude_code_repo_path = nil
-      end
-
-      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
-      summary = @engine.send(:run_test_execution!, pipeline_run)
-
-      assert_nil summary
-    end
-
-    test "run_test_execution! returns nil when repo_path does not exist" do
-      ArnoldPipeline.configure do |c|
-        c.llm_api_key = "test"
-        c.github_token = "test"
-        c.github_repo = "owner/repo"
-        c.test_execution_enabled = true
-        c.claude_code_repo_path = "/nonexistent/path"
-      end
-
-      Dir.stubs(:exist?).with("/nonexistent/path").returns(false)
-
-      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
-      summary = @engine.send(:run_test_execution!, pipeline_run)
-
-      assert_nil summary
-    end
-
-    test "run_test_execution! rescues errors and returns nil" do
-      ArnoldPipeline.configure do |c|
-        c.llm_api_key = "test"
-        c.github_token = "test"
-        c.github_repo = "owner/repo"
-        c.test_execution_enabled = true
-        c.claude_code_repo_path = "/tmp/test_repo"
-      end
-
-      Dir.stubs(:exist?).returns(true)
-      TestExecution::TestRunner.stubs(:call).raises(RuntimeError, "unexpected error")
-
-      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
-      summary = @engine.send(:run_test_execution!, pipeline_run)
-
-      assert_nil summary
-    end
-
-    test "run_test_execution! passes config values to TestRunner" do
-      ArnoldPipeline.configure do |c|
-        c.llm_api_key = "test"
-        c.github_token = "test"
-        c.github_repo = "owner/repo"
-        c.test_execution_enabled = true
-        c.claude_code_repo_path = "/tmp/test_repo"
-        c.test_command = "custom test"
-        c.test_timeout = 300
-        c.test_boot_command = "bin/setup"
-        c.test_boot_timeout = 90
-      end
-
-      Dir.stubs(:exist?).returns(true)
-
-      passed_result = TestExecution::TestResult.new(
-        passed: true, exit_code: 0, summary: "ok"
-      )
-
-      TestExecution::TestRunner.expects(:call).with(
-        repo_path: "/tmp/test_repo",
-        test_command: "custom test",
-        timeout: 300,
-        boot_command: "bin/setup",
-        boot_timeout: 90
-      ).returns(passed_result)
-
-      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
-      @engine.send(:run_test_execution!, pipeline_run)
+      formatted = Prompts::TierGate.format_verification_results(results)
+      assert_includes formatted, "SOME FAILED"
+      assert_includes formatted, "3 failures"
+      assert_includes formatted, "test_auth"
     end
   end
 end

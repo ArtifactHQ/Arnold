@@ -48,6 +48,7 @@ module ArnoldPipeline
         tier_gate_evaluated analysis_completed iteration_decision spec_delta_merged
         pipeline_paused pipeline_failed pipeline_completed repo_context_scanned
         criteria_check verification_execution test_execution spec_test_execution
+        post_merge_hooks verification_checks
       ]
       assert_equal expected, PipelineEvent.event_types.keys
     end

@@ -241,7 +241,7 @@ After each tier completes, results are merged before the next tier begins.
 #### Scenario: Tier Gate Check
 - GIVEN a tier that has completed execution and merge.
 - AND tier_gate_enabled is true.
-- WHEN the TierGateCheck agent evaluates the merged diffs and task summaries.
+- WHEN the TierGateCheck agent evaluates the merged diffs, task summaries, and verification_results.
 - THEN it returns a pass/fail verdict, a context_summary, and optionally corrective_tasks.
 
 #### Scenario: Tier Gate Failure with Retry [SPEC-TIER-004]
@@ -351,9 +351,14 @@ During GitHub polling, the system classifies issue comments using pattern-based 
 A comment is considered "substantive" if it matches at least one resolution pattern. The `has_substantive_comments?` method on the Task model uses these patterns to determine whether a task's comments indicate resolution. Tasks with only WIP-pattern comments are classified as `wip_comments_only` in the resolution summary.
 
 ### Requirement: Empirical Validation System [SPEC-VALIDATION-001]
-The system SHALL provide a four-layer empirical validation system that evaluates task outputs using acceptance criteria, recipe verification, test execution, and spec-scenario integration tests.
+The system SHALL provide a four-layer empirical validation system that evaluates task outputs using acceptance criteria, post-merge hooks, verification checks, and spec-scenario integration tests.
 Validation results are passed to the tier gate check agent to inform pass/fail decisions and corrective task generation.
 All validation layers are optional and configurable; when disabled, the tier gate operates without those signals.
+
+**Layer 1: Acceptance Criteria** — Static and runtime checks defined per-task (file_exists, test_exists, model_has, route_exists, http, command_exits).
+**Layer 2: Post-Merge Hooks** — User-configurable commands triggered by file path patterns after tier merge. Hooks may commit derived files (e.g., database schema, generated assets) when specified.
+**Layer 3: Verification Checks** — User-configurable command sequences (boot/test_suite/custom) run after hooks to verify application health. Checks can be marked as required; failures short-circuit the sequence.
+**Layer 4: Spec-Scenario Integration Tests** — Auto-generated tests from GIVEN/WHEN/THEN scenarios in the specification, executed after each tier to measure alignment progress.
 
 #### Layer 1: Acceptance Criteria on Tasks [SPEC-CRITERIA-001]
 
@@ -378,11 +383,11 @@ The system SHALL support six criterion types: four static types (evaluated offli
   - `{ "type": "file_exists", "description": "User model exists", "params": { "pattern": "app/models/user.rb" } }`
   - `{ "type": "route_exists", "description": "Login route exists", "params": { "method": "POST", "path": "/login" } }`
 
-#### Scenario: Static Criteria Evaluation After Tier Merge
+#### Scenario: Static Criteria Evaluation After Tier Merge [SPEC-CRITERIA-002]
 - GIVEN tasks with acceptance criteria have been executed and merged.
 - WHEN the CriteriaChecker evaluates static criteria against the repository.
 - THEN each criterion is marked as `verified`, `unverified`, or `failed`.
-- AND the results summary is passed to the tier gate check via `acceptance_criteria_summary:`.
+- AND the formatted results summary is passed to the tier gate check via `acceptance_criteria_summary:` parameter.
 
 #### Scenario: Criteria Re-evaluation on Tier Gate Retry
 - GIVEN a tier that failed the gate check and triggered corrective tasks.
@@ -395,77 +400,88 @@ The system SHALL support six criterion types: four static types (evaluated offli
 - THEN the `acceptance_criteria` JSON field is saved for each task.
 - AND when corrective tasks are generated from tier gate failures, they also receive `acceptance_criteria` if provided by the tier gate agent.
 
-#### Layer 2: Test Execution at Tier Gates [SPEC-TEST-001]
+#### Layer 2: Post-Merge Hooks [SPEC-HOOK-001]
 
-The system SHALL support automatic test execution after each tier merge when `test_execution_enabled` is true.
-The TestRunner auto-detects the project's test framework and runs tests with configurable timeout.
-Test results (pass/fail, exit code, summary, failures) are passed to the tier gate check via `test_execution_summary:`.
+The system SHALL support user-configurable post-merge hooks that execute commands after each tier merge.
+Hooks are triggered when changed files match configured glob patterns (trigger_paths).
+When a hook succeeds and commit_paths are specified, the runner commits derived files to preserve generated artifacts.
 
-#### Scenario: Test Framework Auto-Detection
-- GIVEN a repository with a test suite.
-- WHEN the TestRunner detects the test framework.
-- THEN it checks for frameworks in order: `bin/rails test` → minitest, `Gemfile` + rspec-core → rspec, `package.json` → npm test, `pytest.ini`/`pyproject.toml` → pytest.
-- AND the detected command is used to run tests.
+#### Scenario: Hook Definition and Triggering [SPEC-HOOK-002]
+- GIVEN a post-merge hook configured with:
+  - `name: "Update Database Schema"`
+  - `trigger_paths: ["db/migrate/*.rb"]`
+  - `command: "bundle exec rails db:migrate"`
+  - `commit_paths: ["db/schema.rb"]`
+  - `commit_message: "Update schema from migration"`
+- AND a tier merge includes changes to `db/migrate/20250214_create_users.rb`.
+- WHEN the PostMergeHookRunner evaluates hooks.
+- THEN the hook's `triggered_by?` method matches via File.fnmatch(pattern, file, File::FNM_PATHNAME).
+- AND the command executes in the repository directory.
+- AND if exit code is 0 and `db/schema.rb` has changed, a git commit is created with the specified message.
 
-#### Scenario: Test Execution After Tier Merge
-- GIVEN a tier has completed execution and merge.
-- AND `test_execution_enabled` is true.
-- WHEN the tier gate process runs.
-- THEN the TestRunner executes the test command with `test_timeout` (default: 120 seconds).
-- AND the TestResultParser parses the output to extract pass/fail status, summary, and failures.
-- AND the formatted test results are passed to TierGateCheck via `test_execution_summary:`.
+#### Scenario: Hook Result Recording [SPEC-HOOK-003]
+- GIVEN a hook execution completes.
+- WHEN the result is returned.
+- THEN it includes: `{ name:, triggered:, success:, stdout:, stderr:, exit_code: }`.
+- AND stdout/stderr are capped at 2000 characters.
+- AND a `post_merge_hooks` pipeline event is recorded with hook counts and results.
 
-#### Scenario: Test Execution with Boot Command
-- GIVEN a project requiring application boot before tests (e.g., Rails server).
-- AND `test_boot_command` is configured (e.g., `bin/rails server`).
-- WHEN tests are executed.
-- THEN the boot command is started in the background with `test_boot_timeout` (default: 60 seconds).
-- AND tests run after the boot process completes.
+#### Scenario: Hooks Run Before Gate Check [SPEC-HOOK-004]
+- GIVEN tier tasks have been merged.
+- WHEN the tier execution flow proceeds.
+- THEN post-merge hooks run first (after merge, before gate).
+- AND verification checks run second (after hooks, before gate).
+- AND tier gate check runs last with verification_results parameter.
 
-#### Scenario: Test Re-execution on Tier Gate Retry
+#### Scenario: Non-Fatal Hook Failures [SPEC-HOOK-005]
+- GIVEN a post-merge hook raises an exception.
+- WHEN the PostMergeHookRunner catches the error.
+- THEN it logs the error and returns `{ name:, triggered: true, success: false, error: message }`.
+- AND the pipeline continues execution without interruption.
+
+#### Layer 3: Verification Checks [SPEC-VCHECK-001]
+
+The system SHALL support user-configurable verification checks that run command sequences after each tier merge.
+Checks can be of type `:boot`, `:test_suite`, or `:custom`, and can be marked as `required` to short-circuit on failure.
+Verification results (all_passed, summary, and per-check details) are passed to the tier gate check via `verification_results:`.
+
+#### Scenario: Check Definition and Execution [SPEC-VCHECK-002]
+- GIVEN a verification check configured with:
+  - `name: "Boot Check"`
+  - `command: "bundle exec rails runner 'puts Rails.version'"`
+  - `type: :boot`
+  - `required: true`
+- AND a tier has completed merge.
+- WHEN the VerificationRunner processes checks.
+- THEN the command executes in the repository directory.
+- AND the result captures: `{ name:, type:, success:, exit_code:, stdout:, stderr:, duration_ms: }`.
+- AND stdout is capped at 5000 characters, stderr at 2000 characters.
+
+#### Scenario: Required Check Short-Circuits [SPEC-VCHECK-003]
+- GIVEN three checks configured: Boot (required), Database Migration (not required), Test Suite (required).
+- AND the Boot check fails (exit code 1).
+- WHEN the VerificationRunner executes checks.
+- THEN the Boot check runs and fails.
+- AND Database Migration and Test Suite checks are NOT executed.
+- AND the results include only the Boot check with `all_passed: false`.
+
+#### Scenario: Verification Results Passed to Gate [SPEC-VCHECK-004]
+- GIVEN verification checks have executed.
+- WHEN the tier gate check agent is invoked.
+- THEN it receives `verification_results:` containing:
+  - `{ checks: [...], all_passed: boolean, summary: "N passed, M failed: details" }`
+- AND the gate prompt includes a unified "Empirical Verification Results" section with formatted check details.
+
+#### Scenario: Verification Re-execution on Tier Gate Retry [SPEC-VCHECK-005]
 - GIVEN a tier that failed the gate check and triggered corrective tasks.
 - WHEN corrective tasks are executed and merged.
-- THEN tests are re-run against the updated codebase.
+- THEN the verification checks are re-run against the updated codebase.
 
-#### Scenario: Test Command Override
-- GIVEN a project with a non-standard test command.
-- WHEN `test_command` is configured (e.g., `bundle exec rake spec`).
-- THEN the configured command is used instead of auto-detection.
-
-#### Layer 3: Recipe Verification Blocks [SPEC-VERIFY-001]
-
-Recipes MAY include a `verification` block defining setup, boot, health check, and test commands.
-When `verification_enabled` is true, the VerificationRunner executes the verification sequence after each tier merge.
-Verification results are passed to the tier gate check via `verification_summary:`.
-
-#### Scenario: Recipe Verification Block Extraction
-- GIVEN a recipe with a `verification` block containing `setup_command`, `boot_command`, `health_check`, and `run_command`.
-- WHEN the RecipeVerificationExtractor processes the pipeline run's specification.
-- THEN the verification block is extracted and normalized for execution.
-
-#### Scenario: Four-Step Verification Sequence
-- GIVEN a tier has completed execution and merge.
-- AND `verification_enabled` is true.
-- AND the recipe includes a verification block.
-- WHEN the VerificationRunner executes the verification sequence.
-- THEN it runs:
-  1. `setup_command` (e.g., `bundle install`) with `verification_timeout`
-  2. `boot_command` (e.g., `bin/rails server`) spawned as a background process
-  3. Health check via HTTP GET with `verification_health_check_retries` (default: 10) and `verification_health_check_interval` (default: 3 seconds)
-  4. `run_command` (e.g., `bin/rails test`) with `verification_timeout`
-- AND the VerificationResult captures pass/fail for each step.
-- AND the formatted verification summary is passed to TierGateCheck via `verification_summary:`.
-
-#### Scenario: Verification Re-execution on Tier Gate Retry
-- GIVEN a tier that failed the gate check and triggered corrective tasks.
-- WHEN corrective tasks are executed and merged.
-- THEN the verification sequence is re-run against the updated codebase.
-
-#### Scenario: Graceful Degradation Without Verification Block
-- GIVEN a recipe without a `verification` block.
-- OR `verification_enabled` is false.
+#### Scenario: Graceful Degradation Without Checks [SPEC-VCHECK-006]
+- GIVEN no verification checks are configured (`verification_checks` is empty).
+- OR `claude_code_repo_path` is nil.
 - WHEN the tier gate process runs.
-- THEN verification is skipped and `verification_summary:` is nil.
+- THEN verification is skipped and `verification_results:` is nil.
 
 #### Layer 4: Spec-Scenario Integration Tests [SPEC-SPECTEST-001]
 
@@ -516,19 +532,21 @@ When multiple tasks within the same tier modify the same file, the DiffSummarize
 
 #### Pipeline Event Types for Validation [SPEC-EVENT-006]
 
-The system SHALL record four additional event types for empirical validation:
+The system SHALL record event types for empirical validation:
 
 | Event Type | Enum Value | Description |
 |---|---|---|
 | criteria_check | 15 | Records acceptance criteria evaluation results |
-| verification_execution | 16 | Records recipe verification results |
-| test_execution | 17 | Records test execution results |
+| verification_execution | 16 | DEPRECATED (replaced by verification_checks) |
+| test_execution | 17 | DEPRECATED (replaced by verification_checks) |
 | spec_test_execution | 18 | Records spec-scenario test execution results |
+| post_merge_hooks | 19 | Records post-merge hook execution results |
+| verification_checks | 20 | Records verification check execution results |
 
-#### Scenario: Validation Event Recording
+#### Scenario: Validation Event Recording [SPEC-EVENT-007]
 - GIVEN a tier completes execution and validation.
 - AND `event_logging_enabled` is true.
-- WHEN criteria are checked, verification runs, tests execute, or spec tests progress.
+- WHEN criteria are checked, hooks execute, verification checks run, or spec tests progress.
 - THEN corresponding PipelineEvent records are created with summaries and optional payloads.
 
 ### Requirement: Pause and Resume
@@ -685,15 +703,9 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | verbose_event_logging | Boolean | false | None |
 | repo_context_scan_patterns | Array of Strings | nil (uses defaults) | None |
 | repo_context_scan_files | Array of Strings | nil (uses defaults) | None |
-| verification_enabled | Boolean | false | None |
-| verification_timeout | Integer | 120 | Positive integer |
-| verification_health_check_retries | Integer | 10 | Positive integer |
-| verification_health_check_interval | Integer | 3 | Positive integer |
-| test_execution_enabled | Boolean | false | None |
-| test_command | String | nil | None |
-| test_timeout | Integer | 120 | Positive integer |
-| test_boot_command | String | nil | None |
-| test_boot_timeout | Integer | 60 | Positive integer |
+| post_merge_hooks | Array of Hashes | [] | Each hash: name, trigger_paths, command, commit_paths (optional), commit_message (optional) |
+| verification_checks | Array of Hashes | [] | Each hash: name, command, type (:boot/:test_suite/:custom), required (boolean) |
+| test_timeout | Integer | 120 | Positive integer (used by SpecTestProgressTracker) |
 | spec_test_generation_enabled | Boolean | false | None |
 | spec_test_directory | String | "test/spec_integration" | None |
 | spec_test_persona | String | "testing_specialist" | None |
