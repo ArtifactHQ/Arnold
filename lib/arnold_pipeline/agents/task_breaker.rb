@@ -14,7 +14,7 @@ module ArnoldPipeline
           properties: {
             tasks: { type: "array", items: {
               type: "object", additionalProperties: false,
-              required: ["title", "description", "priority", "labels", "position", "depends_on", "section_ref"],
+              required: ["title", "description", "priority", "labels", "position", "depends_on", "section_ref", "acceptance_criteria"],
               properties: {
                 title: { type: "string" },
                 description: { type: "string" },
@@ -22,7 +22,16 @@ module ArnoldPipeline
                 labels: { type: "array", items: { type: "string" } },
                 position: { type: "integer" },
                 depends_on: { type: "array", items: { type: "integer" } },
-                section_ref: { type: "string" }
+                section_ref: { type: "string" },
+                acceptance_criteria: { type: "array", items: {
+                  type: "object", additionalProperties: false,
+                  required: ["type", "description", "params"],
+                  properties: {
+                    type: { type: "string", enum: %w[file_exists test_exists model_has route_exists http command_exits] },
+                    description: { type: "string" },
+                    params: { type: "string", description: "JSON-encoded parameters object" }
+                  }
+                } }
               }
             } }
           }
@@ -46,11 +55,25 @@ module ArnoldPipeline
         )
 
         tasks = result["tasks"]
+        raise Error, "LLM returned no tasks (got #{result.keys.inspect})" unless tasks.is_a?(Array)
+
+        decode_criteria_params!(tasks)
         validate_tasks!(tasks)
         tasks
       end
 
       private
+
+      def decode_criteria_params!(tasks)
+        tasks.each do |task|
+          (task["acceptance_criteria"] || []).each do |ac|
+            next unless ac["params"].is_a?(String)
+            ac["params"] = JSON.parse(ac["params"])
+          rescue JSON::ParserError
+            ac["params"] = {}
+          end
+        end
+      end
 
       def validate_tasks!(tasks)
         raise Error, "Expected array of tasks, got #{tasks.class}" unless tasks.is_a?(Array)

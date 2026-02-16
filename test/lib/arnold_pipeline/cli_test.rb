@@ -588,6 +588,69 @@ module ArnoldPipeline
       assert_match(/2 iterations, 10 tasks/, output)
     end
 
+    test "log formats criteria_check event with counts" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :criteria_check, stage: "tier_gate",
+        summary: {
+          "verified_count" => 3, "failed_count" => 1, "unverified_count" => 2,
+          "criteria" => [
+            { "type" => "file_exists", "description" => "Gemfile exists", "result" => "verified" },
+            { "type" => "route_exists", "description" => "Health check route", "result" => "failed" },
+            { "type" => "http", "description" => "Returns 200", "result" => "unverified" }
+          ]
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/Criteria: 3 verified, 1 failed, 2 unverified/, output)
+      # Without --verbose, individual criteria should not show
+      assert_no_match(/PASS:/, output)
+    end
+
+    test "log --verbose shows per-criterion results for criteria_check" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :criteria_check, stage: "tier_gate",
+        summary: {
+          "verified_count" => 1, "failed_count" => 1, "unverified_count" => 0,
+          "criteria" => [
+            { "type" => "file_exists", "description" => "Gemfile exists", "result" => "verified" },
+            { "type" => "route_exists", "description" => "Health check route", "result" => "failed" }
+          ]
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s, "--verbose"]) }
+
+      assert_match(/PASS: Gemfile exists \(file_exists\)/, output)
+      assert_match(/FAIL: Health check route \(route_exists\)/, output)
+    end
+
+    test "log --verbose shows corrective tasks for tier_gate_evaluated" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :tier_gate_evaluated, stage: "tier_gate",
+        summary: {
+          "pass" => false,
+          "issues" => ["Missing route"],
+          "corrective_task_count" => 1,
+          "corrective_tasks" => [
+            { "title" => "Add route", "description" => "Add GET /up to routes.rb" }
+          ]
+        },
+        duration_ms: 5000.0
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s, "--verbose"]) }
+
+      assert_match(/Gate: FAILED — Missing route/, output)
+      assert_match(/Corrective tasks:/, output)
+      assert_match(/1\. Add route/, output)
+      assert_match(/Add GET \/up to routes\.rb/, output)
+    end
+
     test "run --quiet suppresses informational output" do
       mock_run = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
 

@@ -15,7 +15,7 @@ module ArnoldPipeline
                   :claude_code_repo_path, :claude_code_model,
                   :claude_code_max_turns, :claude_code_permission_mode,
                   :claude_code_max_concurrency,
-                  :max_iterations, :library_path,
+                  :max_iterations, :analysis_done_threshold, :library_path,
                   :polling_interval, :polling_timeout, :polling_max_interval,
                   :tier_gate_enabled, :context_propagation_enabled, :max_tier_retries,
                   :workflow_status_enabled, :workflow_branch_pattern,
@@ -24,7 +24,10 @@ module ArnoldPipeline
                   :merge_conflict_resolution_enabled, :merge_conflict_max_files,
                   :event_logging_enabled, :verbose_event_logging,
                   :llm_request_timeout,
-                  :repo_context_scan_patterns, :repo_context_scan_files
+                  :repo_context_scan_patterns, :repo_context_scan_files,
+                  :test_timeout,
+                  :post_merge_hooks, :verification_checks,
+                  :spec_test_generation_enabled, :spec_test_directory, :spec_test_persona
     attr_writer   :llm_provider, :llm_api_key, :llm_model
 
     def initialize
@@ -41,6 +44,7 @@ module ArnoldPipeline
       @claude_code_permission_mode = "bypassPermissions"
       @claude_code_max_concurrency = 4
       @max_iterations     = 3
+      @analysis_done_threshold = nil
       @library_path       = nil
       @polling_interval     = 30
       @polling_timeout      = 1800
@@ -61,6 +65,12 @@ module ArnoldPipeline
       @llm_request_timeout               = 600
       @repo_context_scan_patterns        = nil
       @repo_context_scan_files           = nil
+      @test_timeout                            = 120
+      @post_merge_hooks                        = []
+      @verification_checks                     = []
+      @spec_test_generation_enabled             = false
+      @spec_test_directory                       = "test/spec_integration"
+      @spec_test_persona                         = "testing_specialist"
     end
 
     def llm_provider
@@ -81,9 +91,11 @@ module ArnoldPipeline
       validate_execution_provider!
       validate_execution_config! unless %i[spec tasks].include?(stop_after)
       validate_max_iterations!
+      validate_analysis_done_threshold!
       validate_polling_config!
       validate_max_tier_retries!
       validate_workflow_branch_pattern!
+      validate_test_timeout!
       true
     end
 
@@ -130,6 +142,13 @@ module ArnoldPipeline
       raise ConfigurationError, "max_iterations must be an integer between 1 and 10."
     end
 
+    def validate_analysis_done_threshold!
+      return if @analysis_done_threshold.nil?
+      return if @analysis_done_threshold.is_a?(Integer) && @analysis_done_threshold.between?(50, 100)
+
+      raise ConfigurationError, "analysis_done_threshold must be nil or an integer between 50 and 100."
+    end
+
     def validate_max_tier_retries!
       return if @max_tier_retries.is_a?(Integer) && @max_tier_retries.between?(0, 5)
 
@@ -140,6 +159,12 @@ module ArnoldPipeline
       return if @workflow_branch_pattern.is_a?(Regexp)
 
       raise ConfigurationError, "workflow_branch_pattern must be a Regexp"
+    end
+
+    def validate_test_timeout!
+      unless @test_timeout.is_a?(Integer) && @test_timeout > 0
+        raise ConfigurationError, "test_timeout must be a positive integer."
+      end
     end
 
     def validate_polling_config!

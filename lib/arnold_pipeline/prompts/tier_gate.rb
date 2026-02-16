@@ -47,6 +47,45 @@ module ArnoldPipeline
           - Do NOT decompose into multiple subtasks — the original scope was appropriate
           - Copy the original task's description and add context about the failure
 
+          ## Acceptance Criteria Evaluation
+
+          When acceptance criteria are provided for this tier's tasks, evaluate the diffs
+          against each criterion specifically:
+          - **Verified (programmatic)**: These criteria were already checked automatically.
+            Treat them as confirmed facts — do not re-evaluate them.
+          - **Failed (programmatic)**: These criteria failed automatic checks. Flag these as
+            issues and create corrective tasks if critical.
+          - **Unverified**: These criteria require your evaluation. Check the diffs to
+            determine if each criterion is satisfied.
+
+          Focus your evaluation on the specific acceptance criteria rather than making
+          open-ended judgments about alignment.
+
+          ## Empirical Verification Results
+
+          When verification results are provided, they represent configurable checks
+          (boot, test suite, custom commands) run after this tier's merge. Treat them
+          as empirical evidence:
+          - Each check reports PASSED or FAILED with its output
+          - If all checks PASSED: the implementation satisfies its verification suite
+          - If any check FAILED: evaluate whether the failure is critical based on the
+            check type and output. Create corrective tasks targeting specific failures.
+          - Required checks that fail are particularly important — they indicate
+            fundamental issues that must be resolved.
+
+          ## Spec-Scenario Test Progression
+
+          When spec-scenario test results are provided, they represent independently
+          generated integration tests derived from the specification's GIVEN/WHEN/THEN
+          scenarios. These tests were written BEFORE implementation began and validate
+          the behavioral contract:
+          - Track how many spec tests now pass compared to the previous tier
+          - "Newly passing" tests indicate forward progress on spec alignment
+          - "Regressions" (previously passing tests that now fail) are critical issues —
+            create corrective tasks to restore passing tests
+          - A high spec-test pass rate is strong evidence of spec alignment
+          - A low pass rate after late tiers may indicate fundamental implementation gaps
+
           ## Incremental Pipeline Awareness
 
           This pipeline may be running incrementally on a repository that already contains
@@ -62,7 +101,9 @@ module ArnoldPipeline
         PROMPT
       end
 
-      def self.user_prompt(tier_number:, task_summaries:, diffs:, comments: "", repo_context: nil)
+      def self.user_prompt(tier_number:, task_summaries:, diffs:, comments: "", repo_context: nil,
+                           acceptance_criteria_summary: nil, verification_results: nil,
+                           spec_test_progress_summary: nil)
         prompt = <<~PROMPT
           ## Tier #{tier_number} Gate Review
 
@@ -72,6 +113,30 @@ module ArnoldPipeline
           ### Code Diffs
           #{diffs}
         PROMPT
+
+        if acceptance_criteria_summary.present?
+          prompt += <<~CRITERIA
+
+            ### Acceptance Criteria Results
+            #{acceptance_criteria_summary}
+          CRITERIA
+        end
+
+        if verification_results.present?
+          prompt += <<~VERIFICATION
+
+            ### Empirical Verification Results
+            #{format_verification_results(verification_results)}
+          VERIFICATION
+        end
+
+        if spec_test_progress_summary.present?
+          prompt += <<~SPEC_TESTS
+
+            ### Spec-Scenario Test Progression
+            #{spec_test_progress_summary}
+          SPEC_TESTS
+        end
 
         if repo_context.present?
           prompt += <<~BASELINE
@@ -92,6 +157,34 @@ module ArnoldPipeline
 
         prompt += "\nEvaluate this tier and provide your gate assessment.\n"
         prompt
+      end
+
+      def self.format_verification_results(results)
+        return "No verification results available." unless results.is_a?(Hash)
+
+        lines = []
+        lines << "**Overall: #{results[:all_passed] ? 'ALL PASSED' : 'SOME FAILED'}**"
+        lines << "Summary: #{results[:summary]}"
+
+        checks = results[:checks] || []
+        checks.each do |check|
+          status = check[:success] ? "PASSED" : "FAILED"
+          lines << ""
+          lines << "- **#{check[:name]}** (#{check[:type]}): #{status}"
+          unless check[:success]
+            output = check[:stderr].to_s.strip
+            output = check[:stdout].to_s.strip if output.empty?
+            unless output.empty?
+              # Cap failure output at 50 lines
+              output_lines = output.lines.first(50).join
+              lines << "  ```"
+              lines << "  #{output_lines.strip}"
+              lines << "  ```"
+            end
+          end
+        end
+
+        lines.join("\n")
       end
     end
   end

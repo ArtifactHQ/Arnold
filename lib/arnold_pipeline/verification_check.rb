@@ -1,0 +1,18 @@
+module ArnoldPipeline
+  class VerificationCheck
+    TYPES = %i[boot test_suite custom].freeze
+
+    attr_reader :name, :command, :type, :required
+
+    def initialize(name:, command:, type: :custom, required: false)
+      @name = name
+      @command = command
+      @type = type.to_sym
+      @required = required
+    end
+
+    def required?
+      @required
+    end
+  end
+end

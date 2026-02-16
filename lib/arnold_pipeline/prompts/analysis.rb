@@ -134,7 +134,8 @@ module ArnoldPipeline
         PROMPT
       end
 
-      def self.user_prompt(spec_content:, diffs:, iteration_number:, comments: "")
+      def self.user_prompt(spec_content:, diffs:, iteration_number:, comments: "", spec_test_progress_summary: nil,
+                           max_iterations: nil, previous_decisions: [])
         prompt = <<~PROMPT
           Iteration #{iteration_number}: Analyze the following implementation against the spec.
 
@@ -144,6 +145,24 @@ module ArnoldPipeline
           ## Code Diffs / Results
           #{diffs}
         PROMPT
+
+        iteration_context = build_iteration_context(iteration_number, max_iterations, previous_decisions)
+        prompt += iteration_context if iteration_context
+
+        if spec_test_progress_summary.present?
+          prompt += <<~SPEC_TESTS
+
+            ## Spec-Scenario Test Results
+            These tests were generated from the specification's GIVEN/WHEN/THEN scenarios
+            before implementation began. They validate the behavioral contract independently
+            of the coding agent's own tests.
+
+            #{spec_test_progress_summary}
+
+            Use these results as a primary alignment signal — a high spec-test pass rate
+            is stronger evidence of alignment than subjective evaluation.
+          SPEC_TESTS
+        end
 
         if comments.present?
           prompt += <<~COMMENTS
@@ -155,6 +174,51 @@ module ArnoldPipeline
 
         prompt += "\nProvide your analysis with decision, confidence score, and reasoning.\n"
         prompt
+      end
+
+      def self.build_iteration_context(iteration_number, max_iterations, previous_decisions)
+        return nil unless max_iterations
+
+        remaining = max_iterations - iteration_number
+        lines = ["\n## Iteration Context", "This is iteration #{iteration_number} of #{max_iterations}."]
+
+        if previous_decisions.any?
+          lines << ""
+          lines << "### Previous Decisions"
+          previous_decisions.each do |pd|
+            excerpt = pd[:reasoning_excerpt] || pd["reasoning_excerpt"] || ""
+            lines << "- Iteration #{pd[:iteration] || pd["iteration"]}: " \
+                     "**#{pd[:decision] || pd["decision"]}** " \
+                     "(confidence: #{pd[:confidence] || pd["confidence"]}%) — #{excerpt}"
+          end
+
+          all_iterate_tasks = previous_decisions.all? { |pd|
+            (pd[:decision] || pd["decision"]) == "iterate_tasks"
+          }
+          if all_iterate_tasks && previous_decisions.size >= 2
+            lines << ""
+            lines << "**STUCK DETECTION**: All #{previous_decisions.size} previous iterations chose " \
+                     "`iterate_tasks`. The same approach is not converging. Consider whether the " \
+                     "remaining issues are truly blocking or if the implementation is acceptable."
+          end
+        end
+
+        lines << ""
+        if remaining > (max_iterations / 2.0)
+          # More than half budget remaining — no extra pressure
+        elsif remaining >= 2
+          lines << "**More than half the iteration budget has been spent.** Bias toward `done` " \
+                   "unless there are significant functional gaps in the implementation."
+        elsif remaining == 1
+          lines << "**This is the penultimate iteration.** Strongly prefer `done` unless there " \
+                   "are critical, unambiguous failures in the implementation."
+        else
+          lines << "**FINAL ITERATION — no more iterations remain after this.** You MUST choose " \
+                   "`done`. Any remaining minor issues should be documented in the reasoning, " \
+                   "not used to justify further iteration."
+        end
+
+        lines.join("\n") + "\n"
       end
     end
   end

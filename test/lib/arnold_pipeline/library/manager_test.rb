@@ -10,12 +10,13 @@ module ArnoldPipeline
 
       test "loads all personas" do
         personas = @manager.all_personas
-        assert_equal 4, personas.size
+        assert_equal 5, personas.size
         names = personas.map(&:name)
         assert_includes names, "Software Architect"
         assert_includes names, "Domain Expert"
         assert_includes names, "General Analyst"
         assert_includes names, "QA Analyst"
+        assert_includes names, "Testing Specialist"
       end
 
       test "loads all recipes" do

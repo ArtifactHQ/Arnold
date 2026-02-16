@@ -418,6 +418,12 @@ module ArnoldPipeline
         c.claude_code_permission_mode = yaml_config[:claude_code_permission_mode] if yaml_config[:claude_code_permission_mode]
         c.openspec_enabled = yaml_config[:openspec_enabled] unless yaml_config[:openspec_enabled].nil?
         c.openspec_cli_path = yaml_config[:openspec_cli_path] if yaml_config[:openspec_cli_path]
+        c.claude_code_max_concurrency = yaml_config[:claude_code_max_concurrency] if yaml_config[:claude_code_max_concurrency]
+        c.post_merge_hooks = yaml_config[:post_merge_hooks]&.map { |h| h.transform_keys(&:to_s) } || [] if yaml_config.key?(:post_merge_hooks)
+        c.verification_checks = yaml_config[:verification_checks]&.map { |h| h.transform_keys(&:to_s) } || [] if yaml_config.key?(:verification_checks)
+        c.spec_test_generation_enabled = yaml_config[:spec_test_generation_enabled] unless yaml_config[:spec_test_generation_enabled].nil?
+        c.spec_test_directory = yaml_config[:spec_test_directory] if yaml_config[:spec_test_directory]
+        c.spec_test_persona = yaml_config[:spec_test_persona] if yaml_config[:spec_test_persona]
         c.event_logging_enabled = yaml_config[:event_logging_enabled] unless yaml_config[:event_logging_enabled].nil?
         c.verbose_event_logging = yaml_config[:verbose_event_logging] unless yaml_config[:verbose_event_logging].nil?
         if yaml_config[:workflow_branch_pattern]
@@ -561,6 +567,31 @@ module ArnoldPipeline
         status = summary["pass"] ? "PASSED" : "FAILED"
         issues = (summary["issues"] || []).join("; ")
         say "  Gate: #{status}#{issues.present? ? " — #{issues}" : ""}"
+        if options[:verbose]
+          corrective = summary["corrective_tasks"] || []
+          if corrective.any?
+            say "  Corrective tasks:"
+            corrective.each_with_index do |t, i|
+              say "    #{i + 1}. #{t['title']}"
+              say "       #{t['description']}" if t["description"].present?
+            end
+          end
+        end
+      when "criteria_check"
+        v = summary["verified_count"] || 0
+        f = summary["failed_count"] || 0
+        u = summary["unverified_count"] || 0
+        say "  Criteria: #{v} verified, #{f} failed, #{u} unverified"
+        if options[:verbose] && summary["criteria"]
+          summary["criteria"].each do |c|
+            label = case c["result"]
+            when "verified" then "PASS"
+            when "failed" then "FAIL"
+            else "UNVERIFIED"
+            end
+            say "    #{label}: #{c['description']} (#{c['type']})"
+          end
+        end
       when "analysis_completed"
         say "  Decision: #{summary['decision']} (#{summary['confidence']}% confidence)"
         say "  Reasoning: #{summary['reasoning_excerpt']}" if summary["reasoning_excerpt"].present?

@@ -168,6 +168,50 @@ module ArnoldPipeline
         )
       end
 
+      test "passes verification_results through to prompt" do
+        result = {
+          "pass" => true,
+          "issues" => [],
+          "context_summary" => "Built the foundation.",
+          "corrective_tasks" => []
+        }
+        @llm.expects(:chat_json).with { |params|
+          user_msg = params[:messages].first[:content]
+          user_msg.include?("### Empirical Verification Results") &&
+            user_msg.include?("ALL PASSED")
+        }.returns(result)
+
+        @agent.call(
+          tier_number: 0,
+          task_summaries: "- Setup DB",
+          diffs: "diff content",
+          verification_results: {
+            all_passed: true,
+            summary: "1 passed, 0 failed: boot=OK",
+            checks: [{ name: "boot", type: :boot, success: true, stdout: "", stderr: "" }]
+          }
+        )
+      end
+
+      test "works without verification_results (backward compatible)" do
+        result = {
+          "pass" => true,
+          "issues" => [],
+          "context_summary" => "Built the foundation.",
+          "corrective_tasks" => []
+        }
+        @llm.expects(:chat_json).with { |params|
+          user_msg = params[:messages].first[:content]
+          !user_msg.include?("Empirical Verification Results")
+        }.returns(result)
+
+        @agent.call(
+          tier_number: 0,
+          task_summaries: "- Setup DB",
+          diffs: "diff content"
+        )
+      end
+
       # -- Schema validation --
 
       test "RESPONSE_SCHEMA validates a passing gate result" do
