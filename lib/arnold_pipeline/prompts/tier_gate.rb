@@ -63,15 +63,13 @@ module ArnoldPipeline
 
           ## Empirical Verification Results
 
-          When verification results are provided, they represent configurable checks
-          (boot, test suite, custom commands) run after this tier's merge. Treat them
-          as empirical evidence:
-          - Each check reports PASSED or FAILED with its output
-          - If all checks PASSED: the implementation satisfies its verification suite
-          - If any check FAILED: evaluate whether the failure is critical based on the
-            check type and output. Create corrective tasks targeting specific failures.
-          - Required checks that fail are particularly important — they indicate
-            fundamental issues that must be resolved.
+          When verification checks are configured and produce test results, the pass/fail
+          decision is made BEFORE this prompt is called — you are only consulted when
+          verification checks are not available or did not run.
+
+          If you see a "Verification Results" section below, treat test results as the
+          strongest available evidence. Focus your review on architectural quality and
+          patterns, not on correctness (the tests cover that).
 
           ## Spec-Scenario Test Progression
 

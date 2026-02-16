@@ -4,6 +4,7 @@ module ArnoldPipeline
   class Configuration
     VALID_LLM_PROVIDERS = %i[anthropic openai].freeze
     VALID_EXECUTION_PROVIDERS = %i[github].freeze
+    VALID_CRITERIA_CHECK_MODES = %i[advisory gating disabled].freeze
 
     PROVIDER_DEFAULTS = {
       anthropic: { env_key: "ANTHROPIC_API_KEY", model: "claude-sonnet-4-20250514" },
@@ -27,7 +28,8 @@ module ArnoldPipeline
                   :repo_context_scan_patterns, :repo_context_scan_files,
                   :test_timeout,
                   :post_merge_hooks, :verification_checks,
-                  :spec_test_generation_enabled, :spec_test_directory, :spec_test_persona
+                  :spec_test_generation_enabled, :spec_test_directory, :spec_test_persona,
+                  :criteria_check_mode
     attr_writer   :llm_provider, :llm_api_key, :llm_model
 
     def initialize
@@ -71,6 +73,7 @@ module ArnoldPipeline
       @spec_test_generation_enabled             = false
       @spec_test_directory                       = "test/spec_integration"
       @spec_test_persona                         = "testing_specialist"
+      @criteria_check_mode                         = :advisory
     end
 
     def llm_provider
@@ -96,6 +99,7 @@ module ArnoldPipeline
       validate_max_tier_retries!
       validate_workflow_branch_pattern!
       validate_test_timeout!
+      validate_criteria_check_mode!
       true
     end
 
@@ -165,6 +169,12 @@ module ArnoldPipeline
       unless @test_timeout.is_a?(Integer) && @test_timeout > 0
         raise ConfigurationError, "test_timeout must be a positive integer."
       end
+    end
+
+    def validate_criteria_check_mode!
+      return if VALID_CRITERIA_CHECK_MODES.include?(@criteria_check_mode)
+
+      raise ConfigurationError, "criteria_check_mode must be one of: #{VALID_CRITERIA_CHECK_MODES.join(', ')}"
     end
 
     def validate_polling_config!

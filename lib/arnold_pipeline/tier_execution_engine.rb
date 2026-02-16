@@ -98,7 +98,7 @@ module ArnoldPipeline
 
         # Run criteria check for this tier's tasks (gate feature only, not context propagation)
         acceptance_criteria_summary = nil
-        if ArnoldPipeline.configuration.tier_gate_enabled
+        if ArnoldPipeline.configuration.tier_gate_enabled && ArnoldPipeline.configuration.criteria_check_mode != :disabled
           acceptance_criteria_summary = run_criteria_check!(pipeline_run, tier_tasks)
         end
 
@@ -189,6 +189,92 @@ module ArnoldPipeline
       comments = format_task_comments(tier_tasks)
       repo_context = build_repo_context(pipeline_run)
 
+      if verification_results && has_test_suite_result?(verification_results)
+        return evaluate_with_verification(
+          pipeline_run:, tier_num:, tier_tasks:,
+          task_summaries:, diffs:, comments:, repo_context:,
+          acceptance_criteria_summary:, verification_results:,
+          spec_test_progress_summary:
+        )
+      end
+
+      evaluate_with_llm(
+        tier_num:, task_summaries:, diffs:, comments:, repo_context:,
+        acceptance_criteria_summary:, verification_results:,
+        spec_test_progress_summary:
+      )
+    rescue => e
+      logger.warn { "[Arnold] Tier gate check failed (non-fatal): #{e.class}: #{e.message}\n#{e.backtrace&.first(5)&.join("\n")}" }
+      nil
+    end
+
+    def has_test_suite_result?(verification_results)
+      verification_results[:checks]&.any? { |c| c[:type] == :test_suite }
+    end
+
+    def test_suite_passed?(verification_results)
+      test_check = verification_results[:checks].find { |c| c[:type] == :test_suite }
+      test_check && test_check[:success]
+    end
+
+    def required_checks_passed?(verification_results)
+      verification_results[:checks].select { |c| c[:required] }.all? { |c| c[:success] }
+    end
+
+    def evaluate_with_verification(pipeline_run:, tier_num:, tier_tasks:,
+                                   task_summaries:, diffs:, comments:, repo_context:,
+                                   acceptance_criteria_summary:, verification_results:,
+                                   spec_test_progress_summary:)
+      # Check required checks first — boot failures are immediate gate failures
+      failed_required = verification_results[:checks].select { |c| c[:required] && !c[:success] }
+      if failed_required.any?
+        result = build_failed_gate_result(
+          tier_num: tier_num,
+          issues: failed_required.map { |c| "Required check '#{c[:name]}' failed" },
+          corrective_tasks: [build_boot_fix_task(verification_results)],
+          context_summary: "Tier #{tier_num}: required verification checks failed — #{failed_required.map { |c| c[:name] }.join(', ')}"
+        )
+        log_gate_result(tier_num, result)
+        record_gate_event(tier_num, result, diffs, task_summaries, "verification_required_failed")
+        return result
+      end
+
+      # Parse test output for structured failures
+      test_check = verification_results[:checks].find { |c| c[:type] == :test_suite }
+      test_result = TestExecution::TestResultParser.call(
+        stdout: test_check[:stdout] || "",
+        stderr: test_check[:stderr] || "",
+        exit_code: test_check[:exit_code]
+      )
+
+      if test_suite_passed?(verification_results)
+        # Tests passed — gate PASSES, criteria are advisory
+        context_summary = build_pass_context_summary(verification_results, acceptance_criteria_summary)
+        result = build_passed_gate_result(tier_num: tier_num, context_summary: context_summary)
+        log_gate_result(tier_num, result)
+        record_gate_event(tier_num, result, diffs, task_summaries, "verification_tests_passed")
+        result
+      else
+        # Tests failed — gate FAILS with corrective tasks from failures
+        corrective_tasks = generate_corrective_tasks_from_failures(
+          test_result: test_result, diffs: diffs,
+          task_summaries: task_summaries, repo_context: repo_context
+        )
+        issues = extract_failure_summary(test_result)
+        context_summary = build_fail_context_summary(verification_results, acceptance_criteria_summary)
+        result = build_failed_gate_result(
+          tier_num: tier_num, issues: issues,
+          corrective_tasks: corrective_tasks, context_summary: context_summary
+        )
+        log_gate_result(tier_num, result)
+        record_gate_event(tier_num, result, diffs, task_summaries, "verification_tests_failed")
+        result
+      end
+    end
+
+    def evaluate_with_llm(tier_num:, task_summaries:, diffs:, comments:, repo_context:,
+                          acceptance_criteria_summary:, verification_results:,
+                          spec_test_progress_summary:)
       result = if event_recorder
         event_recorder.timed(
           event_type: :tier_gate_evaluated, stage: "tier_gate",
@@ -199,7 +285,8 @@ module ArnoldPipeline
               corrective_task_count: (r&.dig("corrective_tasks") || []).size,
               corrective_tasks: (r&.dig("corrective_tasks") || []).map { |t|
                 { title: t["title"], description: t["description"] }
-              }
+              },
+              decision_source: "llm_judgment"
             }
           },
           payload: ->(r) { { diffs: diffs, task_summaries: task_summaries, gate_response: r } },
@@ -215,16 +302,115 @@ module ArnoldPipeline
                              spec_test_progress_summary:)
       end
 
-      if result
-        status = result["pass"] ? "PASSED" : "FAILED"
-        issues = result["issues"]&.join("; ") || "none"
-        logger.info { "[Arnold] Tier #{tier_num} gate: #{status} — issues: #{issues}" }
-      end
-
+      log_gate_result(tier_num, result)
       result
+    end
+
+    def generate_corrective_tasks_from_failures(test_result:, diffs:, task_summaries:, repo_context:)
+      CorrectiveTaskGenerator.call(
+        test_result: test_result,
+        diffs: diffs,
+        task_summaries: task_summaries,
+        repo_context: repo_context,
+        logger: logger
+      )
     rescue => e
-      logger.warn { "[Arnold] Tier gate check failed (non-fatal): #{e.class}: #{e.message}\n#{e.backtrace&.first(5)&.join("\n")}" }
-      nil
+      logger.warn { "[Arnold] CorrectiveTaskGenerator failed (fallback to generic task): #{e.class}: #{e.message}" }
+      truncated_summary = test_result.summary.to_s[0, 500]
+      [{
+        "title" => "Fix test failures",
+        "description" => "Test suite failed. Summary: #{truncated_summary}",
+        "labels" => ["bugfix"]
+      }]
+    end
+
+    def build_passed_gate_result(tier_num:, context_summary:)
+      {
+        "pass" => true,
+        "issues" => [],
+        "corrective_tasks" => [],
+        "context_summary" => context_summary
+      }
+    end
+
+    def build_failed_gate_result(tier_num:, issues:, corrective_tasks:, context_summary:)
+      {
+        "pass" => false,
+        "issues" => issues,
+        "corrective_tasks" => corrective_tasks,
+        "context_summary" => context_summary
+      }
+    end
+
+    def build_pass_context_summary(verification_results, criteria_summary)
+      lines = ["Verification checks all passed."]
+      check_names = verification_results[:checks].map { |c| "#{c[:name]}=#{c[:success] ? 'OK' : 'FAIL'}" }
+      lines << "Checks: #{check_names.join(', ')}"
+      if criteria_summary.present?
+        lines << ""
+        lines << "Criteria check (advisory): #{criteria_summary}"
+      end
+      lines.join("\n")
+    end
+
+    def build_fail_context_summary(verification_results, criteria_summary)
+      lines = ["Verification checks found failures."]
+      check_names = verification_results[:checks].map { |c| "#{c[:name]}=#{c[:success] ? 'OK' : 'FAIL'}" }
+      lines << "Checks: #{check_names.join(', ')}"
+      if criteria_summary.present?
+        lines << ""
+        lines << "Criteria check: #{criteria_summary}"
+      end
+      lines.join("\n")
+    end
+
+    def build_boot_fix_task(verification_results)
+      failed_checks = verification_results[:checks].select { |c| c[:required] && !c[:success] }
+      details = failed_checks.map do |c|
+        output = [c[:stdout], c[:stderr]].compact.reject(&:empty?).join("\n")
+        truncated = output[0, 1000]
+        "Check '#{c[:name]}' failed (exit code: #{c[:exit_code]}):\n#{truncated}"
+      end.join("\n\n")
+
+      {
+        "title" => "Fix application boot failure",
+        "description" => "Required verification checks failed. The application cannot boot.\n\n#{details}",
+        "labels" => ["boot-fix", "critical"]
+      }
+    end
+
+    def extract_failure_summary(test_result)
+      return ["Test suite failed: #{test_result.summary}"] if test_result.failures.empty?
+
+      test_result.failures.map do |f|
+        location = f[:location] ? " (#{f[:location]})" : ""
+        "#{f[:name]}#{location}: #{f[:message]}"
+      end
+    end
+
+    def log_gate_result(tier_num, result)
+      return unless result
+
+      status = result["pass"] ? "PASSED" : "FAILED"
+      issues = result["issues"]&.join("; ") || "none"
+      logger.info { "[Arnold] Tier #{tier_num} gate: #{status} — issues: #{issues}" }
+    end
+
+    def record_gate_event(tier_num, result, diffs, task_summaries, decision_source)
+      event_recorder&.record(
+        event_type: :tier_gate_evaluated, stage: "tier_gate",
+        summary: {
+          pass: result["pass"],
+          issues: result["issues"] || [],
+          corrective_task_count: (result["corrective_tasks"] || []).size,
+          corrective_tasks: (result["corrective_tasks"] || []).map { |t|
+            { title: t["title"], description: t["description"] }
+          },
+          decision_source: decision_source
+        },
+        payload: { diffs: diffs, task_summaries: task_summaries, gate_response: result },
+        tier_number: tier_num
+      )
     end
 
     def handle_tier_gate_failure!(pipeline_run, tier_num, tier_tasks, gate_result, accumulated_context,
@@ -580,6 +766,8 @@ module ArnoldPipeline
     end
 
     def run_criteria_check!(pipeline_run, tier_tasks)
+      return nil if ArnoldPipeline.configuration.criteria_check_mode == :disabled
+
       all_criteria = tier_tasks.flat_map do |task|
         AcceptanceCriterion.from_array(task.acceptance_criteria)
       end

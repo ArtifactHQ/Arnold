@@ -2,6 +2,7 @@ require "test_helper"
 require "octokit"
 require "faraday"
 require "arnold_pipeline/tier_execution_engine"
+require "arnold_pipeline/corrective_task_generator"
 
 module ArnoldPipeline
   class TierExecutionEngineTest < ActiveSupport::TestCase
@@ -1321,6 +1322,422 @@ module ArnoldPipeline
 
       pipeline_run.reload
       assert_equal "paused", pipeline_run.status
+    end
+
+    # --- Empirical verification path tests ---
+
+    test "empirical path: passes gate when test suite passes" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, description: "Create database",
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      verification_results = {
+        checks: [
+          { name: "tests", type: :test_suite, success: true, stdout: "5 runs, 5 assertions, 0 failures, 0 errors", stderr: "", exit_code: 0 }
+        ],
+        all_passed: true,
+        summary: "1 passed"
+      }
+
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+                            verification_results: verification_results)
+
+      assert result["pass"], "Gate should pass when test suite passes"
+      assert_empty result["issues"]
+      assert_empty result["corrective_tasks"]
+      assert_includes result["context_summary"], "Verification checks all passed"
+    end
+
+    test "empirical path: passes gate despite criteria_check failures when tests pass" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, description: "Create database",
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      verification_results = {
+        checks: [
+          { name: "tests", type: :test_suite, success: true, stdout: "5 runs, 5 assertions, 0 failures, 0 errors", stderr: "", exit_code: 0 }
+        ],
+        all_passed: true,
+        summary: "1 passed"
+      }
+
+      criteria_summary = "**Failed:**\n- [FAIL] Missing route (route_exists)"
+
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+                            verification_results: verification_results,
+                            acceptance_criteria_summary: criteria_summary)
+
+      assert result["pass"], "Gate should pass even with criteria failures when tests pass"
+      assert_includes result["context_summary"], "Criteria check (advisory)"
+      assert_includes result["context_summary"], "Missing route"
+    end
+
+    test "empirical path: fails gate when test suite fails" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, description: "Create database",
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      verification_results = {
+        checks: [
+          { name: "tests", type: :test_suite, success: false,
+            stdout: "3 runs, 3 assertions, 2 failures, 0 errors\n\n1) Failure:\nUserTest#test_valid [test/models/user_test.rb:10]:\nExpected true, got false",
+            stderr: "", exit_code: 1 }
+        ],
+        all_passed: false,
+        summary: "0 passed, 1 failed"
+      }
+
+      ArnoldPipeline::CorrectiveTaskGenerator.stubs(:call).returns([
+        { "title" => "Fix user validation", "description" => "Fix the user model", "labels" => ["unit-fix"] }
+      ])
+
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+                            verification_results: verification_results)
+
+      refute result["pass"], "Gate should fail when test suite fails"
+      assert result["issues"].any?, "Should have issues"
+      assert result["corrective_tasks"].any?, "Should have corrective tasks"
+      assert_equal "Fix user validation", result["corrective_tasks"].first["title"]
+    end
+
+    test "empirical path: generates corrective tasks from test failures" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, description: "Create database",
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      verification_results = {
+        checks: [
+          { name: "tests", type: :test_suite, success: false,
+            stdout: "3 runs, 3 assertions, 1 failures, 0 errors",
+            stderr: "", exit_code: 1 }
+        ],
+        all_passed: false,
+        summary: "0 passed, 1 failed"
+      }
+
+      # Verify CorrectiveTaskGenerator is called with parsed test_result
+      captured_test_result = nil
+      ArnoldPipeline::CorrectiveTaskGenerator.stubs(:call).with { |test_result:, **|
+        captured_test_result = test_result
+        true
+      }.returns([{ "title" => "Fix test", "description" => "Fix it", "labels" => ["bugfix"] }])
+
+      @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+                   verification_results: verification_results)
+
+      assert_not_nil captured_test_result, "CorrectiveTaskGenerator should be called with a test_result"
+      assert_kind_of ArnoldPipeline::TestExecution::TestResult, captured_test_result
+    end
+
+    test "empirical path: fails gate when required boot check fails" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, description: "Create database",
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      verification_results = {
+        checks: [
+          { name: "boot", type: :boot, success: false, required: true,
+            stdout: "", stderr: "LoadError: cannot load such file", exit_code: 1 },
+          { name: "tests", type: :test_suite, success: false,
+            stdout: "", stderr: "", exit_code: 1 }
+        ],
+        all_passed: false,
+        summary: "0 passed, 2 failed"
+      }
+
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+                            verification_results: verification_results)
+
+      refute result["pass"], "Gate should fail when required check fails"
+      assert result["issues"].any? { |i| i.include?("boot") }, "Issues should mention the failed check"
+    end
+
+    test "empirical path: generates boot fix task when boot check fails" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, description: "Create database",
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      verification_results = {
+        checks: [
+          { name: "boot", type: :boot, success: false, required: true,
+            stdout: "", stderr: "LoadError: cannot load file", exit_code: 1 },
+          { name: "tests", type: :test_suite, success: false,
+            stdout: "", stderr: "", exit_code: 1 }
+        ],
+        all_passed: false,
+        summary: "0 passed, 2 failed"
+      }
+
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+                            verification_results: verification_results)
+
+      boot_task = result["corrective_tasks"].first
+      assert_not_nil boot_task, "Should have a corrective task"
+      assert_equal "Fix application boot failure", boot_task["title"]
+      assert_includes boot_task["labels"], "boot-fix"
+      assert_includes boot_task["description"], "cannot load file"
+    end
+
+    # --- Fallback LLM path tests ---
+
+    test "fallback path: falls back to LLM judgment when no verification results" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, description: "Create database",
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      @tier_gate_check.expects(:call).once.returns({
+        "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => []
+      })
+
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+                            verification_results: nil)
+
+      assert result["pass"]
+    end
+
+    test "fallback path: falls back to LLM judgment when no test_suite type check present" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, description: "Create database",
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      # Verification results with only a boot check (no test_suite)
+      verification_results = {
+        checks: [
+          { name: "boot", type: :boot, success: true, required: true }
+        ],
+        all_passed: true,
+        summary: "1 passed"
+      }
+
+      @tier_gate_check.expects(:call).once.returns({
+        "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => []
+      })
+
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+                            verification_results: verification_results)
+
+      assert result["pass"]
+    end
+
+    # --- Decision source tracking ---
+
+    test "records decision_source verification_tests_passed in event" do
+      event_recorder = build_recording_event_recorder
+
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, description: "Create database",
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      verification_results = {
+        checks: [
+          { name: "tests", type: :test_suite, success: true,
+            stdout: "5 runs, 5 assertions, 0 failures, 0 errors", stderr: "", exit_code: 0 }
+        ],
+        all_passed: true,
+        summary: "1 passed"
+      }
+
+      engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+                  verification_results: verification_results)
+
+      gate_event = event_recorder.events.find { |e| e[:event_type] == :tier_gate_evaluated }
+      assert_not_nil gate_event
+      assert_equal "verification_tests_passed", gate_event[:summary][:decision_source]
+    end
+
+    test "records decision_source verification_tests_failed in event" do
+      event_recorder = build_recording_event_recorder
+
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, description: "Create database",
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      verification_results = {
+        checks: [
+          { name: "tests", type: :test_suite, success: false,
+            stdout: "3 runs, 3 assertions, 1 failures, 0 errors", stderr: "", exit_code: 1 }
+        ],
+        all_passed: false,
+        summary: "0 passed, 1 failed"
+      }
+
+      ArnoldPipeline::CorrectiveTaskGenerator.stubs(:call).returns([])
+
+      engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+                  verification_results: verification_results)
+
+      gate_event = event_recorder.events.find { |e| e[:event_type] == :tier_gate_evaluated }
+      assert_not_nil gate_event
+      assert_equal "verification_tests_failed", gate_event[:summary][:decision_source]
+    end
+
+    test "records decision_source verification_required_failed in event" do
+      event_recorder = build_recording_event_recorder
+
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, description: "Create database",
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      verification_results = {
+        checks: [
+          { name: "boot", type: :boot, success: false, required: true,
+            stdout: "", stderr: "boot failed", exit_code: 1 },
+          { name: "tests", type: :test_suite, success: false,
+            stdout: "", stderr: "", exit_code: 1 }
+        ],
+        all_passed: false,
+        summary: "0 passed, 2 failed"
+      }
+
+      engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+                  verification_results: verification_results)
+
+      gate_event = event_recorder.events.find { |e| e[:event_type] == :tier_gate_evaluated }
+      assert_not_nil gate_event
+      assert_equal "verification_required_failed", gate_event[:summary][:decision_source]
+    end
+
+    test "records decision_source llm_judgment when no verification" do
+      event_recorder = build_recording_event_recorder
+
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, description: "Create database",
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      @tier_gate_check.stubs(:call).returns({
+        "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => []
+      })
+
+      engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+                  verification_results: nil)
+
+      gate_event = event_recorder.events.find { |e| e[:event_type] == :tier_gate_evaluated }
+      assert_not_nil gate_event
+      assert_equal "llm_judgment", gate_event[:summary][:decision_source]
+    end
+
+    # --- Criteria check mode ---
+
+    test "skips criteria check when criteria_check_mode is disabled" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = File.expand_path("../../..", __dir__)
+        c.criteria_check_mode = :disabled
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        acceptance_criteria: [
+          { "type" => "file_exists", "description" => "Gemfile exists", "path" => "Gemfile" }
+        ]
+      )
+
+      ArnoldPipeline::CriteriaChecker.expects(:call).never
+
+      result = @engine.send(:run_criteria_check!, pipeline_run, [task])
+      assert_nil result
+    end
+
+    test "runs criteria check in advisory mode" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = File.expand_path("../../..", __dir__)
+        c.criteria_check_mode = :advisory
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        acceptance_criteria: [
+          { "type" => "file_exists", "description" => "Gemfile exists", "path" => "Gemfile" }
+        ]
+      )
+
+      verified = ArnoldPipeline::AcceptanceCriterion.new(type: "file_exists", description: "Gemfile exists", params: {})
+      ArnoldPipeline::CriteriaChecker.expects(:call).once.returns({
+        verified: [verified], failed: [], unverified: []
+      })
+
+      result = @engine.send(:run_criteria_check!, pipeline_run, [task])
+      assert_not_nil result
+    end
+
+    # --- Error handling ---
+
+    test "falls back to generic task when CorrectiveTaskGenerator fails" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, description: "Create database",
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      verification_results = {
+        checks: [
+          { name: "tests", type: :test_suite, success: false,
+            stdout: "3 runs, 3 assertions, 1 failures, 0 errors", stderr: "", exit_code: 1 }
+        ],
+        all_passed: false,
+        summary: "0 passed, 1 failed"
+      }
+
+      ArnoldPipeline::CorrectiveTaskGenerator.stubs(:call).raises(RuntimeError, "LLM exploded")
+
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+                            verification_results: verification_results)
+
+      refute result["pass"]
+      assert_equal 1, result["corrective_tasks"].size
+      assert_equal "Fix test failures", result["corrective_tasks"].first["title"]
+      assert_includes result["corrective_tasks"].first["labels"], "bugfix"
     end
 
     private

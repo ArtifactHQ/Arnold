@@ -136,8 +136,8 @@ module ArnoldPipeline
     test "tier gate prompt includes empirical verification results section" do
       prompt = ArnoldPipeline::Prompts::TierGate.system_prompt
       assert_includes prompt, "Empirical Verification Results"
-      assert_includes prompt, "PASSED"
-      assert_includes prompt, "FAILED"
+      assert_includes prompt, "pass/fail"
+      assert_includes prompt, "architectural quality"
     end
 
     test "user_prompt includes acceptance criteria when provided" do

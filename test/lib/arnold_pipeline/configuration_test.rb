@@ -317,6 +317,40 @@ module ArnoldPipeline
       assert_match(/analysis_done_threshold must be nil or an integer between 50 and 100/, error.message)
     end
 
+    # --- criteria_check_mode tests ---
+
+    test "defaults criteria_check_mode to :advisory" do
+      assert_equal :advisory, @config.criteria_check_mode
+    end
+
+    test "accepts :gating criteria_check_mode" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.criteria_check_mode = :gating
+
+      assert @config.validate!
+    end
+
+    test "accepts :disabled criteria_check_mode" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.criteria_check_mode = :disabled
+
+      assert @config.validate!
+    end
+
+    test "rejects invalid criteria_check_mode" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.criteria_check_mode = :invalid
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/criteria_check_mode must be one of/, error.message)
+    end
+
     # --- Auto-detection tests ---
 
     test "auto-detects anthropic when ANTHROPIC_API_KEY is set" do

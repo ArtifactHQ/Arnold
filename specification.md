@@ -283,6 +283,21 @@ After each tier completes, results are merged before the next tier begins.
 - AND if no additional context is available (no gate issues, no original tasks, no criteria), the base description is used as-is.
 - AND the current tier's `context_summary` from the gate result is included in the `prior_context` passed to corrective task execution, so the executor knows what the original tier already built.
 
+#### Scenario: Test-Driven Corrective Task Generation [SPEC-TIER-008]
+- GIVEN a tier gate evaluation where verification checks have failed with specific test output.
+- WHEN the CorrectiveTaskGenerator service processes the test results.
+- THEN it parses failures using TestResultParser to extract structured failure data.
+- AND it groups failures by category: view_markup, integration_expectation, unit_expectation, missing_reference, routing, and general.
+- AND it generates one corrective task per failure category, with file:line references from the test output included in the task description.
+- AND if the LLM-based task generation fails, it falls back to direct task construction from the parsed test results.
+
+#### Scenario: Tier Gate Evaluation Path Selection [SPEC-TIER-009]
+- GIVEN a tier has completed execution and merge.
+- WHEN the TierExecutionEngine prepares for gate evaluation.
+- THEN it selects the `evaluate_with_verification` path when a test_suite verification check is present in the results.
+- AND it selects the `evaluate_with_llm` path when no verification checks ran (fallback to LLM judgment).
+- AND the selected evaluation path is recorded as `decision_source` in the pipeline event metadata, with values: `verification_tests_passed`, `verification_tests_failed`, `verification_required_failed`, or `llm_judgment`.
+
 #### Scenario: Tier Gate Retry Exhaustion
 - GIVEN a tier that has failed the gate check max_tier_retries times.
 - WHEN the retry limit is reached.
@@ -499,12 +514,13 @@ Verification results (all_passed, summary, and per-check details) are passed to 
 - AND Database Migration and Test Suite checks are NOT executed.
 - AND the results include only the Boot check with `all_passed: false`.
 
-#### Scenario: Verification Results Passed to Gate [SPEC-VCHECK-004]
+#### Scenario: Verification Results Determine Gate Verdict [SPEC-VCHECK-004]
 - GIVEN verification checks have executed.
 - WHEN the tier gate check agent is invoked.
 - THEN it receives `verification_results:` containing:
   - `{ checks: [...], all_passed: boolean, summary: "N passed, M failed: details" }`
 - AND the gate prompt includes a unified "Empirical Verification Results" section with formatted check details.
+- AND when verification results are available, they determine the tier gate verdict rather than serving as advisory input.
 
 #### Scenario: Verification Re-execution on Tier Gate Retry [SPEC-VCHECK-005]
 - GIVEN a tier that failed the gate check and triggered corrective tasks.
@@ -516,6 +532,15 @@ Verification results (all_passed, summary, and per-check details) are passed to 
 - OR `claude_code_repo_path` is nil.
 - WHEN the tier gate process runs.
 - THEN verification is skipped and `verification_results:` is nil.
+
+#### Scenario: Empirical Validation Decision Hierarchy [SPEC-VCHECK-007]
+- GIVEN verification checks have run and produced test results.
+- WHEN the tier gate evaluates the results.
+- THEN verification results are the primary pass/fail signal for the gate verdict.
+- AND required check failures cause immediate gate failure regardless of other signals.
+- AND a test_suite check that passes causes the gate to pass (acceptance criteria are advisory only).
+- AND a test_suite check that fails causes the gate to fail, with corrective tasks generated from the test failures.
+- AND when no verification checks ran, LLM judgment is the fallback evaluation method.
 
 #### Layer 4: Spec-Scenario Integration Tests [SPEC-SPECTEST-001]
 
@@ -582,6 +607,16 @@ The system SHALL record event types for empirical validation:
 - AND `event_logging_enabled` is true.
 - WHEN criteria are checked, hooks execute, verification checks run, or spec tests progress.
 - THEN corresponding PipelineEvent records are created with summaries and optional payloads.
+
+#### Scenario: Tier Gate Decision Source Metadata [SPEC-EVENT-008]
+- GIVEN a tier gate evaluation completes.
+- WHEN the `tier_gate_evaluated` pipeline event is recorded.
+- THEN the event metadata includes a `decision_source` field indicating how the verdict was determined.
+- AND `decision_source` is one of:
+  - `verification_tests_passed` — Test suite verification passed, gate passes.
+  - `verification_tests_failed` — Test suite verification failed, corrective tasks generated from failures.
+  - `verification_required_failed` — A required verification check failed, gate fails immediately.
+  - `llm_judgment` — No verification checks ran, LLM evaluated diffs directly.
 
 ### Requirement: Pause and Resume
 The system SHALL support pausing execution at configurable stage checkpoints and resuming from the last completed stage.
@@ -749,6 +784,7 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | repo_context_scan_files | Array of Strings | nil (uses defaults) | None |
 | post_merge_hooks | Array of Hashes | [] | Each hash: name, trigger_paths, command, commit_paths (optional), commit_message (optional) |
 | verification_checks | Array of Hashes | [] | Each hash: name, command, type (:boot/:test_suite/:custom), required (boolean) |
+| criteria_check_mode | Symbol | :advisory | Must be :advisory, :gating, or :disabled. Controls whether acceptance criteria auto-fail gates. |
 | test_timeout | Integer | 120 | Positive integer (used by SpecTestProgressTracker) |
 | spec_test_generation_enabled | Boolean | false | None |
 | spec_test_directory | String | "test/spec_integration" | None |
