@@ -1,0 +1,18 @@
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Gem build artifacts
+*.gem
+pkg/
+
+# Dummy app runtime files
+test/dummy/log/*.log
+test/dummy/storage/*.sqlite3
+test/dummy/tmp/
+
+# OS
+.DS_Store
+Thumbs.db
