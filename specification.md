@@ -79,6 +79,27 @@ The loop SHALL use the execution provider's polling mechanism (async providers) 
 - WHEN final validation occurs.
 - THEN changes are merged via GitHub API (e.g., PR merge), and the loop ends.
 
+#### Scenario: Iteration Context with Convergence Pressure [SPEC-ANALYSIS-009]
+- GIVEN the Analysis Agent is evaluating iteration N of max_iterations.
+- WHEN the analysis prompt is constructed.
+- THEN an "Iteration Context" section is appended containing:
+  - The current iteration number and total max_iterations.
+  - A "Previous Decisions" list showing each prior iteration's decision, confidence, and reasoning excerpt.
+  - Escalating convergence pressure based on remaining budget:
+    - More than half budget remaining: no extra pressure.
+    - Half budget spent (remaining >= 2): "Bias toward `done` unless there are significant functional gaps."
+    - Penultimate iteration (remaining == 1): "Strongly prefer `done` unless there are critical, unambiguous failures."
+    - Final iteration (remaining == 0): "You MUST choose `done`."
+- AND if all previous iterations chose `iterate_tasks` and there are 2+ prior decisions, a "STUCK DETECTION" warning is included advising the agent that the same approach is not converging.
+
+#### Scenario: Analysis Done Threshold Promotion [SPEC-ANALYSIS-010]
+- GIVEN the Analysis Agent returns `iterate_tasks` with a confidence score.
+- AND `analysis_done_threshold` is configured (integer 50-100, default nil/disabled).
+- WHEN the confidence score is greater than or equal to the threshold.
+- THEN the decision is promoted from `iterate_tasks` to `done`.
+- AND the promotion is logged and recorded as a pipeline event with `promoted_from: "iterate_tasks"`.
+- AND when the threshold is nil (default), no promotion occurs and the agent's decision is used as-is.
+
 ### Analysis Evaluation Methodology
 
 The Analysis Agent applies three completeness tests and checks for seven anti-patterns when evaluating implementation against the specification.
@@ -252,6 +273,16 @@ After each tier completes, results are merged before the next tier begins.
 - AND each corrective task branches from the updated master branch (including changes from the previous corrective task's merge).
 - AND task summaries sent to the tier gate reviewer are annotated with `[FAILED - EMPTY DIFF]` for tasks that completed with exit code 0 but no code changes, or `[FAILED]` for other failures.
 
+#### Scenario: Corrective Task Description Enrichment [SPEC-TIER-007]
+- GIVEN a tier gate failure produces corrective tasks.
+- WHEN corrective tasks are created.
+- THEN each corrective task description is enriched with contextual sections beyond the gate's base description:
+  - `## Gate Issues` — Numbered list of issues from the gate result that triggered the correction.
+  - `## Original Tier Tasks` — List of the original tier's tasks with title, description, and diff status annotation: `[produced diffs]` for tasks with non-empty result_diff, `[NO DIFFS]` for tasks with empty or missing diffs.
+  - `## Acceptance Criteria Status` — The formatted acceptance criteria summary (verified/failed/unverified) when available.
+- AND if no additional context is available (no gate issues, no original tasks, no criteria), the base description is used as-is.
+- AND the current tier's `context_summary` from the gate result is included in the `prior_context` passed to corrective task execution, so the executor knows what the original tier already built.
+
 #### Scenario: Tier Gate Retry Exhaustion
 - GIVEN a tier that has failed the gate check max_tier_retries times.
 - WHEN the retry limit is reached.
@@ -415,7 +446,8 @@ When a hook succeeds and commit_paths are specified, the runner commits derived 
   - `commit_message: "Update schema from migration"`
 - AND a tier merge includes changes to `db/migrate/20250214_create_users.rb`.
 - WHEN the PostMergeHookRunner evaluates hooks.
-- THEN the hook's `triggered_by?` method matches via File.fnmatch(pattern, file, File::FNM_PATHNAME).
+- THEN changed files are extracted from each task's `result_diff` by parsing the JSON array and collecting `filename` fields (with fallback to unified diff regex parsing if JSON parsing fails).
+- AND the hook's `triggered_by?` method matches via File.fnmatch(pattern, file, File::FNM_PATHNAME).
 - AND the command executes in the repository directory.
 - AND if exit code is 0 and `db/schema.rb` has changed, a git commit is created with the specified message.
 
@@ -424,7 +456,9 @@ When a hook succeeds and commit_paths are specified, the runner commits derived 
 - WHEN the result is returned.
 - THEN it includes: `{ name:, triggered:, success:, stdout:, stderr:, exit_code: }`.
 - AND stdout/stderr are capped at 2000 characters.
-- AND a `post_merge_hooks` pipeline event is recorded with hook counts and results.
+- AND a `post_merge_hooks` pipeline event is recorded with:
+  - **Summary:** `{ hook_count:, triggered_count:, success_count:, results: [{ name:, triggered:, success:, exit_code: (if triggered), error: (if raised) }] }`
+  - **Payload:** `{ changed_files: [filenames], results: [full hook result hashes including stdout/stderr] }`
 
 #### Scenario: Hooks Run Before Gate Check [SPEC-HOOK-004]
 - GIVEN tier tasks have been merged.
@@ -612,6 +646,14 @@ Event recording SHALL be non-fatal: database errors during event creation do not
 - THEN the error is silently rescued.
 - AND the pipeline continues execution without interruption.
 
+#### Scenario: Verbose Debug Logging [SPEC-OUTPUT-001]
+- GIVEN the `--verbose` CLI flag is passed (or logger level is DEBUG).
+- WHEN agents process LLM requests.
+- THEN the BaseAgent logs prompt contents at DEBUG level: system prompt, each message role and content (truncated to 2000 characters).
+- AND the BaseAgent logs LLM response size and content at DEBUG level (truncated to 2000 characters).
+- AND the TierExecutionEngine logs at DEBUG level: gate issues triggering correction (numbered list), corrective task details (title, description, labels), and per-criterion acceptance criteria results (type and description).
+- AND all DEBUG-level output is suppressed at the default INFO log level.
+
 ### Requirement: CLI Commands
 The system SHALL provide a command-line interface via the `arnold_pipeline` executable.
 
@@ -671,6 +713,7 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 ### Requirement: Configuration
 The system SHALL be configurable via a Ruby block (`ArnoldPipeline.configure`) or YAML config file.
 When multiple sources provide the same key, CLI flags take precedence over YAML config, which takes precedence over defaults (CLI > YAML > defaults).
+The CLI's YAML config loader (`apply_config!`) MUST map all configuration keys listed in the table below. Omitting a key from the YAML loader silently drops user configuration, which is a bug.
 All configuration keys SHALL be validated before pipeline execution via `validate!`.
 
 | Key | Type | Default | Validation |
@@ -688,6 +731,7 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | claude_code_permission_mode | String | "bypassPermissions" | Must be one of: acceptEdits, bypassPermissions, default, delegate, dontAsk, plan |
 | claude_code_max_concurrency | Integer | 4 | 1-16 |
 | max_iterations | Integer | 3 | 1-10 |
+| analysis_done_threshold | Integer | nil (disabled) | nil or 50-100 |
 | library_path | String | nil (built-in library) | None |
 | polling_interval | Numeric | 30 | Positive |
 | polling_timeout | Numeric | 1800 | Positive |

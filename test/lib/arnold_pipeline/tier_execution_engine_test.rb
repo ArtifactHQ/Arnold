@@ -983,7 +983,7 @@ module ArnoldPipeline
       @executor.stubs(:merge_results).returns([])
 
       ArnoldPipeline::PostMergeHookRunner.stubs(:call).returns([
-        { name: "lint", triggered: true, success: true }
+        { name: "lint", triggered: true, success: true, stdout: "ok", stderr: "", exit_code: 0 }
       ])
 
       engine.execute_tiers!(pipeline_run)
@@ -991,7 +991,17 @@ module ArnoldPipeline
       hook_event = event_recorder.events.find { |e| e[:event_type] == :post_merge_hooks }
       assert_not_nil hook_event, "Expected a post_merge_hooks event to be recorded"
       assert_equal "execution", hook_event[:stage]
-      assert_equal 1, hook_event[:summary][:hook_count]
+
+      summary = hook_event[:summary]
+      assert_equal 1, summary[:hook_count]
+      assert_equal 1, summary[:triggered_count]
+      assert_equal 1, summary[:success_count]
+      assert_equal 0, summary[:results].first[:exit_code]
+      assert_equal true, summary[:results].first[:triggered]
+
+      payload = hook_event[:payload]
+      assert_not_nil payload[:changed_files]
+      assert_equal "ok", payload[:results].first[:stdout]
     end
 
     test "records verification_checks PipelineEvent" do
@@ -1081,6 +1091,201 @@ module ArnoldPipeline
       assert_nothing_raised do
         @engine.execute_tiers!(pipeline_run)
       end
+    end
+
+    # --- collect_changed_files ---
+
+    test "collect_changed_files extracts filenames from JSON result_diff" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        result_diff: '[{"filename":"Gemfile","patch":"+ gem rails","status":"modified"},{"filename":"app/models/user.rb","patch":"+ class User","status":"added"}]'
+      )
+
+      files = @engine.send(:collect_changed_files, [task])
+      assert_includes files, "Gemfile"
+      assert_includes files, "app/models/user.rb"
+      assert_equal 2, files.size
+    end
+
+    test "collect_changed_files returns empty array for empty diff" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        result_diff: "[]"
+      )
+
+      files = @engine.send(:collect_changed_files, [task])
+      assert_equal [], files
+    end
+
+    test "collect_changed_files deduplicates across tasks" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task1 = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        result_diff: '[{"filename":"Gemfile","patch":"+","status":"modified"}]'
+      )
+      task2 = pipeline_run.tasks.create!(
+        title: "Add routes", position: 1, tier: 0,
+        result_diff: '[{"filename":"Gemfile","patch":"+","status":"modified"},{"filename":"config/routes.rb","patch":"+","status":"added"}]'
+      )
+
+      files = @engine.send(:collect_changed_files, [task1, task2])
+      assert_equal 2, files.size
+      assert_includes files, "Gemfile"
+      assert_includes files, "config/routes.rb"
+    end
+
+    # --- build_corrective_description ---
+
+    test "build_corrective_description includes gate issues" do
+      desc = @engine.send(:build_corrective_description,
+        base_description: "Fix the routes",
+        gate_issues: ["Missing root route", "No health check endpoint"],
+        original_tier_tasks: [],
+        acceptance_criteria_summary: nil
+      )
+
+      assert_includes desc, "Fix the routes"
+      assert_includes desc, "## Gate Issues"
+      assert_includes desc, "1. Missing root route"
+      assert_includes desc, "2. No health check endpoint"
+    end
+
+    test "build_corrective_description includes original task context with diff annotations" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task_with_diffs = pipeline_run.tasks.create!(
+        title: "Setup DB", description: "Create database schema", position: 0, tier: 0,
+        result_diff: '[{"filename":"schema.rb","patch":"+ create_table"}]'
+      )
+      task_without_diffs = pipeline_run.tasks.create!(
+        title: "Add Routes", description: "Configure routing", position: 1, tier: 0,
+        result_diff: "[]"
+      )
+
+      desc = @engine.send(:build_corrective_description,
+        base_description: "Fix routing",
+        gate_issues: [],
+        original_tier_tasks: [task_with_diffs, task_without_diffs],
+        acceptance_criteria_summary: nil
+      )
+
+      assert_includes desc, "## Original Tier Tasks"
+      assert_includes desc, "Setup DB: Create database schema [produced diffs]"
+      assert_includes desc, "Add Routes: Configure routing [NO DIFFS]"
+    end
+
+    test "build_corrective_description includes acceptance criteria summary" do
+      criteria_summary = "**Failed (programmatic — these are NOT satisfied):**\n- [FAIL] Health check route (route_exists)"
+
+      desc = @engine.send(:build_corrective_description,
+        base_description: "Fix health check",
+        gate_issues: [],
+        original_tier_tasks: [],
+        acceptance_criteria_summary: criteria_summary
+      )
+
+      assert_includes desc, "## Acceptance Criteria Status"
+      assert_includes desc, "[FAIL] Health check route (route_exists)"
+    end
+
+    test "build_corrective_description returns base description only when no context" do
+      desc = @engine.send(:build_corrective_description,
+        base_description: "Fix the routes",
+        gate_issues: [],
+        original_tier_tasks: [],
+        acceptance_criteria_summary: nil
+      )
+
+      assert_equal "Fix the routes", desc
+    end
+
+    test "handle_tier_gate_failure! creates tasks with enriched descriptions" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 1
+        c.tier_gate_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      original_task = pipeline_run.tasks.create!(
+        title: "Setup DB", description: "Create schema", position: 0, tier: 0,
+        result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      gate_fail = {
+        "pass" => false,
+        "issues" => ["Missing root route redirect"],
+        "corrective_tasks" => [
+          { "title" => "Add root route", "description" => "Add root route redirect" }
+        ],
+        "context_summary" => "DB schema created, routes missing"
+      }
+      gate_pass = { "pass" => true, "issues" => [], "context_summary" => "All good.", "corrective_tasks" => [] }
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @tier_gate_check.stubs(:call).returns(gate_pass)
+
+      criteria_summary = "**Failed:**\n- [FAIL] Root route (route_exists)"
+
+      @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [original_task], gate_fail, [],
+                   acceptance_criteria_summary: criteria_summary)
+
+      corrective = pipeline_run.tasks.where(title: "Add root route").first
+      assert_not_nil corrective
+      assert_includes corrective.description, "Add root route redirect"
+      assert_includes corrective.description, "## Gate Issues"
+      assert_includes corrective.description, "Missing root route redirect"
+      assert_includes corrective.description, "## Original Tier Tasks"
+      assert_includes corrective.description, "Setup DB: Create schema [produced diffs]"
+      assert_includes corrective.description, "## Acceptance Criteria Status"
+      assert_includes corrective.description, "[FAIL] Root route (route_exists)"
+    end
+
+    test "handle_tier_gate_failure! includes current tier context in prior_context" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 1
+        c.tier_gate_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      gate_fail = {
+        "pass" => false,
+        "issues" => ["missing files"],
+        "corrective_tasks" => [
+          { "title" => "Fix files", "description" => "add missing files" }
+        ],
+        "context_summary" => "DB schema and models created, routes file exists"
+      }
+      gate_pass = { "pass" => true, "issues" => [], "context_summary" => "All good.", "corrective_tasks" => [] }
+
+      # Capture prior_context passed to executor.call for the corrective task
+      captured_prior_context = nil
+      @executor.stubs(:call).with { |prior_context:, **|
+        captured_prior_context = prior_context
+        true
+      }.returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @tier_gate_check.stubs(:call).returns(gate_pass)
+
+      # Pass empty accumulated_context — current tier context should still be included
+      @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [], gate_fail, [])
+
+      assert_not_nil captured_prior_context, "prior_context should be passed to executor"
+      assert_includes captured_prior_context, "DB schema and models created, routes file exists"
+      assert_includes captured_prior_context, "Tier 0 completed:"
     end
 
     test "handle_tier_gate_failure! pauses from executing with sync provider" do

@@ -418,6 +418,12 @@ module ArnoldPipeline
         c.claude_code_permission_mode = yaml_config[:claude_code_permission_mode] if yaml_config[:claude_code_permission_mode]
         c.openspec_enabled = yaml_config[:openspec_enabled] unless yaml_config[:openspec_enabled].nil?
         c.openspec_cli_path = yaml_config[:openspec_cli_path] if yaml_config[:openspec_cli_path]
+        c.claude_code_max_concurrency = yaml_config[:claude_code_max_concurrency] if yaml_config[:claude_code_max_concurrency]
+        c.post_merge_hooks = yaml_config[:post_merge_hooks]&.map { |h| h.transform_keys(&:to_s) } || [] if yaml_config.key?(:post_merge_hooks)
+        c.verification_checks = yaml_config[:verification_checks]&.map { |h| h.transform_keys(&:to_s) } || [] if yaml_config.key?(:verification_checks)
+        c.spec_test_generation_enabled = yaml_config[:spec_test_generation_enabled] unless yaml_config[:spec_test_generation_enabled].nil?
+        c.spec_test_directory = yaml_config[:spec_test_directory] if yaml_config[:spec_test_directory]
+        c.spec_test_persona = yaml_config[:spec_test_persona] if yaml_config[:spec_test_persona]
         c.event_logging_enabled = yaml_config[:event_logging_enabled] unless yaml_config[:event_logging_enabled].nil?
         c.verbose_event_logging = yaml_config[:verbose_event_logging] unless yaml_config[:verbose_event_logging].nil?
         if yaml_config[:workflow_branch_pattern]

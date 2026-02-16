@@ -111,7 +111,8 @@ module ArnoldPipeline
 
           if gate_result
             if ArnoldPipeline.configuration.tier_gate_enabled && !gate_result["pass"]
-              handle_tier_gate_failure!(pipeline_run, tier_num, tier_tasks, gate_result, accumulated_context)
+              handle_tier_gate_failure!(pipeline_run, tier_num, tier_tasks, gate_result, accumulated_context,
+                                        acceptance_criteria_summary:)
             end
 
             if ArnoldPipeline.configuration.context_propagation_enabled
@@ -226,7 +227,8 @@ module ArnoldPipeline
       nil
     end
 
-    def handle_tier_gate_failure!(pipeline_run, tier_num, tier_tasks, gate_result, accumulated_context)
+    def handle_tier_gate_failure!(pipeline_run, tier_num, tier_tasks, gate_result, accumulated_context,
+                                   acceptance_criteria_summary: nil)
       max_retries = ArnoldPipeline.configuration.max_tier_retries
       metadata = pipeline_run.metadata || {}
       tier_retries = metadata["tier_retries"] || {}
@@ -251,9 +253,16 @@ module ArnoldPipeline
         max_position = pipeline_run.tasks.maximum(:position) || 0
 
         created_tasks = corrective_tasks.each_with_index.map do |td, i|
+          enriched_desc = build_corrective_description(
+            base_description: td["description"],
+            gate_issues: gate_issues,
+            original_tier_tasks: tier_tasks,
+            acceptance_criteria_summary: acceptance_criteria_summary
+          )
+
           pipeline_run.tasks.create!(
             title: td["title"],
-            description: td["description"],
+            description: enriched_desc,
             labels: td["labels"] || [],
             position: max_position + i + 1,
             tier: tier_num,
@@ -273,8 +282,16 @@ module ArnoldPipeline
 
         return if created_tasks.empty?
 
+        # Include the current tier's context_summary so corrective tasks know what was already built
+        current_tier_summary = gate_result["context_summary"]
+        corrective_context = if current_tier_summary.present?
+          accumulated_context + [{ "tier" => tier_num, "summary" => current_tier_summary }]
+        else
+          accumulated_context
+        end
+
         # Execute corrective tasks sequentially — each branches from updated master
-        prior_context = build_prior_context(accumulated_context)
+        prior_context = build_prior_context(corrective_context)
         pipeline_run.update!(status: :executing)
 
         created_tasks.each do |task|
@@ -474,9 +491,21 @@ module ArnoldPipeline
       changed_files = collect_changed_files(tier_tasks)
       results = PostMergeHookRunner.call(repo_path:, changed_files:, hooks:, logger:)
 
+      triggered = results.select { |r| r[:triggered] }
       event_recorder&.record(
         event_type: :post_merge_hooks, stage: "execution",
-        summary: { hook_count: results.size, results: results.map { |r| { name: r[:name], success: r[:success] } } }
+        summary: {
+          hook_count: results.size,
+          triggered_count: triggered.size,
+          success_count: triggered.count { |r| r[:success] },
+          results: results.map { |r|
+            entry = { name: r[:name], triggered: r[:triggered], success: r[:success] }
+            entry[:exit_code] = r[:exit_code] if r[:triggered]
+            entry[:error] = r[:error] if r[:error]
+            entry
+          }
+        },
+        payload: { changed_files: changed_files, results: results }
       )
 
       results
@@ -506,7 +535,16 @@ module ArnoldPipeline
     end
 
     def collect_changed_files(tier_tasks)
-      tier_tasks.flat_map { |t| t.result_diff.to_s.scan(%r{^[+-]{3} [ab]/(.+)$}).flatten }.uniq
+      tier_tasks.flat_map do |t|
+        diff_data = t.result_diff.to_s
+        next [] if diff_data.blank? || diff_data == "[]"
+
+        parsed = JSON.parse(diff_data)
+        parsed.filter_map { |f| f["filename"] }
+      rescue JSON::ParserError
+        # Fallback: try parsing as raw unified diff text
+        diff_data.scan(%r{^[+-]{3} [ab]/(.+)$}).flatten
+      end.uniq
     rescue => e
       logger.warn { "[Arnold] Failed to collect changed files: #{e.message}" }
       []
@@ -650,6 +688,32 @@ module ArnoldPipeline
       end
 
       "## Prior Implementation Context\n\n#{lines.join("\n\n")}"
+    end
+
+    def build_corrective_description(base_description:, gate_issues: [], original_tier_tasks: [], acceptance_criteria_summary: nil)
+      sections = [base_description]
+
+      if gate_issues.present?
+        issue_lines = gate_issues.each_with_index.map { |issue, i| "#{i + 1}. #{issue}" }
+        sections << "## Gate Issues\n#{issue_lines.join("\n")}"
+      end
+
+      if original_tier_tasks.present?
+        task_lines = original_tier_tasks.map do |t|
+          has_diffs = t.result_diff.present? && t.result_diff != "[]"
+          status = has_diffs ? "[produced diffs]" : "[NO DIFFS]"
+          "- #{t.title}: #{t.description} #{status}"
+        end
+        sections << "## Original Tier Tasks\n#{task_lines.join("\n")}"
+      end
+
+      if acceptance_criteria_summary.present?
+        sections << "## Acceptance Criteria Status\n#{acceptance_criteria_summary}"
+      end
+
+      return base_description if sections.size == 1
+
+      sections.join("\n\n")
     end
   end
 end
