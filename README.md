@@ -1,6 +1,44 @@
 # Arnold Pipeline
 
-Agentic workflow system that transforms natural language descriptions into executable code. Describe an app, get working code — Arnold orchestrates AI agents through spec generation, task breakdown, execution via [GitHub](#execution-via-github) or [Claude Code](#execution-via-claude-code), and iterative analysis.
+Arnold Pipeline is a Ruby gem that orchestrates AI coding agents through a structured, multi-stage workflow. Give it a natural language description of an application; it generates a specification, breaks it into dependency-ordered tasks, dispatches those tasks to a pluggable execution backend (GitHub Issues + Copilot/Actions, Claude Code CLI, or your own), validates results through tier gate checks, and iterates via an analysis feedback loop until the implementation aligns with the spec — or flags low-confidence decisions for human review.
+
+Arnold is not another AI code editor. It doesn't write code itself. It automates the methodology that separates good AI-assisted development from chaotic AI-assisted development: structured specs, dependency-ordered execution, quality gates between tiers, and iterative refinement. The actual code generation happens through whatever coding agent you plug in.
+
+## How the Pipeline Works
+
+```
+NL Input
+  |
+  v
+Library Manager ── find persona + recipe
+  |
+  v
+Spec Generator ── NL + persona + recipe --> OpenSpec-format Markdown (### Requirement: headers, GIVEN/WHEN/THEN scenarios, [REQ-*] IDs)
+  |
+  v
+Task Breaker ── spec --> 5-20 ordered tasks (JSON)
+  |
+  v
+Executor ── tasks --> execution provider
+  |            GitHub: create Issues, poll for PR diffs (exponential backoff)
+  |            Claude Code: run CLI in worktrees, capture diffs immediately
+  |            (receives prior tier context when context_propagation_enabled)
+  v
+Tier Gate Check ── diffs --> pass/fail + context summary (per tier)
+  |                          fail --> corrective tasks + retry (up to max_tier_retries)
+  |                          still failing --> pause for human review
+  v
+Analyzer ── diffs + spec --> decision + confidence
+  |
+  |-- "done" (>=70% confidence) --> merge results, complete
+  |-- "iterate_tasks" --> replace tasks, re-execute
+  |-- "iterate_spec" --> structured deltas (add/modify/remove requirements), re-break, re-execute
+  |
+  v
+Max 3 iterations, then stop. <70% confidence flags for human review.
+```
+
+**Agents** are stateless service objects — input in, output out. The **Orchestrator** owns state, persistence, and the feedback loop.
 
 ## Quick Start (Standalone CLI)
 
@@ -47,18 +85,7 @@ arnold resume 1 --stop-after executed  # Resume and pause again at a later stage
 npm install -g @fission-ai/openspec   # Requires Node.js
 ```
 
-When installed, Arnold uses OpenSpec's merge engine during `iterate_spec` decisions for surgical spec updates (adding, modifying, or removing individual requirements). Without it, Arnold falls back to appending structured sections — functional but less precise. Disable explicitly with `openspec_enabled: false` in config.
-
-That's it. Arnold will:
-1. Match your description to the best persona and recipe from its library
-2. Generate a structured specification using `### Requirement:` blocks with GIVEN/WHEN/THEN scenarios and `[REQ-*]` IDs for traceability
-3. Break it into 5-20 dependency-ordered tasks
-4. Dispatch tasks to the execution provider (GitHub Issues or Claude Code CLI)
-5. Collect results (poll for PRs on GitHub, or capture diffs immediately with Claude Code)
-6. Analyze results against the spec
-7. Iterate up to 3 times until aligned — spec changes are structured deltas (added/modified/removed requirements), not free-text appends, so specs stay clean across iterations. <70% confidence flags for human review.
-
-You can stop the pipeline at any stage and resume later — see [Partial Execution & Resume](#partial-execution--resume).
+When installed, Arnold uses OpenSpec's merge engine during `iterate_spec` decisions for surgical spec updates (adding, modifying, or removing individual requirements). Without it, Arnold falls back to appending structured sections — functional but less precise. See [OpenSpec Integration](#openspec-integration) for details.
 
 The CLI stores pipeline runs in a standalone SQLite database at `~/.arnold_pipeline/pipeline.sqlite3`. This is created automatically on first use and migrations are applied each time the CLI starts.
 
@@ -95,6 +122,230 @@ Arnold dispatches tasks directly to the Claude Code CLI on your local machine. E
 - A local git repository to operate on
 
 **Note:** The `llm_provider` / `llm_api_key` configuration is still required regardless of execution provider — it's used for spec generation, task breakdown, analysis, and tier gate checks. The execution provider only controls how tasks are dispatched and results collected.
+
+## CLI Commands
+
+```bash
+arnold run "description" [options]   # Run the full pipeline
+arnold resume ID [options]           # Resume a paused or failed run
+arnold status ID [options]           # Check a pipeline run
+arnold list [options]                # List all runs
+arnold spec ID [options]             # Export a run's specification
+arnold tasks ID [options]            # Export a run's tasks
+arnold log ID [options]              # Show event audit trail
+arnold version                       # Show version
+arnold tree                          # Print command tree
+
+# Options for `run`:
+#   --config FILE              YAML config file
+#   --provider NAME            LLM provider (anthropic/openai)
+#   --model NAME               Model name
+#   --repo OWNER/REPO          GitHub repository
+#   --issue-mention MENTION    Include in issue body (e.g. @claude)
+#   --execution-provider NAME  Execution provider (github/claude_code/null)
+#   --claude-code-repo-path PATH   Local repo path for Claude Code provider
+#   --claude-code-model NAME       Claude Code model (default: sonnet)
+#   --claude-code-max-turns N      Max turns for Claude Code execution
+#   --claude-code-permission-mode MODE  Permission mode (default: bypassPermissions)
+#   --stop-after STAGE         Pause after stage: spec, tasks, executed
+#   --preview, --dry-run       Generate spec and tasks without publishing to execution provider (still makes LLM API calls)
+#   --polling-interval SECS    Polling interval (default: 30)
+#   --polling-timeout SECS     Max polling wait (default: 1800)
+#   --verbose                  Enable verbose event logging
+
+# Options for `resume` (accepts all `run` config flags):
+#   --stop-after STAGE         Pause again at a later stage
+
+# Options for `status`:
+#   --json             Output as JSON
+
+# Options for `list`:
+#   --limit N          Number of runs to show (default: 20)
+#   --json             Output as JSON
+
+# Options for `spec`:
+#   -o, --output FILE  Write to file instead of stdout
+#   --json             Output structured JSON data instead of markdown
+#   --history          Show revision history (version, change source, delta summary)
+#   --version N        Show spec content at a specific version
+
+# Options for `tasks`:
+#   -o, --output FILE  Write to file instead of stdout
+#   --json             Output as JSON
+
+# Options for `log`:
+#   --json             Output as JSON
+#   --stage STAGE      Filter events by pipeline stage
+#   --verbose          Include full event payloads
+```
+
+### Exporting Specifications
+
+After a pipeline run, export the generated spec:
+
+```bash
+arnold spec 1                    # Print spec markdown to stdout
+arnold spec 1 --json             # Print structured JSON instead
+arnold spec 1 -o spec.md         # Write markdown to file
+arnold spec 1 --json -o spec.json  # Write JSON to file
+```
+
+### Spec Revision History
+
+Every spec change is snapshotted as a revision — both the initial generation and each `iterate_spec` refinement. Use `--history` to see the timeline and `--version` to retrieve a specific snapshot:
+
+```bash
+arnold spec 1 --history               # Show revision timeline with delta summaries
+arnold spec 1 --version 2             # Show spec content at version 2
+arnold spec 1 --version 2 -o v2.md    # Write version 2 to file
+```
+
+Each revision records its `change_source` (`spec_generation` or `iterate_spec`) and a summary of what changed. When the analysis agent refines the spec, individual changes are tracked as deltas (added/modified/removed requirements with rationale), so you can see exactly what shifted between iterations.
+
+### Exporting Tasks
+
+After a pipeline run, export the generated tasks:
+
+```bash
+arnold tasks 1                      # Print tasks as markdown to stdout
+arnold tasks 1 --json               # Print as JSON array instead
+arnold tasks 1 -o tasks.md          # Write markdown to file
+arnold tasks 1 --json -o tasks.json # Write JSON to file
+```
+
+Each task includes position, title, tier, priority, status, labels, dependencies, and description. JSON output additionally includes `id`, `external_id`, and `external_url`.
+
+## Configuration Reference
+
+### LLM Provider
+
+| Option | Default | Env Var | Description |
+|--------|---------|---------|-------------|
+| `llm_provider` | `:anthropic` | — | `:anthropic` or `:openai` |
+| `llm_api_key` | — | `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` | Auto-detected from provider |
+| `llm_model` | per-provider | — | `claude-sonnet-4-20250514` (anthropic) / `gpt-4o` (openai) |
+| `llm_request_timeout` | `600` | — | LLM API request timeout in seconds |
+
+### Execution Provider (common)
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `execution_provider` | `:github` | `:github`, `:claude_code`, or `:null` |
+
+### GitHub Provider
+
+| Option | Default | Env Var | Description |
+|--------|---------|---------|-------------|
+| `github_token` | — | `GITHUB_TOKEN` | GitHub personal access token |
+| `github_repo` | — | — | Target repo (`owner/repo`) |
+| `github_issue_mention` | `nil` | — | Mention added to issue body (e.g. `@claude`) |
+| `workflow_status_enabled` | `true` | — | Check GitHub Actions workflow status before resolving tasks |
+| `workflow_branch_pattern` | `/issue[-_]?\d+/i` | — | Regex to match branch names when checking workflow runs |
+
+### Claude Code Provider
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `claude_code_repo_path` | `nil` | Local repo path for Claude Code provider |
+| `claude_code_model` | `"sonnet"` | Model for Claude Code CLI |
+| `claude_code_max_turns` | `nil` | Max turns per task (nil = Claude Code default) |
+| `claude_code_permission_mode` | `"bypassPermissions"` | Permission mode for Claude Code CLI |
+| `claude_code_max_concurrency` | `4` | Parallel task execution slots (1-16) |
+| `merge_conflict_resolution_enabled` | `true` | Auto-resolve merge conflicts via LLM |
+| `merge_conflict_max_files` | `10` | Max conflicted files to attempt resolution on |
+
+### Pipeline Control
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `max_iterations` | `3` | Feedback loop cap (1-10) |
+| `library_path` | built-in | Custom personas/recipes directory |
+
+### Polling (GitHub)
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `polling_interval` | `30` | Seconds between polling checks |
+| `polling_timeout` | `1800` | Max seconds to wait for results (30 min) |
+| `polling_max_interval` | `300` | Backoff cap in seconds (5 min) |
+
+### Tier Execution
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `tier_gate_enabled` | `true` | LLM validates each tier's output before next tier |
+| `context_propagation_enabled` | `true` | Prepend tier summaries to next tier's task bodies |
+| `max_tier_retries` | `2` | Corrective retries per tier before pausing (0-5) |
+
+### Diff Management
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `max_diff_chars` | `100000` | Max total diff characters sent to LLM |
+| `max_diff_per_file_chars` | `10000` | Max diff characters per file |
+
+### OpenSpec
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `openspec_enabled` | `true` | Use OpenSpec CLI for spec merging when available. Set `false` for append fallback |
+| `openspec_cli_path` | `"openspec"` | Path to OpenSpec CLI binary |
+
+### Event Logging
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `event_logging_enabled` | `true` | Record pipeline events for audit trail |
+| `verbose_event_logging` | `false` | Include full payloads in events (set via `--verbose` CLI flag) |
+
+### Repo Context
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `repo_context_scan_patterns` | `nil` | Glob patterns for repo context scanning (nil = Rails defaults) |
+| `repo_context_scan_files` | `nil` | Specific files to include in repo context scan |
+
+## Key Concepts
+
+**Tiers** — Tasks are grouped into execution tiers computed from the `depends_on` DAG. Tier 0 tasks have no dependencies, tier 1 tasks depend only on tier 0 tasks, and so on. Each tier is published, executed, and merged before the next tier starts.
+
+**Tier Gate Checks** — After each tier's results are merged, an LLM reviews the combined diffs and decides pass or fail. Failures generate corrective tasks that are executed and re-checked, up to `max_tier_retries` times. If retries are exhausted, the pipeline pauses for human review. Gate checks are lenient by default — only critical, build-breaking issues cause a failure.
+
+**Context Propagation** — Each tier gate check produces a 2-3 sentence summary of what was built. These summaries are accumulated across tiers and prepended to the next tier's task bodies, giving coding agents explicit context about what already exists in the repo.
+
+**Spec Deltas** — When the analysis agent decides `iterate_spec`, it produces structured requirement-level changes (add, modify, or remove) rather than free-text appends. Each delta includes an operation, section, requirement content, and rationale. This keeps specs clean across iterations.
+
+**Personas, Recipes, and Domain Types** — Arnold's library system, loaded from YAML files. Personas define agent behavior (Software Architect, Domain Expert, QA Analyst). Recipes define application structure templates (Web App, API Service). Domain types provide a domain-specific prompting lens (FINTECH, GAME, HEALTH, etc. — 13 built-in types). The Library Manager matches your input description to the best combination via keyword matching, with generic fallbacks.
+
+**Pipeline Events** — An audit trail of every stage transition and decision point: library selection, spec generation, task breakdown, tier execution, gate checks, analysis decisions, iteration outcomes, and pipeline lifecycle (pause/fail/complete). Viewable via `arnold log ID`.
+
+## OpenSpec Integration
+
+[OpenSpec](https://github.com/fission-ai/openspec) is an optional Node.js CLI that enables surgical spec merging during `iterate_spec` decisions. Instead of appending new requirements to the end of the spec, OpenSpec can add, modify, or remove individual requirements in-place.
+
+**Installation:**
+
+```bash
+npm install -g @fission-ai/openspec
+```
+
+**How it works:** When the analysis agent decides to refine the spec, Arnold:
+
+1. Writes the current spec and the structured deltas to a temporary workspace
+2. Calls the OpenSpec CLI to merge the deltas into the base spec
+3. Replaces the spec content with the merged result and creates a new `SpecRevision`
+
+The base spec must follow OpenSpec format (`## Purpose`, `## Requirements` sections with `### Requirement:` headers).
+
+**Fallback chain:** If OpenSpec is installed but the merge fails, Arnold falls back to structured appending (adding `## ADDED Requirements` / `## MODIFIED Requirements` / `## REMOVED Requirements` sections). If OpenSpec is not installed or is disabled, Arnold uses this append strategy directly.
+
+**Configuration:**
+
+```ruby
+config.openspec_enabled = true       # default — use OpenSpec when available
+config.openspec_enabled = false      # always use append fallback (no Node.js needed)
+config.openspec_cli_path = "openspec" # default — or provide an absolute path
+```
 
 ## Rails Integration
 
@@ -202,81 +453,53 @@ run = ArnoldPipeline::PipelineRun.create!(nl_input: "Build a dashboard app")
 ArnoldPipeline::PipelineJob.perform_later(run.id)
 ```
 
-## CLI Commands
+## Partial Execution & Resume
 
-```bash
-arnold run "description" [options]   # Run the full pipeline
-arnold resume ID [options]           # Resume a paused or failed run
-arnold spec ID [options]             # Export a run's specification
-arnold tasks ID [options]            # Export a run's tasks
-arnold status ID                     # Check a pipeline run
-arnold list                          # List all runs
-arnold version                       # Show version
-arnold tree                          # Print command tree
+The pipeline can be paused at any stage and resumed later. This is useful for reviewing intermediate results before committing to the next step, or for recovering from failures.
 
-# Options for `run`:
-#   --config FILE              YAML config file
-#   --provider NAME            LLM provider (anthropic/openai)
-#   --model NAME               Model name
-#   --repo OWNER/REPO          GitHub repository
-#   --issue-mention MENTION    Include in issue body (e.g. @claude)
-#   --execution-provider NAME  Execution provider (github/claude_code/null)
-#   --claude-code-repo-path PATH   Local repo path for Claude Code provider
-#   --claude-code-model NAME       Claude Code model (default: sonnet)
-#   --claude-code-max-turns N      Max turns for Claude Code execution
-#   --claude-code-permission-mode MODE  Permission mode (default: auto)
-#   --stop-after STAGE         Pause after stage: spec, tasks, executed
-#   --preview, --dry-run       Generate spec and tasks without publishing to execution provider (still makes LLM API calls)
-#   --polling-interval SECS    Polling interval (default: 30)
-#   --polling-timeout SECS     Max polling wait (default: 1800)
-#   --verbose                  Debug logging
+### Stages
 
-# Options for `resume` (accepts all `run` config flags):
-#   --stop-after STAGE         Pause again at a later stage
+| `stop_after` | Stops after | What exists when paused |
+|--------------|------------|------------------------|
+| `:spec` | Spec generation | Specification (markdown + structured data) |
+| `:tasks` | Task breakdown | Specification + 5-20 ordered tasks |
+| `:executed` | Task dispatch + result collection | Tasks with external IDs, diffs, and comments |
+| `nil` | Full pipeline | Everything including analysis iterations |
 
-# Options for `spec`:
-#   -o, --output FILE  Write to file instead of stdout
-#   --json             Output structured JSON data instead of markdown
-#   --history          Show revision history (version, change source, delta summary)
-#   --version N        Show spec content at a specific version
+### Partial Execution
 
-# Options for `tasks`:
-#   -o, --output FILE  Write to file instead of stdout
-#   --json             Output as JSON
+Stop the pipeline at any stage to review before continuing:
+
+```ruby
+orchestrator = ArnoldPipeline::Orchestrator.new
+
+# Generate spec only
+run = orchestrator.call(nl_input: "Build a todo app", stop_after: :spec)
+run.status                    # => "paused"
+run.metadata["paused_at"]     # => "spec"
+puts run.specification.content  # Review the generated spec
+
+# Generate spec + tasks
+run = orchestrator.call(nl_input: "Build a todo app", stop_after: :tasks)
+run.tasks.each { |t| puts "#{t.position}: #{t.title}" }
+
+# Execute (dispatch tasks and collect results) but don't run analysis
+run = orchestrator.call(nl_input: "Build a todo app", stop_after: :executed)
+run.tasks.each { |t| puts "#{t.title} -> #{t.external_url}" }
 ```
 
-### Exporting Specifications
+### Resume
 
-After a pipeline run, export the generated spec:
+Resume a paused (or failed) pipeline run. The orchestrator infers where to pick up based on existing state:
 
-```bash
-arnold spec 1                    # Print spec markdown to stdout
-arnold spec 1 --json             # Print structured JSON instead
-arnold spec 1 -o spec.md         # Write markdown to file
-arnold spec 1 --json -o spec.json  # Write JSON to file
-```
+```ruby
+# Resume to completion
+result = orchestrator.resume(pipeline_run: run)
+result.status  # => "completed"
 
-### Spec Revision History
-
-Every spec change is snapshotted as a revision — both the initial generation and each `iterate_spec` refinement. Use `--history` to see the timeline and `--version` to retrieve a specific snapshot:
-
-```bash
-arnold spec 1 --history               # Show revision timeline with delta summaries
-arnold spec 1 --version 2             # Show spec content at version 2
-arnold spec 1 --version 2 -o v2.md    # Write version 2 to file
-```
-
-Each revision records its `change_source` (`spec_generation` or `iterate_spec`) and a summary of what changed. When the analysis agent refines the spec, individual changes are tracked as deltas (added/modified/removed requirements with rationale), so you can see exactly what shifted between iterations.
-
-### Exporting Tasks
-
-After a pipeline run, export the generated tasks:
-
-```bash
-arnold tasks 1                      # Print tasks as markdown to stdout
-arnold tasks 1 --json               # Print as JSON array instead
-arnold tasks 1 -o tasks.md          # Write markdown to file
-arnold tasks 1 --json -o tasks.json # Write JSON to file
+# Resume but pause again at a later stage
+result = orchestrator.resume(pipeline_run: run, stop_after: :executed)
+result.status  # => "paused"
 ```
 
 Each task includes position, title, tier, priority, status, labels, dependencies, and description. JSON output additionally includes `id`, `external_id`, and `external_url`.
@@ -311,8 +534,14 @@ Each task includes position, title, tier, priority, status, labels, dependencies
 | `verification_checks` | `[]` | — | Array of check definitions (see [Verification Checks](#post-merge-hooks--verification-checks)) |
 | `library_path` | built-in | — | Custom personas/recipes dir |
 
-## Architecture
+```ruby
+# A run that failed during spec generation
+run = orchestrator.call(nl_input: "Build an app")  # raises if LLM is down
+run = ArnoldPipeline::PipelineRun.last
+run.status  # => "failed"
 
+# Later, when the LLM is back:
+result = orchestrator.resume(pipeline_run: run)
 ```
 NL Input
   |
@@ -358,17 +587,21 @@ Max 3 iterations, then stop. <70% confidence flags for human review.
 
 How results are collected depends on the execution provider:
 
-**GitHub (async):** After creating Issues, the Executor waits for external agents (GitHub Actions, Copilot, etc.) to produce PRs. It uses exponential backoff polling:
+### How Resume Infers the Stage
 
-1. Check for PR diffs every `polling_interval` seconds (default: 30s)
-2. Double the interval each cycle, capped at `polling_max_interval` (default: 5 min)
-3. Stop when all tasks have results, or `polling_timeout` is reached (default: 30 min)
+The orchestrator inspects the pipeline run's existing data to determine where to continue:
 
-The pipeline transitions through `executing` -> `awaiting_results` -> `analyzing` as it waits. Tasks without an `external_id` (e.g. not submitted to GitHub) are skipped and don't block polling.
+| State | Resumes from |
+|-------|-------------|
+| No specification | Spec generation |
+| Specification exists, no tasks | Task breakdown |
+| Tasks exist, no external IDs | Task dispatch |
+| Tasks have external IDs, incomplete results | Result collection |
+| All tasks have results | Analysis |
 
-**Claude Code (sync):** Each task is dispatched to the Claude Code CLI in its own git worktree. Diffs are captured immediately after execution — no polling, no `awaiting_results` state. The pipeline transitions directly from `executing` to `analyzing`.
+If some tasks were published before a pause/failure and others weren't, resume will only publish the remaining tasks — already-published tasks are not duplicated.
 
-### Tier Gating & Context Propagation
+## Tier Gating & Context Propagation
 
 Tasks are executed tier-by-tier (tier 0 first, then tier 1, etc.). After each tier's results are merged, two optional features kick in:
 
@@ -690,80 +923,82 @@ No workflow file, no API keys beyond your existing Copilot subscription.
 - **Use the pipeline run footer as a filter** — The `if: contains(github.event.issue.body, 'Pipeline Run')` check prevents your workflow from triggering on non-Arnold issues. You can also filter by labels if your tasks include them.
 - **Context propagation helps your agent** — When enabled, each issue body includes a summary of what prior tiers built, so the coding agent doesn't have to guess what already exists.
 
-## Partial Execution & Resume
+## Architecture for Contributors
 
-The pipeline can be paused at any stage and resumed later. This is useful for reviewing intermediate results before committing to the next step, or for recovering from failures.
+### Directory Structure
 
-### Stages
+```
+lib/arnold_pipeline/
+  agents/
+    base_agent.rb          # Shared agent interface (call method, LLM client setup)
+    analyzer.rb            # Post-execution analysis: diffs vs spec, confidence scoring
+    executor.rb            # Dispatches tasks to execution provider, collects results
+    spec_generator.rb      # NL input → structured specification
+    task_breaker.rb        # Specification → ordered task list (JSON)
+    tier_gate_check.rb     # Per-tier diff validation, corrective task generation
+  library/
+    domain_type.rb         # Data.define value object for domain types
+    manager.rb             # Keyword-based retrieval of personas, recipes, domain types
+    persona.rb             # Data.define value object for personas
+    recipe.rb              # Data.define value object for recipes
+  prompts/                 # ERB prompt templates for each agent
+  providers/
+    execution/
+      base.rb              # Execution provider interface and registry
+      claude_code.rb       # Claude Code CLI provider (worktrees, parallel execution)
+      github.rb            # GitHub Issues/PRs provider (polling, merge)
+      null.rb              # No-op provider for testing and dry runs
+    llm/
+      anthropic.rb         # Anthropic API adapter (ruby-anthropic gem)
+      base.rb              # LLM provider interface
+      open_ai.rb           # OpenAI API adapter
+  analysis_loop.rb         # Iteration logic: analyze → decide → iterate or done
+  cli.rb                   # Thor-based CLI (arnold command)
+  configuration.rb         # Config object with defaults and validation
+  diff_summarizer.rb       # Truncates large diffs to fit LLM context
+  engine.rb                # Rails engine mount point
+  openspec_bridge.rb       # OpenSpec CLI workspace lifecycle and merge
+  orchestrator.rb          # Main pipeline driver: state machine, stage sequencing
+  pipeline_event_recorder.rb # Event audit trail recording (non-fatal)
+  repo_context_scanner.rb  # Git ls-tree scanning for baseline-aware gate checks
+  resume_inferrer.rb       # Determines resume stage from pipeline run state
+  tier_calculator.rb       # Computes execution tiers from depends_on DAG
+  tier_execution_engine.rb # Tier-by-tier publish → await → merge loop
+  version.rb               # Gem version constant
 
-| `stop_after` | Stops after | What exists when paused |
-|--------------|------------|------------------------|
-| `:spec` | Spec generation | Specification (markdown + structured data) |
-| `:tasks` | Task breakdown | Specification + 5-20 ordered tasks |
-| `:executed` | Task dispatch + result collection | Tasks with external IDs, diffs, and comments |
-| `nil` | Full pipeline | Everything including analysis iterations |
-
-### Partial Execution
-
-Stop the pipeline at any stage to review before continuing:
-
-```ruby
-orchestrator = ArnoldPipeline::Orchestrator.new
-
-# Generate spec only
-run = orchestrator.call(nl_input: "Build a todo app", stop_after: :spec)
-run.status                    # => "paused"
-run.metadata["paused_at"]     # => "spec"
-puts run.specification.content  # Review the generated spec
-
-# Generate spec + tasks
-run = orchestrator.call(nl_input: "Build a todo app", stop_after: :tasks)
-run.tasks.each { |t| puts "#{t.position}: #{t.title}" }
-
-# Execute (dispatch tasks and collect results) but don't run analysis
-run = orchestrator.call(nl_input: "Build a todo app", stop_after: :executed)
-run.tasks.each { |t| puts "#{t.title} -> #{t.external_url}" }
+app/models/arnold_pipeline/
+  application_record.rb    # Engine base model
+  iteration.rb             # Feedback loop iteration (decision, confidence, review flag)
+  pipeline_event.rb        # Audit trail event (stage, type, summary, payload, timing)
+  pipeline_run.rb          # Top-level run record (status, metadata, associations)
+  spec_delta.rb            # Individual requirement change (operation, section, content)
+  spec_revision.rb         # Spec version snapshot (content, change_source, delta_summary)
+  specification.rb         # Generated spec (content, structured_data, version)
+  task.rb                  # Pipeline task (title, tier, deps, external_id, diff, status)
 ```
 
-### Resume
+### Key Classes
 
-Resume a paused (or failed) pipeline run. The orchestrator infers where to pick up based on existing state:
+- **Orchestrator** — The pipeline driver. `call(nl_input:, stop_after:)` for new runs, `resume(pipeline_run:, stop_after:)` for continuation. Owns the state machine and delegates to agents.
+- **AnalysisLoop** — Extracted iteration logic. Runs the analyzer, interprets the decision (`done`, `iterate_tasks`, `iterate_spec`), and drives the next cycle.
+- **TierExecutionEngine** — Manages tier-by-tier execution: publish tasks for a tier, await results, run gate check, merge, advance to next tier.
+- **Agents** — Stateless service objects with a `call(**kwargs)` interface. Each agent builds an LLM prompt, makes an API call, and parses the response.
+- **Providers** — Pluggable backends. LLM providers (Anthropic, OpenAI) handle API calls. Execution providers (GitHub, Claude Code, Null) handle task dispatch and result collection. Both use a `build` factory pattern.
+- **Library::Manager** — Loads personas, recipes, and domain types from YAML files. Matches input descriptions via keyword overlap with generic fallbacks.
 
-```ruby
-# Resume to completion
-result = orchestrator.resume(pipeline_run: run)
-result.status  # => "completed"
+### Testing
 
-# Resume but pause again at a later stage
-result = orchestrator.resume(pipeline_run: run, stop_after: :executed)
-result.status  # => "paused"
+```bash
+bundle exec rails test              # Full suite (700+ tests)
+bundle exec rails test test/agents/ # Specific directory
+bundle exec rails test test/agents/analyzer_test.rb:42  # Specific line
 ```
 
-Resume also works after failures — fix the underlying issue and retry:
-
-```ruby
-# A run that failed during spec generation
-run = orchestrator.call(nl_input: "Build an app")  # raises if LLM is down
-run = ArnoldPipeline::PipelineRun.last
-run.status  # => "failed"
-
-# Later, when the LLM is back:
-result = orchestrator.resume(pipeline_run: run)
-```
-
-### How Resume Infers the Stage
-
-The orchestrator inspects the pipeline run's existing data to determine where to continue:
-
-| State | Resumes from |
-|-------|-------------|
-| No specification | Spec generation |
-| Specification exists, no tasks | Task breakdown |
-| Tasks exist, no external IDs | Task dispatch |
-| Tasks have external IDs, incomplete results | Result collection |
-| All tasks have results | Analysis |
-
-If some tasks were published before a pause/failure and others weren't, resume will only publish the remaining tasks — already-published tasks are not duplicated.
+- **Mocha** (`mocha/minitest`) for stubs and mocks — `stubs` for default behavior, `expects` for assertions
+- **WebMock** for HTTP stubs (Anthropic API, GitHub API, OpenAI API)
+- `ArnoldPipeline.reset_configuration!` in test teardown to avoid config leaking between tests
+- Integration tests use dynamic WebMock responses based on request body content
+- Dummy Rails app at `test/dummy/` provides the engine test harness
 
 ## Extending
 
