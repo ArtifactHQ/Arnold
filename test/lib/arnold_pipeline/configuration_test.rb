@@ -245,6 +245,78 @@ module ArnoldPipeline
       assert_match(/workflow_branch_pattern must be a Regexp/, error.message)
     end
 
+    # --- analysis_done_threshold tests ---
+
+    test "analysis_done_threshold defaults to nil" do
+      assert_nil @config.analysis_done_threshold
+    end
+
+    test "validate! accepts analysis_done_threshold of nil" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.analysis_done_threshold = nil
+
+      assert @config.validate!
+    end
+
+    test "validate! accepts analysis_done_threshold of 50" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.analysis_done_threshold = 50
+
+      assert @config.validate!
+    end
+
+    test "validate! accepts analysis_done_threshold of 80" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.analysis_done_threshold = 80
+
+      assert @config.validate!
+    end
+
+    test "validate! accepts analysis_done_threshold of 100" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.analysis_done_threshold = 100
+
+      assert @config.validate!
+    end
+
+    test "validate! raises on analysis_done_threshold below 50" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.analysis_done_threshold = 49
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/analysis_done_threshold must be nil or an integer between 50 and 100/, error.message)
+    end
+
+    test "validate! raises on analysis_done_threshold above 100" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.analysis_done_threshold = 101
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/analysis_done_threshold must be nil or an integer between 50 and 100/, error.message)
+    end
+
+    test "validate! raises on non-integer analysis_done_threshold" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+      @config.analysis_done_threshold = 75.5
+
+      error = assert_raises(ConfigurationError) { @config.validate! }
+      assert_match(/analysis_done_threshold must be nil or an integer between 50 and 100/, error.message)
+    end
+
     # --- Auto-detection tests ---
 
     test "auto-detects anthropic when ANTHROPIC_API_KEY is set" do

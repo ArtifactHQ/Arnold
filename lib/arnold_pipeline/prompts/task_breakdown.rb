@@ -58,6 +58,34 @@ module ArnoldPipeline
           - All external integrations MUST work without configuration in development
             (use test/mock modes or graceful degradation)
 
+          # Acceptance Criteria
+
+          Each task MUST include an `acceptance_criteria` array — structured, machine-readable
+          assertions derived from the spec's GIVEN/WHEN/THEN scenarios. These are used by
+          automated checkers and tier gate evaluation to verify implementation correctness.
+
+          Acceptance criteria types:
+
+          - `file_exists`: A file or glob pattern must exist.
+            Fields: `pattern` (glob string, e.g. "app/models/user.rb")
+          - `test_exists`: Test files matching a pattern must exist with a minimum assertion count.
+            Fields: `pattern` (glob string, e.g. "test/**/*user*"), `min_assertions` (integer, default 1)
+          - `model_has`: An ActiveRecord model must have specific columns or associations.
+            Fields: `model` (string, e.g. "User"), `columns` (array of strings, optional),
+            `associations` (array of strings like "has_many :posts", optional)
+          - `route_exists`: A route must be defined for a given method + path.
+            Fields: `method` (string, e.g. "POST"), `path` (string, e.g. "/api/sessions")
+          - `http`: An endpoint must respond with expected status/body (verified at runtime).
+            Fields: `method`, `path`, `input` (hash, optional), `expected_status` (integer),
+            `expected_body_contains` (array of strings, optional)
+          - `command_exits`: A CLI command must exit with an expected code (verified at runtime).
+            Fields: `command` (string), `expected_exit_code` (integer, default 0)
+
+          Derive criteria from the spec's GIVEN/WHEN/THEN scenarios. For each scenario, create
+          at least one criterion. Use `file_exists`, `test_exists`, `model_has`, and `route_exists`
+          wherever possible — these are verified programmatically without LLM involvement.
+          Use `http` and `command_exits` for behavioral requirements that need runtime verification.
+
           # Output Format
 
           Your response will be validated against a JSON schema. Return valid JSON matching this structure:
@@ -70,7 +98,24 @@ module ArnoldPipeline
                 "labels": ["backend", "database"],
                 "position": 0,
                 "depends_on": [],
-                "section_ref": "Features > Authentication"
+                "section_ref": "Features > Authentication",
+                "acceptance_criteria": [
+                  {
+                    "type": "file_exists",
+                    "description": "User model exists",
+                    "params": "{\"pattern\": \"app/models/user.rb\"}"
+                  },
+                  {
+                    "type": "route_exists",
+                    "description": "Login endpoint is routed",
+                    "params": "{\"method\": \"POST\", \"path\": \"/api/sessions\"}"
+                  },
+                  {
+                    "type": "test_exists",
+                    "description": "Session tests exist",
+                    "params": "{\"pattern\": \"test/**/*session*\", \"min_assertions\": 2}"
+                  }
+                ]
               }
             ]
           }
@@ -81,6 +126,10 @@ module ArnoldPipeline
           implements (e.g., "Authentication > User Registration"). Use the format
           "[Area Name] > [Requirement Name]" for Features section tasks. This enables
           traceability between tasks and specific requirements.
+          The "acceptance_criteria" array contains structured assertions for automated verification.
+          Every task MUST have at least one acceptance criterion.
+          IMPORTANT: The "params" field must be a JSON-encoded STRING, not a raw object.
+          Example: "params": "{\"pattern\": \"app/models/user.rb\"}" (not "params": {"pattern": "..."})
         PROMPT
       end
 

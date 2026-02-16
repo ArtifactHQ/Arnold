@@ -107,6 +107,107 @@ module ArnoldPipeline
         )
         refute_includes prompt, "## Task Comments / Agent Feedback"
       end
+
+      # --- Iteration context tests ---
+
+      test "user_prompt includes iteration X of Y when max_iterations provided" do
+        prompt = Analysis.user_prompt(
+          spec_content: "# Spec", diffs: "diff", iteration_number: 2,
+          max_iterations: 5
+        )
+        assert_includes prompt, "iteration 2 of 5"
+      end
+
+      test "user_prompt backward compatible without new params" do
+        prompt = Analysis.user_prompt(
+          spec_content: "# Spec", diffs: "diff", iteration_number: 1
+        )
+        refute_includes prompt, "## Iteration Context"
+      end
+
+      test "user_prompt includes FINAL ITERATION language on last iteration" do
+        prompt = Analysis.user_prompt(
+          spec_content: "# Spec", diffs: "diff", iteration_number: 3,
+          max_iterations: 3, previous_decisions: [
+            { iteration: 1, decision: "iterate_tasks", confidence: 75, reasoning_excerpt: "Missing auth" },
+            { iteration: 2, decision: "iterate_tasks", confidence: 80, reasoning_excerpt: "Missing tests" }
+          ]
+        )
+        assert_includes prompt, "FINAL ITERATION"
+        assert_includes prompt, "MUST choose"
+      end
+
+      test "user_prompt includes penultimate iteration language" do
+        prompt = Analysis.user_prompt(
+          spec_content: "# Spec", diffs: "diff", iteration_number: 4,
+          max_iterations: 5, previous_decisions: [
+            { iteration: 1, decision: "iterate_tasks", confidence: 70, reasoning_excerpt: "..." },
+            { iteration: 2, decision: "iterate_tasks", confidence: 75, reasoning_excerpt: "..." },
+            { iteration: 3, decision: "iterate_tasks", confidence: 80, reasoning_excerpt: "..." }
+          ]
+        )
+        assert_includes prompt, "penultimate iteration"
+        assert_includes prompt, "Strongly prefer"
+      end
+
+      test "user_prompt includes half-budget language" do
+        prompt = Analysis.user_prompt(
+          spec_content: "# Spec", diffs: "diff", iteration_number: 3,
+          max_iterations: 5, previous_decisions: [
+            { iteration: 1, decision: "iterate_tasks", confidence: 70, reasoning_excerpt: "..." },
+            { iteration: 2, decision: "done", confidence: 75, reasoning_excerpt: "..." }
+          ]
+        )
+        assert_includes prompt, "half the iteration budget"
+        assert_includes prompt, "Bias toward"
+      end
+
+      test "user_prompt lists previous decisions" do
+        prompt = Analysis.user_prompt(
+          spec_content: "# Spec", diffs: "diff", iteration_number: 2,
+          max_iterations: 5, previous_decisions: [
+            { iteration: 1, decision: "iterate_tasks", confidence: 75, reasoning_excerpt: "Missing auth handler" }
+          ]
+        )
+        assert_includes prompt, "### Previous Decisions"
+        assert_includes prompt, "Iteration 1"
+        assert_includes prompt, "**iterate_tasks**"
+        assert_includes prompt, "75%"
+        assert_includes prompt, "Missing auth handler"
+      end
+
+      test "user_prompt includes stuck detection when all previous iterate_tasks" do
+        prompt = Analysis.user_prompt(
+          spec_content: "# Spec", diffs: "diff", iteration_number: 3,
+          max_iterations: 5, previous_decisions: [
+            { iteration: 1, decision: "iterate_tasks", confidence: 70, reasoning_excerpt: "..." },
+            { iteration: 2, decision: "iterate_tasks", confidence: 75, reasoning_excerpt: "..." }
+          ]
+        )
+        assert_includes prompt, "STUCK DETECTION"
+      end
+
+      test "user_prompt omits stuck detection with mixed decisions" do
+        prompt = Analysis.user_prompt(
+          spec_content: "# Spec", diffs: "diff", iteration_number: 3,
+          max_iterations: 5, previous_decisions: [
+            { iteration: 1, decision: "iterate_spec", confidence: 60, reasoning_excerpt: "..." },
+            { iteration: 2, decision: "iterate_tasks", confidence: 75, reasoning_excerpt: "..." }
+          ]
+        )
+        refute_includes prompt, "STUCK DETECTION"
+      end
+
+      test "user_prompt no convergence pressure early in budget" do
+        prompt = Analysis.user_prompt(
+          spec_content: "# Spec", diffs: "diff", iteration_number: 1,
+          max_iterations: 5
+        )
+        assert_includes prompt, "## Iteration Context"
+        refute_includes prompt, "Bias toward"
+        refute_includes prompt, "Strongly prefer"
+        refute_includes prompt, "MUST choose"
+      end
     end
   end
 end

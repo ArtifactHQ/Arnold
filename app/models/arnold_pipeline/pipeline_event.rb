@@ -19,7 +19,13 @@ module ArnoldPipeline
       pipeline_paused: 11,
       pipeline_failed: 12,
       pipeline_completed: 13,
-      repo_context_scanned: 14
+      repo_context_scanned: 14,
+      criteria_check: 15,
+      verification_execution: 16,
+      test_execution: 17,
+      spec_test_execution: 18,
+      post_merge_hooks: 19,
+      verification_checks: 20
     }
 
     belongs_to :pipeline_run

@@ -19,15 +19,19 @@ module ArnoldPipeline
 
       def chat(messages:, system: nil)
         logger.debug { "#{self.class.name} sending #{messages.size} message(s)" }
+        log_prompt(system:, messages:)
         response = llm.chat(messages:, system:)
         logger.debug { "#{self.class.name} received #{response.size} chars" }
+        logger.debug { "[response:text] #{truncate_for_log(response)}" }
         response
       end
 
       def chat_json(messages:, system: nil, schema:)
         logger.debug { "#{self.class.name} sending #{messages.size} message(s) (structured output: #{schema[:name]})" }
+        log_prompt(system:, messages:)
         result = llm.chat_json(messages:, system:, schema:)
         logger.debug { "#{self.class.name} received structured output (#{result.class})" }
+        logger.debug { "[response:json] #{format_json_for_log(result)}" }
         result
       end
 
@@ -89,6 +93,28 @@ module ArnoldPipeline
         end
 
         nil
+      end
+
+      def log_prompt(system:, messages:)
+        logger.debug { "[prompt:system] #{truncate_for_log(system)}" } if system
+        messages.each_with_index do |msg, i|
+          logger.debug { "[prompt:#{msg[:role]}:#{i}] #{truncate_for_log(msg[:content])}" }
+        end
+      end
+
+      def truncate_for_log(text, max_chars = 2000)
+        return "(nil)" if text.nil?
+
+        str = text.to_s
+        return str if str.length <= max_chars
+
+        "#{str[0, max_chars]}... [truncated, total: #{str.length} chars]"
+      end
+
+      def format_json_for_log(obj)
+        JSON.pretty_generate(obj)
+      rescue
+        obj.inspect
       end
 
       def default_logger

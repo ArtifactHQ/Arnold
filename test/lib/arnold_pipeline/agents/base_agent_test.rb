@@ -136,6 +136,99 @@ module ArnoldPipeline
         end
       end
 
+      # -- prompt/response logging --
+
+      test "chat logs system prompt and user messages at debug level" do
+        log_output = StringIO.new
+        debug_logger = Logger.new(log_output, level: Logger::DEBUG)
+        agent = TestableAgent.new(llm: @llm, logger: debug_logger)
+
+        @llm.stubs(:chat).returns("response text")
+
+        agent.send(:chat, messages: [{ role: :user, content: "Hello world" }], system: "You are helpful")
+
+        log_content = log_output.string
+        assert_match(/\[prompt:system\] You are helpful/, log_content)
+        assert_match(/\[prompt:user:0\] Hello world/, log_content)
+        assert_match(/\[response:text\] response text/, log_content)
+      end
+
+      test "chat_json logs system prompt, messages, and JSON response at debug level" do
+        log_output = StringIO.new
+        debug_logger = Logger.new(log_output, level: Logger::DEBUG)
+        agent = TestableAgent.new(llm: @llm, logger: debug_logger)
+
+        schema = { name: "test", schema: { type: "object" } }
+        @llm.stubs(:chat_json).returns({ "key" => "value" })
+
+        agent.chat_json(messages: [{ role: :user, content: "Analyze this" }], system: "Be precise", schema: schema)
+
+        log_content = log_output.string
+        assert_match(/\[prompt:system\] Be precise/, log_content)
+        assert_match(/\[prompt:user:0\] Analyze this/, log_content)
+        assert_match(/\[response:json\]/, log_content)
+        assert_match(/"key": "value"/, log_content)
+      end
+
+      test "chat does not log system prompt when nil" do
+        log_output = StringIO.new
+        debug_logger = Logger.new(log_output, level: Logger::DEBUG)
+        agent = TestableAgent.new(llm: @llm, logger: debug_logger)
+
+        @llm.stubs(:chat).returns("ok")
+
+        agent.send(:chat, messages: [{ role: :user, content: "Hi" }])
+
+        log_content = log_output.string
+        assert_no_match(/\[prompt:system\]/, log_content)
+        assert_match(/\[prompt:user:0\] Hi/, log_content)
+      end
+
+      test "truncate_for_log truncates long text" do
+        agent = TestableAgent.new(llm: @llm, logger: Logger.new(File::NULL))
+        long_text = "x" * 3000
+
+        result = agent.send(:truncate_for_log, long_text, 2000)
+
+        assert result.length < 3000
+        assert_match(/\[truncated, total: 3000 chars\]/, result)
+      end
+
+      test "truncate_for_log returns short text unchanged" do
+        agent = TestableAgent.new(llm: @llm, logger: Logger.new(File::NULL))
+
+        result = agent.send(:truncate_for_log, "short", 2000)
+
+        assert_equal "short", result
+      end
+
+      test "truncate_for_log handles nil" do
+        agent = TestableAgent.new(llm: @llm, logger: Logger.new(File::NULL))
+
+        result = agent.send(:truncate_for_log, nil)
+
+        assert_equal "(nil)", result
+      end
+
+      test "format_json_for_log pretty prints JSON" do
+        agent = TestableAgent.new(llm: @llm, logger: Logger.new(File::NULL))
+
+        result = agent.send(:format_json_for_log, { "a" => 1 })
+
+        assert_match(/"a": 1/, result)
+      end
+
+      test "format_json_for_log falls back to inspect for non-serializable objects" do
+        agent = TestableAgent.new(llm: @llm, logger: Logger.new(File::NULL))
+
+        # Object that can't be JSON-serialized
+        obj = Object.new
+
+        result = agent.send(:format_json_for_log, obj)
+
+        assert_kind_of String, result
+      end
+
       # -- chat_json delegation --
 
       test "chat_json delegates to llm.chat_json and returns result" do

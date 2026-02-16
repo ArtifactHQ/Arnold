@@ -194,6 +194,93 @@ module ArnoldPipeline
       assert_equal "completed", pipeline_run.reload.status
     end
 
+    # --- Convergence / threshold promotion tests ---
+
+    test "promotes iterate_tasks to done when confidence >= threshold" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      ArnoldPipeline.configuration.analysis_done_threshold = 75
+
+      @analyzer.expects(:call).once.returns(analysis_result("iterate_tasks", 80))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal "completed", pipeline_run.reload.status
+      assert_equal 1, pipeline_run.iterations.count
+      # The DB iteration preserves the original LLM decision
+      assert_equal "iterate_tasks", pipeline_run.iterations.first.decision
+    end
+
+    test "does not promote when confidence < threshold" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      ArnoldPipeline.configuration.analysis_done_threshold = 85
+
+      corrective = {
+        "tasks" => [{ "title" => "Fix", "description" => "Fix it", "position" => 0 }]
+      }
+      @analyzer.stubs(:call).returns(analysis_result("iterate_tasks", 80, corrective))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal "max_iterations_reached", pipeline_run.reload.status
+      assert_equal 3, pipeline_run.iterations.count
+    end
+
+    test "does not promote iterate_spec even at high confidence" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      ArnoldPipeline.configuration.analysis_done_threshold = 70
+
+      @task_breaker.stubs(:call).returns(sample_tasks)
+
+      call_count = sequence("analysis_calls")
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("iterate_spec", 90, { "spec_changes" => "Clarify auth" }))
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("done", 95))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal "completed", pipeline_run.reload.status
+      assert_equal 2, pipeline_run.iterations.count
+    end
+
+    test "threshold disabled when nil — high confidence still iterates" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+
+      ArnoldPipeline.configuration.analysis_done_threshold = nil
+
+      corrective = {
+        "tasks" => [{ "title" => "Fix", "description" => "Fix it", "position" => 0 }]
+      }
+      @analyzer.stubs(:call).returns(analysis_result("iterate_tasks", 99, corrective))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal "max_iterations_reached", pipeline_run.reload.status
+      assert_equal 3, pipeline_run.iterations.count
+    end
+
+    test "passes max_iterations and previous_decisions to analyzer" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+      pipeline_run.iterations.create!(number: 1, decision: "iterate_tasks", confidence: 75, reasoning: "Missing auth handler")
+
+      ArnoldPipeline.configuration.max_iterations = 3
+
+      @analyzer.expects(:call).with { |kwargs|
+        kwargs[:max_iterations] == 3 &&
+          kwargs[:previous_decisions].is_a?(Array) &&
+          kwargs[:previous_decisions].size == 1 &&
+          kwargs[:previous_decisions].first[:decision] == "iterate_tasks" &&
+          kwargs[:previous_decisions].first[:confidence] == 75
+      }.returns(analysis_result("done", 95))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal "completed", pipeline_run.reload.status
+    end
+
     # --- Delta-based iterate_spec tests ---
 
     test "handles iterate_spec with deltas format (legacy_append fallback)" do

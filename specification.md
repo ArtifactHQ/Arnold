@@ -79,6 +79,27 @@ The loop SHALL use the execution provider's polling mechanism (async providers) 
 - WHEN final validation occurs.
 - THEN changes are merged via GitHub API (e.g., PR merge), and the loop ends.
 
+#### Scenario: Iteration Context with Convergence Pressure [SPEC-ANALYSIS-009]
+- GIVEN the Analysis Agent is evaluating iteration N of max_iterations.
+- WHEN the analysis prompt is constructed.
+- THEN an "Iteration Context" section is appended containing:
+  - The current iteration number and total max_iterations.
+  - A "Previous Decisions" list showing each prior iteration's decision, confidence, and reasoning excerpt.
+  - Escalating convergence pressure based on remaining budget:
+    - More than half budget remaining: no extra pressure.
+    - Half budget spent (remaining >= 2): "Bias toward `done` unless there are significant functional gaps."
+    - Penultimate iteration (remaining == 1): "Strongly prefer `done` unless there are critical, unambiguous failures."
+    - Final iteration (remaining == 0): "You MUST choose `done`."
+- AND if all previous iterations chose `iterate_tasks` and there are 2+ prior decisions, a "STUCK DETECTION" warning is included advising the agent that the same approach is not converging.
+
+#### Scenario: Analysis Done Threshold Promotion [SPEC-ANALYSIS-010]
+- GIVEN the Analysis Agent returns `iterate_tasks` with a confidence score.
+- AND `analysis_done_threshold` is configured (integer 50-100, default nil/disabled).
+- WHEN the confidence score is greater than or equal to the threshold.
+- THEN the decision is promoted from `iterate_tasks` to `done`.
+- AND the promotion is logged and recorded as a pipeline event with `promoted_from: "iterate_tasks"`.
+- AND when the threshold is nil (default), no promotion occurs and the agent's decision is used as-is.
+
 ### Analysis Evaluation Methodology
 
 The Analysis Agent applies three completeness tests and checks for seven anti-patterns when evaluating implementation against the specification.
@@ -241,7 +262,7 @@ After each tier completes, results are merged before the next tier begins.
 #### Scenario: Tier Gate Check
 - GIVEN a tier that has completed execution and merge.
 - AND tier_gate_enabled is true.
-- WHEN the TierGateCheck agent evaluates the merged diffs and task summaries.
+- WHEN the TierGateCheck agent evaluates the merged diffs, task summaries, and verification_results.
 - THEN it returns a pass/fail verdict, a context_summary, and optionally corrective_tasks.
 
 #### Scenario: Tier Gate Failure with Retry [SPEC-TIER-004]
@@ -251,6 +272,16 @@ After each tier completes, results are merged before the next tier begins.
 - THEN corrective tasks from the gate result are created at the same tier, executed sequentially (one at a time with merge between each), and re-evaluated.
 - AND each corrective task branches from the updated master branch (including changes from the previous corrective task's merge).
 - AND task summaries sent to the tier gate reviewer are annotated with `[FAILED - EMPTY DIFF]` for tasks that completed with exit code 0 but no code changes, or `[FAILED]` for other failures.
+
+#### Scenario: Corrective Task Description Enrichment [SPEC-TIER-007]
+- GIVEN a tier gate failure produces corrective tasks.
+- WHEN corrective tasks are created.
+- THEN each corrective task description is enriched with contextual sections beyond the gate's base description:
+  - `## Gate Issues` — Numbered list of issues from the gate result that triggered the correction.
+  - `## Original Tier Tasks` — List of the original tier's tasks with title, description, and diff status annotation: `[produced diffs]` for tasks with non-empty result_diff, `[NO DIFFS]` for tasks with empty or missing diffs.
+  - `## Acceptance Criteria Status` — The formatted acceptance criteria summary (verified/failed/unverified) when available.
+- AND if no additional context is available (no gate issues, no original tasks, no criteria), the base description is used as-is.
+- AND the current tier's `context_summary` from the gate result is included in the `prior_context` passed to corrective task execution, so the executor knows what the original tier already built.
 
 #### Scenario: Tier Gate Retry Exhaustion
 - GIVEN a tier that has failed the gate check max_tier_retries times.
@@ -350,6 +381,208 @@ During GitHub polling, the system classifies issue comments using pattern-based 
 
 A comment is considered "substantive" if it matches at least one resolution pattern. The `has_substantive_comments?` method on the Task model uses these patterns to determine whether a task's comments indicate resolution. Tasks with only WIP-pattern comments are classified as `wip_comments_only` in the resolution summary.
 
+### Requirement: Empirical Validation System [SPEC-VALIDATION-001]
+The system SHALL provide a four-layer empirical validation system that evaluates task outputs using acceptance criteria, post-merge hooks, verification checks, and spec-scenario integration tests.
+Validation results are passed to the tier gate check agent to inform pass/fail decisions and corrective task generation.
+All validation layers are optional and configurable; when disabled, the tier gate operates without those signals.
+
+**Layer 1: Acceptance Criteria** — Static and runtime checks defined per-task (file_exists, test_exists, model_has, route_exists, http, command_exits).
+**Layer 2: Post-Merge Hooks** — User-configurable commands triggered by file path patterns after tier merge. Hooks may commit derived files (e.g., database schema, generated assets) when specified.
+**Layer 3: Verification Checks** — User-configurable command sequences (boot/test_suite/custom) run after hooks to verify application health. Checks can be marked as required; failures short-circuit the sequence.
+**Layer 4: Spec-Scenario Integration Tests** — Auto-generated tests from GIVEN/WHEN/THEN scenarios in the specification, executed after each tier to measure alignment progress.
+
+#### Layer 1: Acceptance Criteria on Tasks [SPEC-CRITERIA-001]
+
+Tasks MAY include an `acceptance_criteria` JSON array field defining verifiable conditions that must be met for the task to be considered complete.
+Each criterion has a `type`, `description`, and `params` hash.
+The system SHALL support six criterion types: four static types (evaluated offline against the repository) and two runtime types (evaluated by executing commands or HTTP requests).
+
+**Static Criterion Types:**
+- `file_exists` — Verifies a file matching a glob pattern exists (params: `pattern`)
+- `test_exists` — Verifies a test file matching a glob pattern exists (params: `pattern`)
+- `model_has` — Verifies a Rails model has specific attributes/associations (params: `model`, `attributes`, `associations`)
+- `route_exists` — Verifies a Rails route exists (params: `method`, `path`, `controller`, `action`)
+
+**Runtime Criterion Types:**
+- `http` — Executes an HTTP request and verifies response (params: `method`, `url`, `expected_status`, `expected_body_pattern`)
+- `command_exits` — Executes a shell command and verifies exit code (params: `command`, `expected_exit_code`)
+
+#### Scenario: Acceptance Criteria Definition in Task Breakdown
+- GIVEN a specification requiring user authentication.
+- WHEN the Task Breakdown Agent generates tasks.
+- THEN the authentication task includes acceptance criteria such as:
+  - `{ "type": "file_exists", "description": "User model exists", "params": { "pattern": "app/models/user.rb" } }`
+  - `{ "type": "route_exists", "description": "Login route exists", "params": { "method": "POST", "path": "/login" } }`
+
+#### Scenario: Static Criteria Evaluation After Tier Merge [SPEC-CRITERIA-002]
+- GIVEN tasks with acceptance criteria have been executed and merged.
+- WHEN the CriteriaChecker evaluates static criteria against the repository.
+- THEN each criterion is marked as `verified`, `unverified`, or `failed`.
+- AND the formatted results summary is passed to the tier gate check via `acceptance_criteria_summary:` parameter.
+
+#### Scenario: Criteria Re-evaluation on Tier Gate Retry
+- GIVEN a tier that failed the gate check and triggered corrective tasks.
+- WHEN corrective tasks are executed and merged.
+- THEN acceptance criteria are re-evaluated against the updated repository state.
+
+#### Scenario: Acceptance Criteria Persistence
+- GIVEN the Task Breakdown Agent generates tasks with acceptance criteria.
+- WHEN tasks are persisted to the database.
+- THEN the `acceptance_criteria` JSON field is saved for each task.
+- AND when corrective tasks are generated from tier gate failures, they also receive `acceptance_criteria` if provided by the tier gate agent.
+
+#### Layer 2: Post-Merge Hooks [SPEC-HOOK-001]
+
+The system SHALL support user-configurable post-merge hooks that execute commands after each tier merge.
+Hooks are triggered when changed files match configured glob patterns (trigger_paths).
+When a hook succeeds and commit_paths are specified, the runner commits derived files to preserve generated artifacts.
+
+#### Scenario: Hook Definition and Triggering [SPEC-HOOK-002]
+- GIVEN a post-merge hook configured with:
+  - `name: "Update Database Schema"`
+  - `trigger_paths: ["db/migrate/*.rb"]`
+  - `command: "bundle exec rails db:migrate"`
+  - `commit_paths: ["db/schema.rb"]`
+  - `commit_message: "Update schema from migration"`
+- AND a tier merge includes changes to `db/migrate/20250214_create_users.rb`.
+- WHEN the PostMergeHookRunner evaluates hooks.
+- THEN changed files are extracted from each task's `result_diff` by parsing the JSON array and collecting `filename` fields (with fallback to unified diff regex parsing if JSON parsing fails).
+- AND the hook's `triggered_by?` method matches via File.fnmatch(pattern, file, File::FNM_PATHNAME).
+- AND the command executes in the repository directory.
+- AND if exit code is 0 and `db/schema.rb` has changed, a git commit is created with the specified message.
+
+#### Scenario: Hook Result Recording [SPEC-HOOK-003]
+- GIVEN a hook execution completes.
+- WHEN the result is returned.
+- THEN it includes: `{ name:, triggered:, success:, stdout:, stderr:, exit_code: }`.
+- AND stdout/stderr are capped at 2000 characters.
+- AND a `post_merge_hooks` pipeline event is recorded with:
+  - **Summary:** `{ hook_count:, triggered_count:, success_count:, results: [{ name:, triggered:, success:, exit_code: (if triggered), error: (if raised) }] }`
+  - **Payload:** `{ changed_files: [filenames], results: [full hook result hashes including stdout/stderr] }`
+
+#### Scenario: Hooks Run Before Gate Check [SPEC-HOOK-004]
+- GIVEN tier tasks have been merged.
+- WHEN the tier execution flow proceeds.
+- THEN post-merge hooks run first (after merge, before gate).
+- AND verification checks run second (after hooks, before gate).
+- AND tier gate check runs last with verification_results parameter.
+
+#### Scenario: Non-Fatal Hook Failures [SPEC-HOOK-005]
+- GIVEN a post-merge hook raises an exception.
+- WHEN the PostMergeHookRunner catches the error.
+- THEN it logs the error and returns `{ name:, triggered: true, success: false, error: message }`.
+- AND the pipeline continues execution without interruption.
+
+#### Layer 3: Verification Checks [SPEC-VCHECK-001]
+
+The system SHALL support user-configurable verification checks that run command sequences after each tier merge.
+Checks can be of type `:boot`, `:test_suite`, or `:custom`, and can be marked as `required` to short-circuit on failure.
+Verification results (all_passed, summary, and per-check details) are passed to the tier gate check via `verification_results:`.
+
+#### Scenario: Check Definition and Execution [SPEC-VCHECK-002]
+- GIVEN a verification check configured with:
+  - `name: "Boot Check"`
+  - `command: "bundle exec rails runner 'puts Rails.version'"`
+  - `type: :boot`
+  - `required: true`
+- AND a tier has completed merge.
+- WHEN the VerificationRunner processes checks.
+- THEN the command executes in the repository directory.
+- AND the result captures: `{ name:, type:, success:, exit_code:, stdout:, stderr:, duration_ms: }`.
+- AND stdout is capped at 5000 characters, stderr at 2000 characters.
+
+#### Scenario: Required Check Short-Circuits [SPEC-VCHECK-003]
+- GIVEN three checks configured: Boot (required), Database Migration (not required), Test Suite (required).
+- AND the Boot check fails (exit code 1).
+- WHEN the VerificationRunner executes checks.
+- THEN the Boot check runs and fails.
+- AND Database Migration and Test Suite checks are NOT executed.
+- AND the results include only the Boot check with `all_passed: false`.
+
+#### Scenario: Verification Results Passed to Gate [SPEC-VCHECK-004]
+- GIVEN verification checks have executed.
+- WHEN the tier gate check agent is invoked.
+- THEN it receives `verification_results:` containing:
+  - `{ checks: [...], all_passed: boolean, summary: "N passed, M failed: details" }`
+- AND the gate prompt includes a unified "Empirical Verification Results" section with formatted check details.
+
+#### Scenario: Verification Re-execution on Tier Gate Retry [SPEC-VCHECK-005]
+- GIVEN a tier that failed the gate check and triggered corrective tasks.
+- WHEN corrective tasks are executed and merged.
+- THEN the verification checks are re-run against the updated codebase.
+
+#### Scenario: Graceful Degradation Without Checks [SPEC-VCHECK-006]
+- GIVEN no verification checks are configured (`verification_checks` is empty).
+- OR `claude_code_repo_path` is nil.
+- WHEN the tier gate process runs.
+- THEN verification is skipped and `verification_results:` is nil.
+
+#### Layer 4: Spec-Scenario Integration Tests [SPEC-SPECTEST-001]
+
+The system SHALL generate integration tests from specification GIVEN/WHEN/THEN scenarios using the SpecTestGenerator agent.
+Generated tests are executed after each tier to measure alignment progress: total tests, passing tests, newly passing tests, regressions, and pass rate.
+Spec test results are passed to the Analysis Agent via `spec_test_progress_summary:` as a primary alignment signal.
+
+#### Scenario: Spec Test Generation After Tier 0
+- GIVEN tier 0 (bootstrap tier) has completed execution and merge.
+- AND `spec_test_generation_enabled` is true.
+- WHEN the orchestrator invokes `run_spec_test_generation!`.
+- THEN the SpecTestGenerator agent uses a Testing Specialist persona to generate integration tests from the specification's GIVEN/WHEN/THEN scenarios.
+- AND generated test files are written to `spec_test_directory` (default: `test/spec_integration`).
+- AND the generation is tracked as a tier "0.5" event.
+
+#### Scenario: Spec Test Progress Tracking After Each Tier
+- GIVEN spec tests have been generated after tier 0.
+- AND subsequent tiers have completed execution and merge.
+- WHEN the orchestrator invokes `run_spec_test_progress!`.
+- THEN the SpecTestProgressTracker runs the spec tests and compares results against previous runs.
+- AND it calculates: `total_tests`, `total_passing`, `newly_passing`, `regressions`, `still_failing`, and `pass_rate`.
+- AND progress summary is stored in `pipeline_run.metadata["spec_test_results"]`.
+- AND the formatted summary is passed to the Analysis Agent via `spec_test_progress_summary:`.
+
+#### Scenario: Spec Test Results Inform Iteration Decisions
+- GIVEN the Analysis Agent evaluates code outputs against the specification.
+- AND spec test progress shows `pass_rate: 0.60` (60% passing).
+- WHEN the agent decides whether to iterate.
+- THEN the spec test progression is used as a primary alignment signal alongside diff analysis.
+- AND if pass rate is below acceptable thresholds, the agent may decide `iterate_tasks` to fix failing tests.
+
+#### Scenario: Graceful Degradation Without Spec Test Generation
+- GIVEN `spec_test_generation_enabled` is false.
+- WHEN the pipeline executes.
+- THEN spec test generation and progress tracking are skipped.
+- AND the Analysis Agent operates without `spec_test_progress_summary:`.
+
+#### DiffSummarizer Deduplication [SPEC-DIFF-001]
+
+When multiple tasks within the same tier modify the same file, the DiffSummarizer SHALL keep only the latest entry per filename to prevent contradictory diffs.
+
+#### Scenario: Deduplication of Same-File Modifications
+- GIVEN an original task creates `app/controllers/users_controller.rb`.
+- AND a corrective task modifies `app/controllers/users_controller.rb`.
+- WHEN the DiffSummarizer processes both task results.
+- THEN only the latest diff for `app/controllers/users_controller.rb` is included in the summary.
+- AND the tier gate check receives a single, coherent diff per file.
+
+#### Pipeline Event Types for Validation [SPEC-EVENT-006]
+
+The system SHALL record event types for empirical validation:
+
+| Event Type | Enum Value | Description |
+|---|---|---|
+| criteria_check | 15 | Records acceptance criteria evaluation results |
+| verification_execution | 16 | DEPRECATED (replaced by verification_checks) |
+| test_execution | 17 | DEPRECATED (replaced by verification_checks) |
+| spec_test_execution | 18 | Records spec-scenario test execution results |
+| post_merge_hooks | 19 | Records post-merge hook execution results |
+| verification_checks | 20 | Records verification check execution results |
+
+#### Scenario: Validation Event Recording [SPEC-EVENT-007]
+- GIVEN a tier completes execution and validation.
+- AND `event_logging_enabled` is true.
+- WHEN criteria are checked, hooks execute, verification checks run, or spec tests progress.
+- THEN corresponding PipelineEvent records are created with summaries and optional payloads.
+
 ### Requirement: Pause and Resume
 The system SHALL support pausing execution at configurable stage checkpoints and resuming from the last completed stage.
 Resume SHALL be idempotent: re-publishing already-published tasks is safely skipped.
@@ -413,6 +646,14 @@ Event recording SHALL be non-fatal: database errors during event creation do not
 - THEN the error is silently rescued.
 - AND the pipeline continues execution without interruption.
 
+#### Scenario: Verbose Debug Logging [SPEC-OUTPUT-001]
+- GIVEN the `--verbose` CLI flag is passed (or logger level is DEBUG).
+- WHEN agents process LLM requests.
+- THEN the BaseAgent logs prompt contents at DEBUG level: system prompt, each message role and content (truncated to 2000 characters).
+- AND the BaseAgent logs LLM response size and content at DEBUG level (truncated to 2000 characters).
+- AND the TierExecutionEngine logs at DEBUG level: gate issues triggering correction (numbered list), corrective task details (title, description, labels), and per-criterion acceptance criteria results (type and description).
+- AND all DEBUG-level output is suppressed at the default INFO log level.
+
 ### Requirement: CLI Commands
 The system SHALL provide a command-line interface via the `arnold_pipeline` executable.
 
@@ -472,6 +713,7 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 ### Requirement: Configuration
 The system SHALL be configurable via a Ruby block (`ArnoldPipeline.configure`) or YAML config file.
 When multiple sources provide the same key, CLI flags take precedence over YAML config, which takes precedence over defaults (CLI > YAML > defaults).
+The CLI's YAML config loader (`apply_config!`) MUST map all configuration keys listed in the table below. Omitting a key from the YAML loader silently drops user configuration, which is a bug.
 All configuration keys SHALL be validated before pipeline execution via `validate!`.
 
 | Key | Type | Default | Validation |
@@ -489,6 +731,7 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | claude_code_permission_mode | String | "bypassPermissions" | Must be one of: acceptEdits, bypassPermissions, default, delegate, dontAsk, plan |
 | claude_code_max_concurrency | Integer | 4 | 1-16 |
 | max_iterations | Integer | 3 | 1-10 |
+| analysis_done_threshold | Integer | nil (disabled) | nil or 50-100 |
 | library_path | String | nil (built-in library) | None |
 | polling_interval | Numeric | 30 | Positive |
 | polling_timeout | Numeric | 1800 | Positive |
@@ -504,6 +747,12 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | verbose_event_logging | Boolean | false | None |
 | repo_context_scan_patterns | Array of Strings | nil (uses defaults) | None |
 | repo_context_scan_files | Array of Strings | nil (uses defaults) | None |
+| post_merge_hooks | Array of Hashes | [] | Each hash: name, trigger_paths, command, commit_paths (optional), commit_message (optional) |
+| verification_checks | Array of Hashes | [] | Each hash: name, command, type (:boot/:test_suite/:custom), required (boolean) |
+| test_timeout | Integer | 120 | Positive integer (used by SpecTestProgressTracker) |
+| spec_test_generation_enabled | Boolean | false | None |
+| spec_test_directory | String | "test/spec_integration" | None |
+| spec_test_persona | String | "testing_specialist" | None |
 
 ### PipelineRun State Machine
 
