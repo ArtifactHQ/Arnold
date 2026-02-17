@@ -112,11 +112,11 @@ module ArnoldPipeline
         s = event.summary || {}
         chars = number_with_delimiter(s["content_length"])
         dur = event.duration_ms ? " (#{format_duration(event.duration_ms)})" : ""
-        "  #{ts}  #{label('spec')}  #{c("\u2713", :green)} v#{s['spec_version']} generated (#{chars} chars)#{dur}"
+        "  #{ts}  #{label('spec')}  #{c('✓', :green)} v#{s['spec_version']} generated (#{chars} chars)#{dur}"
       when "tasks_broken"
         s = event.summary || {}
         dur = event.duration_ms ? " (#{format_duration(event.duration_ms)})" : ""
-        "  #{ts}  #{label('tasks')}  #{c("\u2713", :green)} #{s['task_count']} tasks \u2192 #{s['tier_count']} tiers (#{s['dependency_edge_count']} deps)#{dur}"
+        "  #{ts}  #{label('tasks')}  #{c('✓', :green)} #{s['task_count']} tasks → #{s['tier_count']} tiers (#{s['dependency_edge_count']} deps)#{dur}"
       when "tier_execution_completed"
         format_tier_completed(event)
       when "post_merge_hooks"
@@ -157,16 +157,16 @@ module ArnoldPipeline
       failed = s["failed_count"] || 0
 
       if failed > 0
-        result = "#{c("\u2717 #{failed} failed", :red)}, #{resolved} ok"
+        result = "#{c("✗ #{failed} failed", :red)}, #{resolved} ok"
       else
-        result = c("\u2713 #{resolved} passed", :green)
+        result = c("✓ #{resolved} passed", :green)
       end
 
       line = "  #{ts}  #{label('tasks')}  #{result}"
 
       if @verbose && s["task_outcomes"]
         s["task_outcomes"].each do |outcome|
-          status_str = outcome["status"] == "resolved" ? c("\u2713", :green) : c("\u2717", :red)
+          status_str = outcome["status"] == "resolved" ? c("✓", :green) : c("✗", :red)
           reason = outcome["failure_reason"] ? " (#{outcome['failure_reason']})" : ""
           line += "\n    #{status_str} #{outcome['title']}#{reason}"
         end
@@ -258,7 +258,7 @@ module ArnoldPipeline
         line = "  #{ts}  #{label('gate')}  #{bg_red(' FAIL ')}#{source_text}"
         issues = s["issues"] || []
         issues.each do |issue|
-          line += "\n           #{' ' * LABEL_WIDTH}#{c("\u21b3 #{issue}", :red)}"
+          line += "\n           #{' ' * LABEL_WIDTH}#{c("↳ #{issue}", :red)}"
         end
       end
 
@@ -279,9 +279,9 @@ module ArnoldPipeline
       confidence = s["confidence"]
 
       marker, color_sym = case decision
-      when "done" then ["\u2713", :green]
-      when "iterate_tasks" then ["\u21bb", :yellow]
-      when "iterate_spec" then ["\u21bb", :yellow]
+      when "done" then ["✓", :green]
+      when "iterate_tasks" then ["↻", :yellow]
+      when "iterate_spec" then ["↻", :yellow]
       else ["?", :white]
       end
 
@@ -300,23 +300,23 @@ module ArnoldPipeline
       decision = s["decision"]
 
       marker, color_sym = case decision
-      when "done" then ["\u2713 DONE", :green]
-      when "iterate_tasks" then ["\u21bb iterate_tasks", :yellow]
-      when "iterate_spec" then ["\u21bb iterate_spec", :yellow]
+      when "done" then ["✓ DONE", :green]
+      when "iterate_tasks" then ["↻ iterate_tasks", :yellow]
+      when "iterate_spec" then ["↻ iterate_spec", :yellow]
       else [decision, :white]
       end
 
       details = []
       details << "#{s['corrective_task_count']} corrective tasks" if s["corrective_task_count"]&.> 0
 
-      suffix = details.any? ? " \u2192 #{details.join(', ')}" : ""
+      suffix = details.any? ? " → #{details.join(', ')}" : ""
       "  #{ts}  #{label('outcome')}  #{c("#{marker}#{suffix}", color_sym)}"
     end
 
     def format_spec_delta(event)
       s = event.summary || {}
       ts = timestamp(event)
-      "  #{ts}  #{label('spec')}  #{s['merge_strategy']}, #{s['delta_count']} deltas \u2192 v#{s['new_version']}"
+      "  #{ts}  #{label('spec')}  #{s['merge_strategy']}, #{s['delta_count']} deltas → v#{s['new_version']}"
     end
 
     def format_terminal(event)
@@ -331,7 +331,7 @@ module ArnoldPipeline
         if s["tasks_succeeded"] || s["tasks_failed"]
           task_detail = "  (#{s['tasks_succeeded']} succeeded, #{s['tasks_failed']} failed)"
         end
-        "\n #{bg_green(' \u2713 PIPELINE COMPLETED ')}  #{iterations} iterations, #{tasks} tasks#{task_detail}#{duration}#{confidence}"
+        "\n #{bg_green(' ✓ PIPELINE COMPLETED ')}  #{iterations} iterations, #{tasks} tasks#{task_detail}#{duration}#{confidence}"
       when "pipeline_failed"
         error = "#{s['error_class']}: #{s['error_message']}"
         stage = s["failed_stage"] ? "  during #{s['failed_stage']}" : ""
@@ -346,9 +346,9 @@ module ArnoldPipeline
         if s["raw_response_excerpt"]
           excerpt = "\n  #{s['raw_response_excerpt'][0, 200]}..."
         end
-        "\n #{bg_red(' \u2717 PIPELINE FAILED ')}#{stage}\n  #{error}#{provider}#{exec}#{task_info}#{duration}#{excerpt}"
+        "\n #{bg_red(' ✗ PIPELINE FAILED ')}#{stage}\n  #{error}#{provider}#{exec}#{task_info}#{duration}#{excerpt}"
       when "pipeline_paused"
-        "\n #{c(bold(' \u23f8 PIPELINE PAUSED '), :yellow)}  #{s['reason']}"
+        "\n #{c(bold(' ⏸ PIPELINE PAUSED '), :yellow)}  #{s['reason']}"
       end
     end
 
@@ -365,7 +365,7 @@ module ArnoldPipeline
     end
 
     def horizontal_rule
-      "\u2500" * 70
+      "─" * 70
     end
 
     # Colorize text, respecting @color flag
