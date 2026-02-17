@@ -209,20 +209,26 @@ module ArnoldPipeline
         pipeline_run.reload
       rescue => e
         config = ArnoldPipeline.configuration
+        summary = {
+          error_class: e.class.name, error_message: e.message,
+          failed_stage: @current_stage&.to_s,
+          llm_provider: config.llm_provider.to_s,
+          llm_model: config.llm_model,
+          execution_provider: config.execution_provider.to_s,
+          backtrace: e.backtrace&.first(10),
+          total_tasks: pipeline_run.tasks.count,
+          tasks_succeeded: pipeline_run.tasks.where(status: :completed).count,
+          tasks_failed: pipeline_run.tasks.where(status: :failed).count,
+          total_duration_ms: ((Time.current - pipeline_run.created_at) * 1000).round(1)
+        }
+
+        if e.respond_to?(:raw_response) && e.raw_response
+          summary[:raw_response_excerpt] = e.raw_response.to_s[0, 2000]
+        end
+
         @event_recorder&.record(
           event_type: :pipeline_failed, stage: "lifecycle",
-          summary: {
-            error_class: e.class.name, error_message: e.message,
-            failed_stage: @current_stage&.to_s,
-            llm_provider: config.llm_provider.to_s,
-            llm_model: config.llm_model,
-            execution_provider: config.execution_provider.to_s,
-            backtrace: e.backtrace&.first(10),
-            total_tasks: pipeline_run.tasks.count,
-            tasks_succeeded: pipeline_run.tasks.where(status: :completed).count,
-            tasks_failed: pipeline_run.tasks.where(status: :failed).count,
-            total_duration_ms: ((Time.current - pipeline_run.created_at) * 1000).round(1)
-          }
+          summary: summary
         )
         pipeline_run.update!(status: :failed, metadata: (pipeline_run.metadata || {}).merge(
           "error" => e.message, "error_class" => e.class.name, "failed_stage" => @current_stage&.to_s

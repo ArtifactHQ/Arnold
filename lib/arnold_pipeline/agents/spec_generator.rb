@@ -28,7 +28,7 @@ module ArnoldPipeline
 
       def extract_structured_data(response)
         parse_json(response)
-      rescue JSON::ParserError
+      rescue LlmParseError
         logger.warn { "Could not extract structured data from spec response" }
         nil
       end

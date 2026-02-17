@@ -201,6 +201,39 @@ module ArnoldPipeline
       assert_equal 5, summary["total_tasks"]
     end
 
+    test "pipeline_failed event includes raw_response_excerpt for LLM parse errors" do
+      stub_spec_generation!
+
+      error = ArnoldPipeline::Agents::LlmParseError.new(
+        "unexpected token", raw_response: "bad json " * 300
+      )
+      @task_breaker.stubs(:call).raises(error)
+
+      assert_raises(ArnoldPipeline::Agents::LlmParseError) do
+        @orchestrator.call(nl_input: "Build an app")
+      end
+
+      run_record = PipelineRun.last
+      event = run_record.pipeline_events.find_by(event_type: :pipeline_failed)
+      assert_not_nil event
+      assert_includes event.summary.keys, "raw_response_excerpt"
+      assert event.summary["raw_response_excerpt"].length <= 2000
+    end
+
+    test "pipeline_failed event excludes raw_response_excerpt for non-LLM errors" do
+      stub_spec_generation!
+      @task_breaker.stubs(:call).raises(StandardError, "some other error")
+
+      assert_raises(StandardError) do
+        @orchestrator.call(nl_input: "Build an app")
+      end
+
+      run_record = PipelineRun.last
+      event = run_record.pipeline_events.find_by(event_type: :pipeline_failed)
+      assert_not_nil event
+      refute_includes event.summary.keys, "raw_response_excerpt"
+    end
+
     test "call validates configuration before running" do
       ArnoldPipeline.configure { |c| c.llm_provider = :invalid }
       assert_raises(ArnoldPipeline::ConfigurationError) do

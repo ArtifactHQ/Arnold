@@ -130,10 +130,26 @@ module ArnoldPipeline
 
       # -- Error cases --
 
-      test "raises JSON::ParserError for truly unparseable text" do
-        assert_raises(JSON::ParserError) do
+      test "raises LlmParseError for truly unparseable text" do
+        assert_raises(ArnoldPipeline::Agents::LlmParseError) do
           @agent.parse_json("This is just plain English with no JSON at all.")
         end
+      end
+
+      test "parse_json raises LlmParseError with raw_response for malformed JSON" do
+        raw_text = "Here is your JSON:\n{invalid json"
+        error = assert_raises(ArnoldPipeline::Agents::LlmParseError) do
+          @agent.parse_json(raw_text)
+        end
+
+        assert_includes error.message, "unexpected"
+        assert_equal raw_text, error.raw_response
+        assert_kind_of JSON::ParserError, error.original_error
+      end
+
+      test "LlmParseError is a StandardError subclass" do
+        error = ArnoldPipeline::Agents::LlmParseError.new("test")
+        assert_kind_of StandardError, error
       end
 
       # -- prompt/response logging --
