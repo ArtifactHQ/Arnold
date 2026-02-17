@@ -40,7 +40,7 @@ module ArnoldPipeline
     end
 
     test "accepts valid change_sources" do
-      %w[spec_generation iterate_spec].each do |source|
+      %w[spec_generation iterate_spec user_iterate].each do |source|
         revision = @spec.spec_revisions.build(version: 1, content: "c", change_source: source)
         assert revision.valid?, "Expected #{source} to be valid"
       end

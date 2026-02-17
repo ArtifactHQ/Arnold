@@ -154,10 +154,11 @@ When a specification changes (via initial generation or `iterate_spec` decisions
 - `version`: Integer, matches the Specification's version at time of snapshot (unique per specification).
 - `content`: Full spec Markdown text at this version.
 - `structured_data`: JSON metadata block at this version.
-- `change_source`: One of `"spec_generation"` (initial spec or re-generation) or `"iterate_spec"` (analysis-driven refinement).
+- `change_source`: One of `"spec_generation"` (initial spec or re-generation), `"iterate_spec"` (analysis-driven refinement), or `"user_iterate"` (user-initiated CLI iteration).
 - `delta_summary`: JSON array of human-readable strings summarizing what changed (e.g., `"ADDED: Authentication > Password Reset"`).
 - The Orchestrator creates a SpecRevision after every `generate_spec!` call (change_source: `"spec_generation"`).
 - The AnalysisLoop creates a SpecRevision after every successful delta merge (change_source: `"iterate_spec"`).
+- The Orchestrator creates a SpecRevision after every `iterate_spec!` or `fork!` call (change_source: `"user_iterate"`).
 
 **SpecDelta** — Granular, per-requirement change records for `iterate_spec` decisions. [SPEC-DELTA-003]
 - `operation`: One of `"added"`, `"modified"`, or `"removed"`.
@@ -760,6 +761,47 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 - WHEN the --verbose flag is provided.
 - THEN full payload data is included in the output.
 - Exit code 0 on success, 1 if not found.
+
+#### Command: iterate [SPEC-CLI-ITERATE-001]
+- GIVEN a pipeline run ID and a natural language change request.
+- WHEN `arnold_pipeline iterate ID "change request"` is executed.
+- THEN the SpecIterationAgent generates structured deltas from the change request against the existing specification.
+- AND the deltas are merged via the 3-tier merge chain (OpenSpec → structured append → legacy).
+- AND a SpecRevision is created with change_source: "user_iterate".
+- AND existing tasks (if any) are marked as `superseded`.
+- Options: --config (YAML path), --provider (anthropic|openai), --model (name), --dry-run (boolean), --json (boolean), --verbose (boolean), --yes/-y (boolean, skip confirmation).
+- Exit code 0 on success, 1 on error (including "not found", invalid state, empty change request).
+
+#### Scenario: Dry Run Preview [SPEC-CLI-ITERATE-002]
+- GIVEN a pipeline run with an existing specification.
+- WHEN `arnold_pipeline iterate ID "change request" --dry-run` is executed.
+- THEN proposed deltas are displayed without applying them.
+- AND the user is shown added/modified/removed requirements with rationale.
+- AND no changes are persisted to the database.
+- AND when --json is also passed, deltas are output as a JSON array.
+
+#### Scenario: Iteration on Completed Run (Fork) [SPEC-CLI-ITERATE-003]
+- GIVEN a pipeline run in `completed` state.
+- WHEN `arnold_pipeline iterate ID "change request"` is executed.
+- THEN a new pipeline run is created with `forked_from_run_id` in metadata.
+- AND the new run's specification is seeded from the completed run's spec with applied deltas.
+- AND the new run starts in `paused` state at the `spec` checkpoint.
+- AND the user is shown the new run ID and instructed to use `arnold resume` to continue.
+
+#### Scenario: Multiple Iterations Before Resume [SPEC-CLI-ITERATE-004]
+- GIVEN a paused pipeline run that has been iterated multiple times (e.g., spec at v3).
+- WHEN `arnold_pipeline resume ID` is executed.
+- THEN task breakdown uses the latest spec version (v3).
+- AND previously generated tasks with `superseded` status are ignored by the ResumeInferrer.
+- AND the ResumeInferrer infers `:break_tasks` when all tasks are superseded.
+
+#### Scenario: Stale Analysis After User Iteration [SPEC-CLI-ITERATE-005]
+- GIVEN tasks were generated from spec version N.
+- AND the user has iterated the spec to version N+1 (or higher) via the iterate command.
+- WHEN the analysis loop evaluates results from the version-N tasks.
+- THEN the analyzer is restricted to `done` or `iterate_tasks` decisions only.
+- AND `iterate_spec` decisions are suppressed because the spec has already advanced past the task generation version.
+- AND a pipeline event is recorded noting the version skew with `suppressed_from: "iterate_spec"` and `reason: "spec_version_skew"`.
 
 ### Requirement: Configuration
 The system SHALL be configurable via a Ruby block (`ArnoldPipeline.configure`) or YAML config file.

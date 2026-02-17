@@ -128,6 +128,7 @@ Arnold dispatches tasks directly to the Claude Code CLI on your local machine. E
 ```bash
 arnold run "description" [options]   # Run the full pipeline
 arnold resume ID [options]           # Resume a paused or failed run
+arnold iterate ID "change" [options] # Iterate on a run's specification
 arnold status ID [options]           # Check a pipeline run
 arnold list [options]                # List all runs
 arnold spec ID [options]             # Export a run's specification
@@ -155,6 +156,15 @@ arnold tree                          # Print command tree
 
 # Options for `resume` (accepts all `run` config flags):
 #   --stop-after STAGE         Pause again at a later stage
+
+# Options for `iterate`:
+#   --config FILE              YAML config file
+#   --provider NAME            LLM provider (anthropic/openai)
+#   --model NAME               Model name
+#   --dry-run                  Show proposed deltas without applying
+#   --json                     Output delta details as JSON (with --dry-run)
+#   --verbose                  Show full before/after for modified requirements
+#   --yes, -y                  Skip confirmation prompt
 
 # Options for `status`:
 #   --json             Output as JSON
@@ -200,7 +210,37 @@ arnold spec 1 --version 2             # Show spec content at version 2
 arnold spec 1 --version 2 -o v2.md    # Write version 2 to file
 ```
 
-Each revision records its `change_source` (`spec_generation` or `iterate_spec`) and a summary of what changed. When the analysis agent refines the spec, individual changes are tracked as deltas (added/modified/removed requirements with rationale), so you can see exactly what shifted between iterations.
+Each revision records its `change_source` (`spec_generation`, `iterate_spec`, or `user_iterate`) and a summary of what changed. When the analysis agent refines the spec, individual changes are tracked as deltas (added/modified/removed requirements with rationale), so you can see exactly what shifted between iterations.
+
+### Spec Iteration
+
+Refine a pipeline run's specification with natural language change requests using `arnold iterate`. This is useful for adjusting the spec after reviewing it, without restarting the pipeline from scratch.
+
+```bash
+arnold run "Build a chat app" --stop-after spec     # Generate spec, pause
+arnold spec 1                                        # Review it
+arnold iterate 1 "Add typing indicators"             # Refine spec
+arnold iterate 1 "Remove the admin dashboard"        # Refine again
+arnold spec 1 --history                              # See revision timeline
+arnold resume 1                                      # Continue pipeline
+```
+
+Each `iterate` call generates structured deltas (add/modify/remove requirements) via a dedicated SpecIterationAgent, merges them into the spec through the same merge chain used by the analysis loop (OpenSpec CLI or structured append fallback), and marks existing tasks as superseded. When you `resume`, the pipeline re-runs task breakdown against the updated spec.
+
+**Dry run** — Preview proposed changes without applying them:
+
+```bash
+arnold iterate 1 "Add WebSocket support" --dry-run
+arnold iterate 1 "Add WebSocket support" --dry-run --json
+```
+
+**Iterating completed runs** — When you iterate a completed run, Arnold forks it into a new pipeline run with the updated spec. The original run is preserved unchanged:
+
+```bash
+arnold iterate 1 "Switch from REST to GraphQL"
+# => New pipeline run created! New run ID: 2, Forked from: #1
+arnold resume 2
+```
 
 ### Exporting Tasks
 
@@ -448,6 +488,19 @@ run.status  # => "paused"
 # Review the spec and tasks, then continue:
 result = orchestrator.resume(pipeline_run: run)
 
+# User-initiated spec iteration (paused/failed runs)
+run = orchestrator.call(nl_input: "Build a chat app", stop_after: :spec)
+orchestrator.iterate_spec!(pipeline_run: run, change_request: "Add typing indicators")
+result = orchestrator.resume(pipeline_run: run)
+
+# Dry run — preview deltas without applying
+preview = orchestrator.iterate_spec_dry_run!(pipeline_run: run, change_request: "Remove admin panel")
+preview[:deltas]  # => [{"operation"=>"removed", "section"=>"Admin", ...}]
+
+# Fork from completed run — creates a new run with iterated spec
+result = orchestrator.fork!(pipeline_run: completed_run, change_request: "Switch to GraphQL")
+result[:pipeline_run].id  # => new run ID
+
 # Async (via ActiveJob)
 run = ArnoldPipeline::PipelineRun.create!(nl_input: "Build a dashboard app")
 ArnoldPipeline::PipelineJob.perform_later(run.id)
@@ -595,6 +648,7 @@ The orchestrator inspects the pipeline run's existing data to determine where to
 |-------|-------------|
 | No specification | Spec generation |
 | Specification exists, no tasks | Task breakdown |
+| All tasks superseded (after `iterate`) | Task breakdown |
 | Tasks exist, no external IDs | Task dispatch |
 | Tasks have external IDs, incomplete results | Result collection |
 | All tasks have results | Analysis |
@@ -934,6 +988,7 @@ lib/arnold_pipeline/
     analyzer.rb            # Post-execution analysis: diffs vs spec, confidence scoring
     executor.rb            # Dispatches tasks to execution provider, collects results
     spec_generator.rb      # NL input → structured specification
+    spec_iterator.rb       # User change request → structured spec deltas
     task_breaker.rb        # Specification → ordered task list (JSON)
     tier_gate_check.rb     # Per-tier diff validation, corrective task generation
   library/
@@ -955,6 +1010,7 @@ lib/arnold_pipeline/
   analysis_loop.rb         # Iteration logic: analyze → decide → iterate or done
   cli.rb                   # Thor-based CLI (arnold command)
   configuration.rb         # Config object with defaults and validation
+  delta_merger.rb          # Shared delta merge logic (OpenSpec → append fallback)
   diff_summarizer.rb       # Truncates large diffs to fit LLM context
   engine.rb                # Rails engine mount point
   openspec_bridge.rb       # OpenSpec CLI workspace lifecycle and merge
@@ -979,17 +1035,18 @@ app/models/arnold_pipeline/
 
 ### Key Classes
 
-- **Orchestrator** — The pipeline driver. `call(nl_input:, stop_after:)` for new runs, `resume(pipeline_run:, stop_after:)` for continuation. Owns the state machine and delegates to agents.
-- **AnalysisLoop** — Extracted iteration logic. Runs the analyzer, interprets the decision (`done`, `iterate_tasks`, `iterate_spec`), and drives the next cycle.
+- **Orchestrator** — The pipeline driver. `call(nl_input:, stop_after:)` for new runs, `resume(pipeline_run:, stop_after:)` for continuation, `iterate_spec!(pipeline_run:, change_request:)` for user-initiated spec refinement, `fork!(pipeline_run:, change_request:)` for iterating completed runs. Owns the state machine and delegates to agents.
+- **AnalysisLoop** — Extracted iteration logic. Runs the analyzer, interprets the decision (`done`, `iterate_tasks`, `iterate_spec`), and drives the next cycle. Includes a version skew guard that suppresses `iterate_spec` when the spec has been user-iterated past the task generation version.
+- **DeltaMerger** — Shared service for applying structured deltas to specs. Used by both AnalysisLoop (analysis-driven iteration) and Orchestrator (user-initiated iteration). Handles the merge chain: OpenSpec CLI merge, structured append fallback, delta persistence, and revision snapshots.
 - **TierExecutionEngine** — Manages tier-by-tier execution: publish tasks for a tier, await results, run gate check, merge, advance to next tier.
-- **Agents** — Stateless service objects with a `call(**kwargs)` interface. Each agent builds an LLM prompt, makes an API call, and parses the response.
+- **Agents** — Stateless service objects with a `call(**kwargs)` interface. Each agent builds an LLM prompt, makes an API call, and parses the response. Includes SpecIterator for user-initiated spec changes.
 - **Providers** — Pluggable backends. LLM providers (Anthropic, OpenAI) handle API calls. Execution providers (GitHub, Claude Code, Null) handle task dispatch and result collection. Both use a `build` factory pattern.
 - **Library::Manager** — Loads personas, recipes, and domain types from YAML files. Matches input descriptions via keyword overlap with generic fallbacks.
 
 ### Testing
 
 ```bash
-bundle exec rails test              # Full suite (700+ tests)
+bundle exec rails test              # Full suite (1075+ tests)
 bundle exec rails test test/agents/ # Specific directory
 bundle exec rails test test/agents/analyzer_test.rb:42  # Specific line
 ```

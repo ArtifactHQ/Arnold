@@ -29,8 +29,14 @@ module ArnoldPipeline
     end
 
     test "has all expected status values" do
-      expected = %w[pending in_progress completed failed]
+      expected = %w[pending in_progress completed failed superseded]
       assert_equal expected, Task.statuses.keys
+    end
+
+    test "accepts superseded status" do
+      task = @run.tasks.create!(title: "Setup DB", position: 0, status: :superseded)
+      assert task.superseded?
+      assert_equal "superseded", task.status
     end
 
     test "ordered scope sorts by position" do

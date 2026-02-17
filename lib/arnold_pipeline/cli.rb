@@ -140,6 +140,66 @@ module ArnoldPipeline
       end
     end
 
+    desc "iterate ID CHANGE_REQUEST", "Iterate on a pipeline run's specification with a natural language change"
+    option :config, type: :string, desc: "Path to YAML config file"
+    option :provider, type: :string, desc: "LLM provider (anthropic or openai)"
+    option :model, type: :string, desc: "LLM model name"
+    option :dry_run, type: :boolean, default: false, desc: "Show proposed deltas without applying"
+    option :json, type: :boolean, default: false, desc: "Output delta details as JSON"
+    option :verbose, type: :boolean, default: false, desc: "Show full before/after for modified requirements"
+    option :yes, type: :boolean, default: false, aliases: ["-y"], desc: "Skip confirmation prompt"
+    def iterate(id, change_request)
+      if id == "--help" || id == "-h"
+        invoke :help, ["iterate"]
+        return
+      end
+      with_error_handling do
+        setup_standalone!
+        load_config!(options)
+        require "arnold_pipeline/orchestrator"
+        require "arnold_pipeline/delta_presenter"
+
+        run_record = PipelineRun.find_by(id:)
+        unless run_record
+          say_error "Pipeline run ##{id} not found", :red
+          raise SystemExit.new(1)
+        end
+
+        if change_request.strip.empty?
+          say_error "Change request cannot be empty", :red
+          raise SystemExit.new(1)
+        end
+
+        logger = build_logger(options[:verbose])
+        ArnoldPipeline.configuration.verbose_event_logging = true if options[:verbose]
+        orchestrator = Orchestrator.new(logger:)
+
+        if run_record.completed?
+          handle_iterate_fork!(orchestrator, run_record, change_request)
+          return
+        end
+
+        if options[:dry_run]
+          handle_iterate_dry_run!(orchestrator, run_record, change_request)
+          return
+        end
+
+        quiet_say "Iterating specification for pipeline run ##{id}...", :green
+        result = orchestrator.iterate_spec!(pipeline_run: run_record, change_request:)
+
+        quiet_say "\nSpecification updated to v#{result[:spec_version]}", :green
+        quiet_say "  Deltas applied: #{result[:deltas][:delta_count]}"
+        quiet_say "  Merge strategy: #{result[:deltas][:merge_strategy]}"
+
+        superseded_count = run_record.tasks.where(status: :superseded).count
+        if superseded_count > 0
+          quiet_say "  Tasks superseded: #{superseded_count}"
+        end
+
+        quiet_say "\nRun 'arnold resume #{id}' to continue the pipeline with the updated spec.", :yellow
+      end
+    end
+
     desc "status ID", "Show the status of a pipeline run"
     option :json, type: :boolean, default: false, desc: "Output as JSON"
     def status(id)
@@ -476,6 +536,35 @@ module ArnoldPipeline
       say(message, *args) unless options[:quiet]
     end
 
+    def handle_iterate_dry_run!(orchestrator, run_record, change_request)
+      result = orchestrator.iterate_spec_dry_run!(pipeline_run: run_record, change_request:)
+
+      presenter = DeltaPresenter.new(
+        result[:deltas],
+        from_version: result[:current_version],
+        to_version: result[:current_version] + 1
+      )
+
+      if options[:json]
+        say JSON.pretty_generate(presenter.to_json_data)
+      else
+        say presenter.to_s
+        say "\nNo changes applied (dry run).", :yellow
+      end
+    end
+
+    def handle_iterate_fork!(orchestrator, run_record, change_request)
+      quiet_say "Pipeline run ##{run_record.id} is completed. Forking into new run...", :green
+      result = orchestrator.fork!(pipeline_run: run_record, change_request:)
+      new_run = result[:pipeline_run]
+
+      quiet_say "\nNew pipeline run created!", :green
+      quiet_say "  New run ID: #{new_run.id}"
+      quiet_say "  Forked from: ##{run_record.id}"
+      quiet_say "  Spec version: #{new_run.specification.version}"
+      quiet_say "\nRun 'arnold resume #{new_run.id}' to continue.", :yellow
+    end
+
     def task_to_hash(task)
       {
         id: task.id,
@@ -494,7 +583,8 @@ module ArnoldPipeline
 
     def format_task(task)
       lines = []
-      lines << "## [#{task.position}] #{task.title}"
+      label = task.superseded? ? " [superseded]" : ""
+      lines << "## [#{task.position}] #{task.title}#{label}"
       lines << "Tier: #{task.tier} | Priority: #{task.priority} | Status: #{task.status}"
       lines << "Labels: #{task.labels.join(', ')}" if task.labels.any?
       lines << "Depends on: #{task.depends_on.join(', ')}" if task.depends_on.any?

@@ -19,6 +19,8 @@ module ArnoldPipeline
         "corrective_tasks" => []
       })
 
+      @spec_iterator = stub("spec_iterator")
+
       @orchestrator = Orchestrator.new(
         library_manager: @library_manager,
         spec_generator: @spec_generator,
@@ -26,6 +28,7 @@ module ArnoldPipeline
         executor: @executor,
         analyzer: @analyzer,
         tier_gate_check: @tier_gate_check,
+        spec_iterator: @spec_iterator,
         logger: Logger.new(File::NULL)
       )
 
@@ -346,6 +349,350 @@ module ArnoldPipeline
       @orchestrator.call(nl_input: "Build a todo app", stop_after: :tasks)
     end
 
+    # --- iterate_spec! tests ---
+
+    test "iterate_spec! calls agent and applies deltas on paused run" do
+      run = create_paused_run_with_spec_and_tasks
+
+      spec_iterator = stub("spec_iterator")
+      delta_merger = stub("delta_merger")
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+
+      spec_iterator.expects(:call).with(
+        spec_content: "# Original Spec",
+        change_request: "Add dark mode"
+      ).returns(sample_agent_result)
+
+      # DeltaMerger is created internally, so stub via the orchestrator's delta_merger
+      orchestrator.delta_merger.expects(:apply!).with(
+        spec: run.specification,
+        raw_deltas: sample_deltas,
+        change_source: "user_iterate",
+        pipeline_run: run
+      ).returns({ merge_strategy: "append", delta_count: 1, new_version: 2 })
+
+      result = orchestrator.iterate_spec!(pipeline_run: run, change_request: "Add dark mode")
+
+      assert_equal run, result[:pipeline_run]
+      assert_equal 1, result[:deltas][:delta_count]
+    end
+
+    test "iterate_spec! marks existing tasks as superseded" do
+      run = create_paused_run_with_spec_and_tasks
+
+      spec_iterator = stub("spec_iterator")
+      spec_iterator.stubs(:call).returns(sample_agent_result)
+
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+      orchestrator.delta_merger.stubs(:apply!).returns({ merge_strategy: "append", delta_count: 1, new_version: 2 })
+
+      orchestrator.iterate_spec!(pipeline_run: run, change_request: "Add dark mode")
+
+      run.tasks.reload.each do |task|
+        assert_equal "superseded", task.status, "Task '#{task.title}' should be superseded"
+      end
+    end
+
+    test "iterate_spec! creates spec_delta_merged event" do
+      run = create_paused_run_with_spec_and_tasks
+
+      spec_iterator = stub("spec_iterator")
+      spec_iterator.stubs(:call).returns(sample_agent_result)
+
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+      orchestrator.delta_merger.stubs(:apply!).returns({ merge_strategy: "append", delta_count: 1, new_version: 2 })
+
+      orchestrator.iterate_spec!(pipeline_run: run, change_request: "Add dark mode")
+
+      event = run.pipeline_events.find_by(event_type: :spec_delta_merged)
+      assert_not_nil event, "Expected spec_delta_merged event to be recorded"
+    end
+
+    test "iterate_spec! raises when no deltas generated" do
+      run = create_paused_run_with_spec_and_tasks
+
+      spec_iterator = stub("spec_iterator")
+      spec_iterator.stubs(:call).returns({ "summary" => "No changes", "deltas" => [] })
+
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+
+      error = assert_raises(ArgumentError) do
+        orchestrator.iterate_spec!(pipeline_run: run, change_request: "Nothing")
+      end
+      assert_match(/No deltas generated/, error.message)
+    end
+
+    test "iterate_spec! raises for executing pipeline run" do
+      run = PipelineRun.create!(nl_input: "test", status: :executing)
+
+      orchestrator = build_iterate_orchestrator
+
+      error = assert_raises(ArgumentError) do
+        orchestrator.iterate_spec!(pipeline_run: run, change_request: "Change something")
+      end
+      assert_match(/Cannot iterate a executing pipeline run/, error.message)
+    end
+
+    test "iterate_spec! raises for pending pipeline run" do
+      run = PipelineRun.create!(nl_input: "test", status: :pending)
+
+      orchestrator = build_iterate_orchestrator
+
+      error = assert_raises(ArgumentError) do
+        orchestrator.iterate_spec!(pipeline_run: run, change_request: "Change something")
+      end
+      assert_match(/Cannot iterate a pending pipeline run/, error.message)
+    end
+
+    test "iterate_spec! allows failed pipeline run" do
+      run = PipelineRun.create!(nl_input: "test", status: :failed)
+      run.create_specification!(content: "# Spec", version: 1)
+
+      spec_iterator = stub("spec_iterator")
+      spec_iterator.stubs(:call).returns(sample_agent_result)
+
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+      orchestrator.delta_merger.stubs(:apply!).returns({ merge_strategy: "append", delta_count: 1, new_version: 2 })
+
+      result = orchestrator.iterate_spec!(pipeline_run: run, change_request: "Fix it")
+      assert_equal run.id, result[:pipeline_run].id
+    end
+
+    test "iterate_spec! allows completed pipeline run" do
+      run = PipelineRun.create!(nl_input: "test", status: :completed)
+      run.create_specification!(content: "# Spec", version: 1)
+
+      spec_iterator = stub("spec_iterator")
+      spec_iterator.stubs(:call).returns(sample_agent_result)
+
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+      orchestrator.delta_merger.stubs(:apply!).returns({ merge_strategy: "append", delta_count: 1, new_version: 2 })
+
+      result = orchestrator.iterate_spec!(pipeline_run: run, change_request: "Improve it")
+      assert_equal run.id, result[:pipeline_run].id
+    end
+
+    test "iterate_spec! raises when pipeline run has no specification" do
+      run = PipelineRun.create!(nl_input: "test", status: :paused)
+
+      orchestrator = build_iterate_orchestrator
+
+      error = assert_raises(ArgumentError) do
+        orchestrator.iterate_spec!(pipeline_run: run, change_request: "Change something")
+      end
+      assert_match(/has no specification/, error.message)
+    end
+
+    # --- iterate_spec_dry_run! tests ---
+
+    test "iterate_spec_dry_run! returns deltas without modifying DB" do
+      run = create_paused_run_with_spec_and_tasks
+      original_task_count = run.tasks.where.not(status: :superseded).count
+
+      spec_iterator = stub("spec_iterator")
+      spec_iterator.expects(:call).returns(sample_agent_result)
+
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+
+      result = orchestrator.iterate_spec_dry_run!(pipeline_run: run, change_request: "Add dark mode")
+
+      assert_equal sample_deltas, result[:deltas]
+      assert_equal "Added dark mode support", result[:summary]
+      assert_equal 1, result[:current_version]
+
+      # Verify nothing changed in DB
+      assert_equal original_task_count, run.tasks.reload.where.not(status: :superseded).count
+      assert_equal 1, run.specification.reload.version
+    end
+
+    test "iterate_spec_dry_run! raises for invalid state" do
+      run = PipelineRun.create!(nl_input: "test", status: :analyzing)
+
+      orchestrator = build_iterate_orchestrator
+
+      error = assert_raises(ArgumentError) do
+        orchestrator.iterate_spec_dry_run!(pipeline_run: run, change_request: "Change")
+      end
+      assert_match(/Cannot iterate/, error.message)
+    end
+
+    test "iterate_spec_dry_run! raises when no deltas generated" do
+      run = PipelineRun.create!(nl_input: "test", status: :paused)
+      run.create_specification!(content: "# Spec", version: 1)
+
+      spec_iterator = stub("spec_iterator")
+      spec_iterator.stubs(:call).returns({ "summary" => "No changes", "deltas" => [] })
+
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+
+      error = assert_raises(ArgumentError) do
+        orchestrator.iterate_spec_dry_run!(pipeline_run: run, change_request: "Nothing")
+      end
+      assert_match(/No deltas generated/, error.message)
+    end
+
+    # --- fork! tests ---
+
+    test "fork! creates new PipelineRun with forked_from_run_id in metadata" do
+      run = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run.create_specification!(content: "# Original Spec", structured_data: { "features" => ["crud"] }, version: 2)
+
+      spec_iterator = stub("spec_iterator")
+      spec_iterator.stubs(:call).returns(sample_agent_result)
+
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+      orchestrator.delta_merger.stubs(:apply!).returns({ merge_strategy: "append", delta_count: 1, new_version: 3 })
+
+      result = orchestrator.fork!(pipeline_run: run, change_request: "Add dark mode")
+
+      new_run = result[:pipeline_run]
+      assert_not_equal run.id, new_run.id
+      assert_equal run.id, new_run.metadata["forked_from_run_id"]
+      assert_equal "Add dark mode", new_run.metadata["fork_change_request"]
+      assert_equal run.nl_input, new_run.nl_input
+    end
+
+    test "fork! copies spec content to new run" do
+      run = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run.create_specification!(content: "# Original Spec", structured_data: { "features" => ["crud"] }, version: 2)
+
+      spec_iterator = stub("spec_iterator")
+      spec_iterator.stubs(:call).returns(sample_agent_result)
+
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+      orchestrator.delta_merger.stubs(:apply!).returns({ merge_strategy: "append", delta_count: 1, new_version: 3 })
+
+      result = orchestrator.fork!(pipeline_run: run, change_request: "Add dark mode")
+
+      new_spec = result[:pipeline_run].specification
+      assert_not_nil new_spec
+      assert_equal run.specification.structured_data, new_spec.structured_data
+    end
+
+    test "fork! applies deltas via delta_merger with user_iterate change source" do
+      run = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run.create_specification!(content: "# Original Spec", version: 1)
+
+      spec_iterator = stub("spec_iterator")
+      spec_iterator.stubs(:call).returns(sample_agent_result)
+
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+      orchestrator.delta_merger.expects(:apply!).with { |kwargs|
+        kwargs[:change_source] == "user_iterate" &&
+          kwargs[:raw_deltas] == sample_deltas &&
+          kwargs[:spec].pipeline_run_id != run.id
+      }.returns({ merge_strategy: "append", delta_count: 1, new_version: 2 })
+
+      orchestrator.fork!(pipeline_run: run, change_request: "Add dark mode")
+    end
+
+    test "fork! sets new run to paused status at spec checkpoint" do
+      run = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run.create_specification!(content: "# Original Spec", version: 1)
+
+      spec_iterator = stub("spec_iterator")
+      spec_iterator.stubs(:call).returns(sample_agent_result)
+
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+      orchestrator.delta_merger.stubs(:apply!).returns({ merge_strategy: "append", delta_count: 1, new_version: 2 })
+
+      result = orchestrator.fork!(pipeline_run: run, change_request: "Add dark mode")
+
+      new_run = result[:pipeline_run]
+      assert new_run.paused?, "New run should be paused"
+      assert_equal "spec", new_run.metadata["paused_at"]
+    end
+
+    test "fork! returns deltas array" do
+      run = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run.create_specification!(content: "# Original Spec", version: 1)
+
+      spec_iterator = stub("spec_iterator")
+      spec_iterator.stubs(:call).returns(sample_agent_result)
+
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+      orchestrator.delta_merger.stubs(:apply!).returns({ merge_strategy: "append", delta_count: 1, new_version: 2 })
+
+      result = orchestrator.fork!(pipeline_run: run, change_request: "Add dark mode")
+
+      assert_equal sample_deltas, result[:deltas]
+    end
+
+    test "fork! raises for paused pipeline run" do
+      run = PipelineRun.create!(nl_input: "test", status: :paused)
+
+      orchestrator = build_iterate_orchestrator
+
+      error = assert_raises(ArgumentError) do
+        orchestrator.fork!(pipeline_run: run, change_request: "Change")
+      end
+      assert_match(/Can only fork completed or max_iterations_reached/, error.message)
+    end
+
+    test "fork! raises for failed pipeline run" do
+      run = PipelineRun.create!(nl_input: "test", status: :failed)
+
+      orchestrator = build_iterate_orchestrator
+
+      error = assert_raises(ArgumentError) do
+        orchestrator.fork!(pipeline_run: run, change_request: "Change")
+      end
+      assert_match(/Can only fork completed or max_iterations_reached/, error.message)
+    end
+
+    test "fork! raises for executing pipeline run" do
+      run = PipelineRun.create!(nl_input: "test", status: :executing)
+
+      orchestrator = build_iterate_orchestrator
+
+      error = assert_raises(ArgumentError) do
+        orchestrator.fork!(pipeline_run: run, change_request: "Change")
+      end
+      assert_match(/Can only fork completed or max_iterations_reached/, error.message)
+    end
+
+    test "fork! allows max_iterations_reached pipeline run" do
+      run = PipelineRun.create!(nl_input: "Build a todo app", status: :max_iterations_reached)
+      run.create_specification!(content: "# Spec", version: 3)
+
+      spec_iterator = stub("spec_iterator")
+      spec_iterator.stubs(:call).returns(sample_agent_result)
+
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+      orchestrator.delta_merger.stubs(:apply!).returns({ merge_strategy: "append", delta_count: 1, new_version: 4 })
+
+      result = orchestrator.fork!(pipeline_run: run, change_request: "Add dark mode")
+
+      assert result[:pipeline_run].paused?
+      assert_equal run.id, result[:pipeline_run].metadata["forked_from_run_id"]
+    end
+
+    test "fork! raises when pipeline run has no specification" do
+      run = PipelineRun.create!(nl_input: "test", status: :completed)
+
+      orchestrator = build_iterate_orchestrator
+
+      error = assert_raises(ArgumentError) do
+        orchestrator.fork!(pipeline_run: run, change_request: "Change")
+      end
+      assert_match(/has no specification/, error.message)
+    end
+
+    test "fork! raises when no deltas generated" do
+      run = PipelineRun.create!(nl_input: "test", status: :completed)
+      run.create_specification!(content: "# Spec", version: 1)
+
+      spec_iterator = stub("spec_iterator")
+      spec_iterator.stubs(:call).returns({ "summary" => "No changes", "deltas" => [] })
+
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+
+      error = assert_raises(ArgumentError) do
+        orchestrator.fork!(pipeline_run: run, change_request: "Nothing")
+      end
+      assert_match(/No deltas generated/, error.message)
+    end
+
     private
 
     def stub_spec_generation!(recipe_type: nil, supporting_recipe_types: nil)
@@ -379,6 +726,46 @@ module ArnoldPipeline
         "confidence" => confidence,
         "reasoning" => "Analysis reasoning for #{decision}",
         "corrective_data" => corrective_data
+      }
+    end
+
+    def build_iterate_orchestrator(spec_iterator: nil)
+      Orchestrator.new(
+        library_manager: @library_manager,
+        spec_generator: @spec_generator,
+        task_breaker: @task_breaker,
+        executor: @executor,
+        analyzer: @analyzer,
+        tier_gate_check: @tier_gate_check,
+        spec_iterator: spec_iterator || stub("spec_iterator"),
+        logger: Logger.new(File::NULL)
+      )
+    end
+
+    def create_paused_run_with_spec_and_tasks
+      run = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
+      run.create_specification!(content: "# Original Spec", version: 1)
+      run.tasks.create!(title: "Setup DB", description: "Create schema", position: 0, status: :pending)
+      run.tasks.create!(title: "Build API", description: "REST endpoints", position: 1, status: :completed)
+      run
+    end
+
+    def sample_deltas
+      [
+        {
+          "operation" => "added",
+          "section" => "Features",
+          "requirement" => "Dark Mode",
+          "content" => "### Requirement: Dark Mode [REQ-UI-001]\nApp SHALL support dark mode.\n\n#### Scenario: Toggle Dark Mode\n- GIVEN a user in settings\n- WHEN they toggle dark mode\n- THEN the UI switches to dark theme",
+          "rationale" => "User requested dark mode support"
+        }
+      ]
+    end
+
+    def sample_agent_result
+      {
+        "summary" => "Added dark mode support",
+        "deltas" => sample_deltas
       }
     end
   end

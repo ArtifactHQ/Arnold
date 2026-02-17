@@ -1,9 +1,10 @@
 require "arnold_pipeline/openspec_bridge"
 require "arnold_pipeline/diff_summarizer"
+require "arnold_pipeline/delta_merger"
 
 module ArnoldPipeline
   class AnalysisLoop
-    attr_reader :analyzer, :task_breaker, :library_manager, :tier_execution_engine, :logger, :event_recorder
+    attr_reader :analyzer, :task_breaker, :library_manager, :tier_execution_engine, :logger, :event_recorder, :delta_merger
 
     def initialize(analyzer:, task_breaker:, library_manager:, tier_execution_engine:, logger: Logger.new($stdout, level: Logger::INFO), event_recorder: nil)
       @analyzer = analyzer
@@ -12,6 +13,7 @@ module ArnoldPipeline
       @tier_execution_engine = tier_execution_engine
       @logger = logger
       @event_recorder = event_recorder
+      @delta_merger = DeltaMerger.new(logger:)
     end
 
     def run!(pipeline_run)
@@ -23,6 +25,7 @@ module ArnoldPipeline
         iteration_number += 1
         analysis = analyze!(pipeline_run, iteration_number)
         analysis = maybe_promote_to_done(analysis, iteration_number)
+        analysis = suppress_iterate_spec_if_stale(analysis, pipeline_run, iteration_number)
 
         case analysis["decision"]
         when "done"
@@ -148,6 +151,31 @@ module ArnoldPipeline
       analysis.merge("decision" => "done", "promoted_from" => "iterate_tasks")
     end
 
+    def suppress_iterate_spec_if_stale(analysis, pipeline_run, iteration_number)
+      return analysis unless analysis["decision"] == "iterate_spec"
+
+      tasks_spec_version = (pipeline_run.metadata || {})["tasks_generated_at_spec_version"]
+      current_spec_version = pipeline_run.specification&.version
+
+      return analysis unless tasks_spec_version && current_spec_version
+      return analysis unless current_spec_version > tasks_spec_version
+
+      logger.info { "[Arnold] Suppressing iterate_spec — spec v#{current_spec_version} is ahead of tasks generated at v#{tasks_spec_version}" }
+      event_recorder&.record(
+        event_type: :iteration_decision, stage: "iteration",
+        summary: {
+          decision: "done",
+          suppressed_from: "iterate_spec",
+          reason: "spec_version_skew",
+          tasks_spec_version: tasks_spec_version,
+          current_spec_version: current_spec_version
+        },
+        iteration_number: iteration_number
+      )
+
+      analysis.merge("decision" => "done", "suppressed_from" => "iterate_spec")
+    end
+
     def handle_iterate_tasks!(pipeline_run, analysis)
       logger.info { "[Arnold] Iterating tasks based on analysis feedback..." }
 
@@ -182,22 +210,14 @@ module ArnoldPipeline
       raw_deltas = analysis.dig("corrective_data", "deltas")
 
       if raw_deltas.present?
-        persist_deltas!(spec, pipeline_run, raw_deltas)
-        merge_deltas!(spec, raw_deltas, pipeline_run)
-        snapshot_revision!(spec, raw_deltas, "iterate_spec")
-
-        merge_strategy = if ArnoldPipeline.configuration.openspec_enabled
-          "openspec"
-        else
-          "append"
-        end
+        iteration = pipeline_run.iterations.order(:number).last
+        result = delta_merger.apply!(
+          spec:, raw_deltas:, change_source: "iterate_spec",
+          pipeline_run:, iteration:
+        )
         event_recorder&.record(
           event_type: :spec_delta_merged, stage: "iteration",
-          summary: {
-            merge_strategy: merge_strategy,
-            delta_count: raw_deltas.size,
-            new_version: spec.reload.version
-          }
+          summary: result
         )
       else
         legacy_append!(spec, analysis)
@@ -208,82 +228,10 @@ module ArnoldPipeline
       end
     end
 
-    def merge_deltas!(spec, deltas, pipeline_run)
-      if ArnoldPipeline.configuration.openspec_enabled
-        merged = openspec_merge(spec, deltas, pipeline_run)
-        return if merged
-      end
-      append_deltas!(spec, deltas)
-    end
-
-    def openspec_merge(spec, deltas, pipeline_run)
-      iteration = pipeline_run.iterations.order(:number).last
-
-      OpenspecBridge.with_workspace(logger:) do |bridge|
-        bridge.write_spec!(spec)
-        change_name = "iteration-#{iteration.number}"
-        merged_content = bridge.write_delta_and_merge!(
-          change_name:, deltas:
-        )
-
-        if merged_content
-          spec.update!(content: merged_content, version: spec.version + 1)
-          true
-        end
-      end
-    rescue => e
-      logger.warn { "[Arnold] OpenSpec merge error: #{e.message}" }
-      nil
-    end
-
-    def append_deltas!(spec, deltas)
-      additions = deltas.select { |d| d["operation"] == "added" }.map { |d| d["content"] || d["after_content"] }
-      modifications = deltas.select { |d| d["operation"] == "modified" }.map { |d| d["after_content"] }
-      removals = deltas.select { |d| d["operation"] == "removed" }.map { |d| "REMOVED: #{d['requirement']} — #{d['rationale']}" }
-
-      clarifications = (additions + modifications + removals).compact.join("\n\n")
-      updated_content = "#{spec.content}\n\n## Spec Iteration\n#{clarifications}"
-      spec.update!(content: updated_content, version: spec.version + 1)
-    end
-
     def legacy_append!(spec, analysis)
       spec_changes = analysis.dig("corrective_data", "spec_changes") || ""
       updated_content = "#{spec.content}\n\n## Clarifications (Iteration)\n#{spec_changes}"
       spec.update!(content: updated_content, version: spec.version + 1)
-    end
-
-    def persist_deltas!(spec, pipeline_run, raw_deltas)
-      iteration = pipeline_run.iterations.order(:number).last
-      raw_deltas.each do |d|
-        spec.spec_deltas.create!(
-          iteration:,
-          operation: d["operation"],
-          section: d["section"],
-          requirement: d["requirement"],
-          before_content: d["before_content"],
-          after_content: d["after_content"] || d["content"],
-          rationale: d["rationale"]
-        )
-      end
-    end
-
-    def snapshot_revision!(spec, raw_deltas, change_source)
-      summary = raw_deltas.map do |d|
-        op = d["operation"]&.upcase
-        req = d["requirement"] || "new requirement"
-        section = d["section"]
-        "#{op}: #{section} > #{req}"
-      end
-
-      spec.spec_revisions.create!(
-        version: spec.version,
-        content: spec.content,
-        structured_data: spec.structured_data,
-        change_source:,
-        delta_summary: summary
-      )
-    rescue => e
-      logger.warn { "[Arnold] Failed to snapshot revision: #{e.message}" }
     end
 
     def break_tasks!(pipeline_run)
@@ -307,6 +255,10 @@ module ArnoldPipeline
       end
 
       TierCalculator.call(pipeline_run.tasks.reload)
+
+      pipeline_run.update!(
+        metadata: (pipeline_run.metadata || {}).merge("tasks_generated_at_spec_version" => pipeline_run.specification.version)
+      )
     end
 
     def build_spec_test_progress_summary(pipeline_run)

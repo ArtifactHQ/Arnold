@@ -19,6 +19,8 @@ module ArnoldPipeline
         "corrective_tasks" => []
       })
 
+      @spec_iterator = stub("spec_iterator")
+
       @orchestrator = Orchestrator.new(
         library_manager: @library_manager,
         spec_generator: @spec_generator,
@@ -26,6 +28,7 @@ module ArnoldPipeline
         executor: @executor,
         analyzer: @analyzer,
         tier_gate_check: @tier_gate_check,
+        spec_iterator: @spec_iterator,
         logger: Logger.new(File::NULL)
       )
 

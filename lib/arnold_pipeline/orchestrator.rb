@@ -4,11 +4,13 @@ require "arnold_pipeline/agents/task_breaker"
 require "arnold_pipeline/agents/executor"
 require "arnold_pipeline/agents/analyzer"
 require "arnold_pipeline/agents/tier_gate_check"
+require "arnold_pipeline/agents/spec_iterator"
 require "arnold_pipeline/tier_calculator"
 require "arnold_pipeline/tier_execution_engine"
 require "arnold_pipeline/analysis_loop"
 require "arnold_pipeline/resume_inferrer"
 require "arnold_pipeline/pipeline_event_recorder"
+require "arnold_pipeline/delta_merger"
 require "open3"
 
 module ArnoldPipeline
@@ -17,7 +19,7 @@ module ArnoldPipeline
     STAGE_CHECKPOINTS = { generate_spec: :spec, break_tasks: :tasks, execute: :executed }.freeze
 
     attr_reader :library_manager, :spec_generator, :task_breaker, :executor, :analyzer, :tier_gate_check, :logger,
-                :tier_execution_engine
+                :tier_execution_engine, :spec_iterator, :delta_merger
 
     def initialize(
       library_manager: nil,
@@ -26,6 +28,7 @@ module ArnoldPipeline
       executor: nil,
       analyzer: nil,
       tier_gate_check: nil,
+      spec_iterator: nil,
       logger: nil
     )
       @logger = logger || Logger.new($stdout, level: Logger::INFO)
@@ -35,6 +38,8 @@ module ArnoldPipeline
       @executor = executor || Agents::Executor.new(logger: @logger)
       @analyzer = analyzer || Agents::Analyzer.new(logger: @logger)
       @tier_gate_check = tier_gate_check || Agents::TierGateCheck.new(logger: @logger)
+      @spec_iterator = spec_iterator || Agents::SpecIterator.new(logger: @logger)
+      @delta_merger = DeltaMerger.new(logger: @logger)
       @tier_execution_engine = TierExecutionEngine.new(executor: @executor, tier_gate_check: @tier_gate_check, logger: @logger)
     end
 
@@ -54,7 +59,115 @@ module ArnoldPipeline
       run_pipeline!(pipeline_run, from: stage, stop_after:)
     end
 
+    def iterate_spec!(pipeline_run:, change_request:)
+      validate_iterable!(pipeline_run)
+
+      spec = pipeline_run.specification
+      raise ArgumentError, "Pipeline run ##{pipeline_run.id} has no specification" unless spec
+
+      @event_recorder = PipelineEventRecorder.new(pipeline_run:)
+
+      result = @event_recorder.timed(
+        event_type: :spec_delta_merged, stage: "iteration",
+        summary: ->(r) { r || {} }
+      ) do
+        agent_result = spec_iterator.call(
+          spec_content: spec.content,
+          change_request:
+        )
+
+        raw_deltas = agent_result["deltas"]
+        raise ArgumentError, "No deltas generated from change request" if raw_deltas.blank?
+
+        # Mark existing tasks as superseded
+        pipeline_run.tasks.where.not(status: :superseded).update_all(status: :superseded) if pipeline_run.tasks.any?
+
+        delta_merger.apply!(
+          spec:, raw_deltas:, change_source: "user_iterate", pipeline_run:
+        )
+      end
+
+      pipeline_run.reload
+      { pipeline_run:, deltas: result, spec_version: pipeline_run.specification.version }
+    end
+
+    def iterate_spec_dry_run!(pipeline_run:, change_request:)
+      validate_iterable!(pipeline_run)
+
+      spec = pipeline_run.specification
+      raise ArgumentError, "Pipeline run ##{pipeline_run.id} has no specification" unless spec
+
+      agent_result = spec_iterator.call(
+        spec_content: spec.content,
+        change_request:
+      )
+
+      raw_deltas = agent_result["deltas"]
+      raise ArgumentError, "No deltas generated from change request" if raw_deltas.blank?
+
+      { deltas: raw_deltas, summary: agent_result["summary"], current_version: spec.version }
+    end
+
+    def fork!(pipeline_run:, change_request:)
+      unless pipeline_run.completed? || pipeline_run.max_iterations_reached?
+        raise ArgumentError, "Can only fork completed or max_iterations_reached runs"
+      end
+
+      spec = pipeline_run.specification
+      raise ArgumentError, "Pipeline run ##{pipeline_run.id} has no specification" unless spec
+
+      # Generate deltas against current spec
+      agent_result = spec_iterator.call(
+        spec_content: spec.content,
+        change_request:
+      )
+      raw_deltas = agent_result["deltas"]
+      raise ArgumentError, "No deltas generated from change request" if raw_deltas.blank?
+
+      # Create new pipeline run
+      new_run = PipelineRun.create!(
+        nl_input: pipeline_run.nl_input,
+        status: :pending,
+        metadata: {
+          "forked_from_run_id" => pipeline_run.id,
+          "fork_change_request" => change_request
+        }
+      )
+
+      # Copy spec to new run and apply deltas
+      new_spec = new_run.create_specification!(
+        content: spec.content,
+        structured_data: spec.structured_data,
+        version: spec.version
+      )
+
+      # Transition through generating_spec (spec was "generated" via fork + iteration)
+      new_run.update!(status: :generating_spec)
+
+      @event_recorder = PipelineEventRecorder.new(pipeline_run: new_run)
+      delta_merger.apply!(
+        spec: new_spec, raw_deltas:, change_source: "user_iterate", pipeline_run: new_run
+      )
+
+      # Pause at spec checkpoint so resume picks it up
+      new_run.update!(
+        status: :paused,
+        metadata: new_run.metadata.merge("paused_at" => "spec")
+      )
+
+      { pipeline_run: new_run.reload, deltas: raw_deltas }
+    end
+
     private
+
+    ITERABLE_STATES = %w[paused failed completed].freeze
+
+    def validate_iterable!(pipeline_run)
+      unless ITERABLE_STATES.include?(pipeline_run.status)
+        raise ArgumentError, "Cannot iterate a #{pipeline_run.status} pipeline run. " \
+                             "Pause or wait for completion first."
+      end
+    end
 
     def run_pipeline!(pipeline_run, from:, stop_after: nil)
       @event_recorder = PipelineEventRecorder.new(pipeline_run:)
@@ -213,6 +326,10 @@ module ArnoldPipeline
         end
 
         TierCalculator.call(pipeline_run.tasks.reload)
+
+        pipeline_run.update!(
+          metadata: (pipeline_run.metadata || {}).merge("tasks_generated_at_spec_version" => pipeline_run.specification.version)
+        )
       end
     end
 

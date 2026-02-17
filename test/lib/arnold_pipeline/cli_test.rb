@@ -1,6 +1,7 @@
 require "test_helper"
 require "arnold_pipeline/cli"
 require "arnold_pipeline/orchestrator"
+require "arnold_pipeline/delta_presenter"
 
 module ArnoldPipeline
   class CliTest < ActiveSupport::TestCase
@@ -649,6 +650,140 @@ module ArnoldPipeline
       assert_match(/Corrective tasks:/, output)
       assert_match(/1\. Add route/, output)
       assert_match(/Add GET \/up to routes\.rb/, output)
+    end
+
+    test "format_task shows superseded label for superseded tasks" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      task = run_record.tasks.create!(title: "Setup project", tier: 0, position: 0, priority: 1, status: :superseded, labels: [], depends_on: [])
+
+      output = capture_output { Cli.start(["tasks", run_record.id.to_s]) }
+
+      assert_match(/\[0\] Setup project \[superseded\]/, output)
+      assert_match(/Status: superseded/, output)
+    end
+
+    test "format_task does not show superseded label for non-superseded tasks" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.tasks.create!(title: "Setup project", tier: 0, position: 0, priority: 1, status: :completed, labels: [], depends_on: [])
+
+      output = capture_output { Cli.start(["tasks", run_record.id.to_s]) }
+
+      assert_match(/\[0\] Setup project\n/, output)
+      assert_no_match(/\[superseded\]/, output)
+    end
+
+    # --- Iterate command tests ---
+
+    test "iterate with paused run shows success output" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
+      run_record.create_specification!(content: "# Spec", version: 1)
+      run_record.tasks.create!(title: "Setup DB", position: 0, tier: 0, status: :pending)
+
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:iterate_spec!).with(
+        pipeline_run: run_record, change_request: "Add auth"
+      ).returns({
+        pipeline_run: run_record,
+        deltas: { merge_strategy: "append", delta_count: 2, new_version: 2 },
+        spec_version: 2
+      })
+
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+
+      # Mark task as superseded to match what iterate_spec! would do
+      run_record.tasks.update_all(status: :superseded)
+
+      output = capture_output { Cli.start(["iterate", run_record.id.to_s, "Add auth"]) }
+
+      assert_match(/Iterating specification for pipeline run/, output)
+      assert_match(/Specification updated to v2/, output)
+      assert_match(/Deltas applied: 2/, output)
+      assert_match(/Merge strategy: append/, output)
+      assert_match(/Tasks superseded: 1/, output)
+      assert_match(/arnold resume #{run_record.id}/, output)
+    end
+
+    test "iterate with non-existent ID exits with error" do
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start(["iterate", "99999", "Add auth"]) }
+      end
+    end
+
+    test "iterate with empty change request exits with error" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
+
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start(["iterate", run_record.id.to_s, "   "]) }
+      end
+    end
+
+    test "iterate with empty change request shows error message" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
+
+      stderr_output = capture_stderr_through_exit { Cli.start(["iterate", run_record.id.to_s, "   "]) }
+      assert_match(/Change request cannot be empty/, stderr_output)
+    end
+
+    test "iterate --dry-run shows deltas without applying" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
+      run_record.create_specification!(content: "# Spec", version: 1)
+
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:iterate_spec_dry_run!).with(
+        pipeline_run: run_record, change_request: "Add auth"
+      ).returns({
+        deltas: [
+          { "operation" => "added", "section" => "Auth", "requirement" => "Login", "rationale" => "User needs login" }
+        ],
+        summary: "Adding authentication",
+        current_version: 1
+      })
+
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+
+      output = capture_output { Cli.start(["iterate", run_record.id.to_s, "Add auth", "--dry-run"]) }
+
+      assert_match(/Proposed changes to specification/, output)
+      assert_match(/ADDED: Auth > Login/, output)
+      assert_match(/No changes applied \(dry run\)/, output)
+    end
+
+    test "iterate --dry-run --json outputs JSON" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
+      run_record.create_specification!(content: "# Spec", version: 1)
+
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:iterate_spec_dry_run!).returns({
+        deltas: [
+          { "operation" => "added", "section" => "Auth", "requirement" => "Login", "rationale" => "Needs login" }
+        ],
+        summary: "Adding auth",
+        current_version: 1
+      })
+
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+
+      output = capture_output { Cli.start(["iterate", run_record.id.to_s, "Add auth", "--dry-run", "--json"]) }
+
+      parsed = JSON.parse(output)
+      assert_kind_of Array, parsed
+      assert_equal 1, parsed.length
+      assert_equal "added", parsed.first["operation"]
+      assert_equal "Auth", parsed.first["section"]
+    end
+
+    test "iterate with executing run shows error" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :executing)
+
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:iterate_spec!).raises(
+        ArgumentError, "Cannot iterate a executing pipeline run. Pause or wait for completion first."
+      )
+
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+
+      stderr_output = capture_stderr_through_exit { Cli.start(["iterate", run_record.id.to_s, "Add auth"]) }
+      assert_match(/Cannot iterate a executing pipeline run/, stderr_output)
     end
 
     test "run --quiet suppresses informational output" do
