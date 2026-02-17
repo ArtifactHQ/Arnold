@@ -432,33 +432,128 @@ module ArnoldPipeline
       end
     end
 
-    test "spec --history shows revision timeline" do
+    test "spec --history shows lineage for single run (no forks)" do
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
-      spec = run_record.create_specification!(content: "# Spec v2", version: 2)
-      spec.spec_revisions.create!(version: 1, content: "# Spec v1", change_source: "spec_generation")
-      spec.spec_revisions.create!(
-        version: 2,
-        content: "# Spec v2",
-        change_source: "iterate_spec",
-        delta_summary: ["ADDED: Auth > Password Reset", "MODIFIED: Auth > Login"]
-      )
+      run_record.create_specification!(content: "# Spec v1", version: 1)
 
       output = capture_output { Cli.start(["spec", run_record.id.to_s, "--history"]) }
 
-      assert_match(/Specification Revision History:/, output)
-      assert_match(/v1 \[spec_generation\]/, output)
-      assert_match(/v2 \[iterate_spec\]/, output)
-      assert_match(/ADDED: Auth > Password Reset/, output)
-      assert_match(/MODIFIED: Auth > Login/, output)
+      assert_match(/Spec Lineage for Run ##{run_record.id}/, output)
+      assert_match(/##{run_record.id}.*\[completed\].*v1/, output)
+      assert_match(/spec_generation/, output)
+      assert_match(/◄ current/, output)
     end
 
-    test "spec --history with no revisions shows message" do
-      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
-      run_record.create_specification!(content: "# Spec", version: 1)
+    test "spec --history shows fork lineage tree" do
+      root = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      root.create_specification!(content: "# Spec v1", version: 1)
 
-      output = capture_output { Cli.start(["spec", run_record.id.to_s, "--history"]) }
+      child = PipelineRun.create!(
+        nl_input: "Build a todo app",
+        status: :completed,
+        metadata: { "forked_from_run_id" => root.id, "fork_change_request" => "Add authentication" }
+      )
+      spec2 = child.create_specification!(content: "# Spec v2", version: 2)
+      spec2.spec_revisions.create!(
+        version: 2, content: "# Spec v2", change_source: "user_iterate",
+        delta_summary: ["ADDED: Auth > Login"]
+      )
 
-      assert_match(/No revision history available/, output)
+      output = capture_output { Cli.start(["spec", child.id.to_s, "--history"]) }
+
+      assert_match(/Spec Lineage for Run ##{child.id}/, output)
+      assert_match(/##{root.id}.*\[completed\].*v1/, output)
+      assert_match(/spec_generation/, output)
+      assert_match(/##{child.id}.*\[completed\].*v2/, output)
+      assert_match(/Add authentication/, output)
+      assert_match(/ADDED: Auth > Login/, output)
+      # current marker on the requested run
+      assert_match(/##{child.id}.*◄ current/, output)
+    end
+
+    test "spec --history shows deeply nested fork chain" do
+      root = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      root.create_specification!(content: "# v1", version: 1)
+
+      child1 = PipelineRun.create!(
+        nl_input: "Build a todo app", status: :completed,
+        metadata: { "forked_from_run_id" => root.id, "fork_change_request" => "First change" }
+      )
+      child1.create_specification!(content: "# v2", version: 2)
+
+      child2 = PipelineRun.create!(
+        nl_input: "Build a todo app", status: :executing,
+        metadata: { "forked_from_run_id" => child1.id, "fork_change_request" => "Second change" }
+      )
+      child2.create_specification!(content: "# v3", version: 3)
+
+      output = capture_output { Cli.start(["spec", child2.id.to_s, "--history"]) }
+
+      assert_match(/Spec Lineage for Run ##{child2.id}/, output)
+      assert_match(/##{root.id}/, output)
+      assert_match(/##{child1.id}/, output)
+      assert_match(/##{child2.id}.*◄ current/, output)
+      assert_match(/First change/, output)
+      assert_match(/Second change/, output)
+    end
+
+    test "spec --history shows multiple forks from same parent (branching)" do
+      root = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      root.create_specification!(content: "# v1", version: 1)
+
+      fork_a = PipelineRun.create!(
+        nl_input: "Build a todo app", status: :completed,
+        metadata: { "forked_from_run_id" => root.id, "fork_change_request" => "Branch A" }
+      )
+      fork_a.create_specification!(content: "# v2a", version: 2)
+
+      fork_b = PipelineRun.create!(
+        nl_input: "Build a todo app", status: :failed,
+        metadata: { "forked_from_run_id" => root.id, "fork_change_request" => "Branch B" }
+      )
+      fork_b.create_specification!(content: "# v2b", version: 2)
+
+      output = capture_output { Cli.start(["spec", fork_a.id.to_s, "--history"]) }
+
+      assert_match(/##{root.id}/, output)
+      assert_match(/##{fork_a.id}.*◄ current/, output)
+      assert_match(/##{fork_b.id}/, output)
+      assert_match(/Branch A/, output)
+      assert_match(/Branch B/, output)
+    end
+
+    test "spec --history marks current run distinctly" do
+      root = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      root.create_specification!(content: "# v1", version: 1)
+
+      child = PipelineRun.create!(
+        nl_input: "Build a todo app", status: :completed,
+        metadata: { "forked_from_run_id" => root.id, "fork_change_request" => "Change" }
+      )
+      child.create_specification!(content: "# v2", version: 2)
+
+      # Request history for the root — root should be marked current, not child
+      output = capture_output { Cli.start(["spec", root.id.to_s, "--history"]) }
+
+      assert_match(/##{root.id}.*◄ current/, output)
+      assert_no_match(/##{child.id}.*◄ current/, output)
+    end
+
+    test "spec --history truncates long change requests" do
+      root = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      root.create_specification!(content: "# v1", version: 1)
+
+      long_request = "A" * 100
+      child = PipelineRun.create!(
+        nl_input: "Build a todo app", status: :completed,
+        metadata: { "forked_from_run_id" => root.id, "fork_change_request" => long_request }
+      )
+      child.create_specification!(content: "# v2", version: 2)
+
+      output = capture_output { Cli.start(["spec", child.id.to_s, "--history"]) }
+
+      assert_match(/#{"A" * 70}\.\.\./, output)
+      assert_no_match(/#{"A" * 100}/, output)
     end
 
     test "spec --version shows specific version content" do

@@ -299,7 +299,7 @@ module ArnoldPipeline
       end
 
       if options[:history]
-        show_spec_history(spec)
+        show_spec_lineage(run_record)
         return
       end
 
@@ -587,6 +587,90 @@ module ArnoldPipeline
       lines << ""
       lines << task.description if task.description.present?
       lines.join("\n")
+    end
+
+    def show_spec_lineage(pipeline_run)
+      root = find_root_run(pipeline_run)
+      tree = build_lineage_tree(root)
+      say "Spec Lineage for Run ##{pipeline_run.id}:\n", :green
+      render_lineage_tree(tree, pipeline_run.id)
+    end
+
+    def find_root_run(run)
+      current = run
+      while (parent_id = current.metadata&.dig("forked_from_run_id"))
+        parent = PipelineRun.find_by(id: parent_id)
+        break unless parent
+        current = parent
+      end
+      current
+    end
+
+    def build_lineage_tree(root)
+      children = PipelineRun.where("json_extract(metadata, '$.forked_from_run_id') = ?", root.id)
+                            .order(:created_at)
+                            .map { |child| build_lineage_tree(child) }
+      { run: root, children: children }
+    end
+
+    def render_lineage_tree(node, current_run_id, prefix: "", is_last: true, is_root: true)
+      run = node[:run]
+      spec = run.specification
+
+      # Build the connector prefix
+      if is_root
+        line_prefix = ""
+        child_prefix = ""
+      else
+        connector = is_last ? "└── " : "├── "
+        line_prefix = prefix + connector
+        child_prefix = prefix + (is_last ? "    " : "│   ")
+      end
+
+      # Build the main node line
+      current_marker = run.id == current_run_id ? "  ◄ current" : ""
+      version_str = spec ? "v#{spec.version}" : ""
+      timestamp = run.created_at.strftime("%Y-%m-%d %H:%M")
+      header = format(
+        "%s#%-4d [%s] %-6s%s  %s",
+        line_prefix, run.id, run.status, version_str, current_marker, timestamp
+      )
+      say header, lineage_status_color(run, current_run_id)
+
+      # Show change source for root (spec_generation) or change request for forks
+      change_request = run.metadata&.dig("fork_change_request")
+      if change_request
+        truncated = change_request.length > 70 ? "#{change_request[0...70]}..." : change_request
+        say "#{child_prefix}\"#{truncated}\""
+      elsif is_root
+        say "#{child_prefix}spec_generation"
+      end
+
+      # Show delta summaries from the fork's spec revision (user_iterate)
+      if change_request && spec
+        user_rev = spec.spec_revisions.where(change_source: "user_iterate").order(:version).last
+        if user_rev&.delta_summary.present?
+          user_rev.delta_summary.each { |s| say "#{child_prefix}  - #{s}" }
+        end
+      end
+
+      # Render children
+      node[:children].each_with_index do |child, i|
+        is_last_child = (i == node[:children].length - 1)
+        # Add a blank connector line before children if this node has content
+        say "#{child_prefix}│" if i == 0
+        render_lineage_tree(child, current_run_id, prefix: child_prefix, is_last: is_last_child, is_root: false)
+      end
+    end
+
+    def lineage_status_color(run, current_run_id)
+      return :cyan if run.id == current_run_id
+      case run.status
+      when "completed" then :green
+      when "failed" then :red
+      when "paused", "executing", "awaiting_results" then :yellow
+      else :white
+      end
     end
 
     def show_spec_history(spec)
