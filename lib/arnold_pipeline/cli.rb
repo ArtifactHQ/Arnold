@@ -654,6 +654,12 @@ module ArnoldPipeline
         say "  Tier #{summary['tier_number']}, #{summary['task_count']} tasks: #{(summary['task_titles'] || []).join(', ')}"
       when "tier_execution_completed"
         say "  Tier #{summary['tier_number']}: #{summary['resolved_count']} resolved, #{summary['failed_count']} failed"
+        if options[:verbose] && summary["task_outcomes"]
+          summary["task_outcomes"].each do |outcome|
+            reason = outcome["failure_reason"] ? " (#{outcome['failure_reason']})" : ""
+            say "    - #{outcome['title']}: #{outcome['status']}#{reason}"
+          end
+        end
       when "tier_gate_evaluated"
         status = summary["pass"] ? "PASSED" : "FAILED"
         issues = (summary["issues"] || []).join("; ")
@@ -702,10 +708,34 @@ module ArnoldPipeline
           say "  Backtrace:"
           summary["backtrace"].each { |frame| say "    #{frame}" }
         end
+        if summary["total_tasks"]
+          say "  Tasks: #{summary['total_tasks']} total, #{summary['tasks_succeeded']} succeeded, #{summary['tasks_failed']} failed"
+        end
+        say "  Duration: #{format_duration(summary['total_duration_ms'])}" if summary["total_duration_ms"]
+        if summary["raw_response_excerpt"]
+          say "  LLM response excerpt: #{summary['raw_response_excerpt'][0, 200]}..."
+        end
       when "pipeline_completed"
         say "  #{summary['total_iterations']} iterations, #{summary['total_tasks']} tasks"
+        if summary["tasks_succeeded"] || summary["tasks_failed"]
+          say "  Tasks: #{summary['tasks_succeeded']} succeeded, #{summary['tasks_failed']} failed"
+        end
+        say "  Duration: #{format_duration(summary['total_duration_ms'])}" if summary["total_duration_ms"]
+        say "  Final confidence: #{summary['final_confidence']}%" if summary["final_confidence"]
       else
         say "  #{summary.inspect}"
+      end
+    end
+
+    def format_duration(ms)
+      return "N/A" unless ms
+      seconds = ms / 1000.0
+      if seconds < 60
+        "#{seconds.round(1)}s"
+      elsif seconds < 3600
+        "#{(seconds / 60).round(1)}m"
+      else
+        "#{(seconds / 3600).round(1)}h"
       end
     end
 

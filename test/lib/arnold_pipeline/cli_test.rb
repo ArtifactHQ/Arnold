@@ -828,6 +828,115 @@ module ArnoldPipeline
       assert_equal "", output
     end
 
+    test "log displays per-task outcomes in verbose mode" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :tier_execution_completed, stage: "execution", tier_number: 0,
+        summary: {
+          "tier_number" => 0, "resolved_count" => 1, "failed_count" => 1,
+          "task_outcomes" => [
+            { "title" => "Setup DB", "status" => "resolved" },
+            { "title" => "Add API", "status" => "failed", "failure_reason" => "empty_diff" }
+          ]
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s, "--verbose"]) }
+
+      assert_match(/Setup DB.*resolved/, output)
+      assert_match(/Add API.*failed.*empty_diff/, output)
+    end
+
+    test "log does not display per-task outcomes without verbose" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :tier_execution_completed, stage: "execution", tier_number: 0,
+        summary: {
+          "tier_number" => 0, "resolved_count" => 1, "failed_count" => 1,
+          "task_outcomes" => [
+            { "title" => "Setup DB", "status" => "resolved" },
+            { "title" => "Add API", "status" => "failed", "failure_reason" => "empty_diff" }
+          ]
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/Tier 0: 1 resolved, 1 failed/, output)
+      assert_no_match(/Setup DB/, output)
+    end
+
+    test "log displays enriched pipeline_completed summary" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :pipeline_completed, stage: "lifecycle",
+        summary: {
+          "total_iterations" => 2, "total_tasks" => 8,
+          "tasks_succeeded" => 6, "tasks_failed" => 2,
+          "total_duration_ms" => 3600000.0,
+          "final_confidence" => 85
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/2 iterations, 8 tasks/, output)
+      assert_match(/6 succeeded, 2 failed/, output)
+      assert_match(/Duration:.*1\.0h/, output)
+      assert_match(/85%/, output)
+    end
+
+    test "log displays enriched pipeline_failed summary" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :failed)
+      run_record.pipeline_events.create!(
+        event_type: :pipeline_failed, stage: "lifecycle",
+        summary: {
+          "error_class" => "RuntimeError", "error_message" => "Something broke",
+          "failed_stage" => "execution",
+          "total_tasks" => 5, "tasks_succeeded" => 3, "tasks_failed" => 2,
+          "total_duration_ms" => 125000.0,
+          "raw_response_excerpt" => "invalid JSON here that is too long" * 10
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/RuntimeError: Something broke/, output)
+      assert_match(/Tasks: 5 total, 3 succeeded, 2 failed/, output)
+      assert_match(/Duration:.*2\.1m/, output)
+      assert_match(/LLM response excerpt:/, output)
+    end
+
+    test "log formats duration in seconds for short durations" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :pipeline_completed, stage: "lifecycle",
+        summary: {
+          "total_iterations" => 1, "total_tasks" => 2,
+          "total_duration_ms" => 45000.0
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/Duration:.*45\.0s/, output)
+    end
+
+    test "log formats duration in minutes for medium durations" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :pipeline_completed, stage: "lifecycle",
+        summary: {
+          "total_iterations" => 1, "total_tasks" => 3,
+          "total_duration_ms" => 300000.0
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/Duration:.*5\.0m/, output)
+    end
+
     private
 
     def capture_output
