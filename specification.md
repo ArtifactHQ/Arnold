@@ -16,9 +16,25 @@ The system MUST retrieve and apply relevant agent personas and application recip
 - THEN a structured specification document is produced in Markdown format using OpenSpec conventions: `### Requirement:` headers with `[REQ-{DOMAIN}-{NNN}]` IDs, `#### Scenario:` blocks using GIVEN/WHEN/THEN format, and an embedded JSON metadata block. The document includes sections for features, tech stack, data models, user flows, and edge cases, customized by the selected persona and recipe.
 
 #### Scenario: Library Retrieval Failure
-- GIVEN an NL input that does not match any library items (e.g., highly niche domain).  
-- WHEN retrieval is attempted.  
+- GIVEN an NL input that does not match any library items (e.g., highly niche domain).
+- WHEN retrieval is attempted.
 - THEN the system SHOULD default to a generic persona (e.g., General Analyst) and recipe, logging the mismatch for human review.
+
+### Requirement: Technology Stack Defaults [SPEC-SPECGEN-001]
+The Spec Generation Agent SHALL default to zero-dependency infrastructure choices unless the user explicitly requests otherwise.
+
+#### Scenario: No Database Preference Specified
+- GIVEN an NL input that does not explicitly request a specific database (e.g., "build a task manager app").
+- WHEN the Spec Generation Agent generates the technology stack.
+- THEN it SHALL default to SQLite for the development and test database.
+- AND it SHALL default to Solid Cache, Solid Queue, and Solid Cable for cache, job queue, and real-time respectively.
+- AND it SHALL document external service dependencies as "none required" in the External Connections section.
+
+#### Scenario: Explicit Database Preference
+- GIVEN an NL input that explicitly requests a specific database (e.g., "use PostgreSQL", "MySQL database").
+- WHEN the Spec Generation Agent generates the technology stack.
+- THEN it SHALL honor the requested database choice.
+- AND it SHALL note any required setup steps (e.g., "PostgreSQL must be installed and running") in the specification.
 
 ### Requirement: Task Breakdown
 The system SHALL break the generated specification into granular, actionable tasks suitable for AI coding agents.

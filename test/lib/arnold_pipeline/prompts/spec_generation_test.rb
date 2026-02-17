@@ -162,6 +162,16 @@ module ArnoldPipeline
         assert_includes prompt, "Build a fitness tracker"
       end
 
+      test "system_prompt includes SQLite default database guidance" do
+        prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, domain_type: @domain_type)
+        assert_includes prompt, "Technology Stack Defaults"
+        assert_includes prompt, "SQLite"
+        assert_includes prompt, "Solid Cache"
+        assert_includes prompt, "Solid Queue"
+        assert_includes prompt, "Solid Cable"
+        assert_includes prompt, "zero external service dependencies"
+      end
+
       test "system_prompt excludes post_pipeline sections" do
         prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, domain_type: @domain_type)
         refute_includes prompt, "### Deployment & Infrastructure"

@@ -54,6 +54,24 @@ module ArnoldPipeline
           Use the recipe's framework, tools, and guidance to inform your technology choices
           and implementation approach. Reflect these in the tech_stack of your JSON metadata.
 
+          # Technology Stack Defaults
+
+          Unless the user's input explicitly requests a specific database (e.g.,
+          "use PostgreSQL", "MySQL database"), apply these defaults:
+
+          - **Database:** SQLite (Rails 8+ default — zero external service dependencies)
+          - **Cache:** Solid Cache (database-backed, no Redis needed)
+          - **Job Queue:** Solid Queue (database-backed, no Redis needed)
+          - **Real-time:** Solid Cable (database-backed, no Redis needed)
+
+          These defaults ensure the generated application can run immediately on any
+          machine without installing or configuring external services. Document these
+          choices in Section 8 (External Connections) under "No external dependencies
+          required for development."
+
+          If the user does request a specific database, honor that choice and note
+          any required setup steps in the specification.
+
           # Document Structure
 
           Produce a Markdown document with the following 10-section structure. Adapt section names

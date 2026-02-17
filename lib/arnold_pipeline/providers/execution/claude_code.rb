@@ -230,7 +230,10 @@ module ArnoldPipeline
 
           cmd = build_cli_command(prompt)
 
-          output, status = Open3.capture2(cmd, chdir: worktree_path)
+          # Unset CLAUDECODE env var so child claude processes don't refuse to start
+          # when arnold is launched from within a Claude Code session.
+          # Setting to nil tells Process.spawn to remove it from the child environment.
+          output, status = Open3.capture2({ "CLAUDECODE" => nil }, cmd, chdir: worktree_path)
 
           if status.success?
             { success: true, output: output, error: nil }

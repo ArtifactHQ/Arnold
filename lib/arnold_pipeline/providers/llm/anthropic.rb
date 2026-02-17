@@ -5,7 +5,7 @@ module ArnoldPipeline
   module Providers
     module Llm
       class Anthropic < Base
-        DEFAULT_MAX_TOKENS = 8192
+        DEFAULT_MAX_TOKENS = 16_384
 
         def initialize(api_key:, model:, request_timeout: 600, logger: nil)
           super(logger:)
@@ -55,6 +55,13 @@ module ArnoldPipeline
         end
 
         def extract_text(response)
+          if response["stop_reason"] == "max_tokens"
+            usage = response["usage"] || {}
+            raise ArnoldPipeline::Error,
+              "Response truncated (max_tokens: #{DEFAULT_MAX_TOKENS}, used: #{usage['output_tokens'] || '?'}). " \
+              "The LLM response exceeded the token limit and was cut off."
+          end
+
           response.dig("content", 0, "text") || ""
         end
 

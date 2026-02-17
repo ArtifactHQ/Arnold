@@ -56,6 +56,12 @@ module ArnoldPipeline
         end
 
         def extract_text(response)
+          if response.dig("choices", 0, "finish_reason") == "length"
+            raise ArnoldPipeline::Error,
+              "Response truncated (finish_reason: length). " \
+              "The LLM response exceeded the token limit and was cut off."
+          end
+
           response.dig("choices", 0, "message", "content") || ""
         end
 

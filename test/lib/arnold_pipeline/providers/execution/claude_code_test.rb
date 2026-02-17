@@ -419,6 +419,31 @@ module ArnoldPipeline
           assert_equal "CLI exited with code 1", stored[:error]
         end
 
+        # --- Environment tests ---
+
+        test "execute_claude_code unsets CLAUDECODE env var in child process" do
+          branch = "test-env-strip"
+          worktree_path = File.join(@repo_path, ".worktrees", branch)
+          @provider.stubs(:setup_worktree).returns(worktree_path)
+          FileUtils.mkdir_p(worktree_path)
+
+          captured_env = nil
+          Open3.stubs(:capture2).with { |*args|
+            # capture2 called with (env_hash, cmd, chdir: path) — first arg is env
+            captured_env = args.first if args.first.is_a?(Hash)
+            true
+          }.returns(["", stub(success?: true)])
+
+          ENV["CLAUDECODE"] = "1"
+          @provider.send(:execute_claude_code, prompt: "test", branch: branch, external_id: "cc-1")
+
+          assert_kind_of Hash, captured_env
+          assert captured_env.key?("CLAUDECODE"), "CLAUDECODE key should be present"
+          assert_nil captured_env["CLAUDECODE"], "CLAUDECODE should be nil to unset in child"
+        ensure
+          ENV.delete("CLAUDECODE")
+        end
+
         # --- Configuration tests ---
 
         test "validate_configuration! raises when repo_path blank" do

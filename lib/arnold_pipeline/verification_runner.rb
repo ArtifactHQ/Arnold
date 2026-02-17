@@ -41,7 +41,9 @@ module ArnoldPipeline
       @logger&.info("[VerificationRunner] Running check: #{check.name}")
 
       start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      stdout, stderr, status = Open3.capture3(check.command, chdir: @repo_path)
+      stdout, stderr, status = Bundler.with_unbundled_env do
+        Open3.capture3(check.command, chdir: @repo_path)
+      end
       duration_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000).round
 
       {

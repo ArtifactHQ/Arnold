@@ -34,23 +34,44 @@ module ArnoldPipeline
         assert_raises(ArnoldPipeline::Error) { @agent.call(spec_content: "spec") }
       end
 
-      test "raises on invalid dependency order" do
+      test "auto-repairs backwards dependency order via topological sort" do
         tasks = [
           { "title" => "Task A", "position" => 0, "depends_on" => [1] },
           { "title" => "Task B", "position" => 1, "depends_on" => [] }
         ]
         @llm.expects(:chat_json).returns({ "tasks" => tasks })
 
-        assert_raises(ArnoldPipeline::Error) { @agent.call(spec_content: "spec") }
+        result = @agent.call(spec_content: "spec")
+        assert_equal 2, result.size
+        # Task B should come first (no deps), Task A second (depends on B)
+        assert_equal "Task B", result[0]["title"]
+        assert_equal 1, result[0]["position"]
+        assert_equal "Task A", result[1]["title"]
+        assert_equal 2, result[1]["position"]
+        assert_equal [1], result[1]["depends_on"]
       end
 
-      test "raises on non-existent dependency" do
+      test "strips non-existent dependency references" do
         tasks = [
           { "title" => "Task A", "position" => 0, "depends_on" => [99] }
         ]
         @llm.expects(:chat_json).returns({ "tasks" => tasks })
 
-        assert_raises(ArnoldPipeline::Error) { @agent.call(spec_content: "spec") }
+        result = @agent.call(spec_content: "spec")
+        assert_equal 1, result.size
+        assert_empty result[0]["depends_on"]
+      end
+
+      test "handles dependency cycle by stripping all deps" do
+        tasks = [
+          { "title" => "Task A", "position" => 0, "depends_on" => [1] },
+          { "title" => "Task B", "position" => 1, "depends_on" => [0] }
+        ]
+        @llm.expects(:chat_json).returns({ "tasks" => tasks })
+
+        result = @agent.call(spec_content: "spec")
+        assert_equal 2, result.size
+        result.each { |t| assert_empty t["depends_on"] }
       end
 
       test "passes recipe context to system prompt" do

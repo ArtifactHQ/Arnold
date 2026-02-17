@@ -101,6 +101,25 @@ module ArnoldPipeline
           assert_match(/Anthropic API 429: rate limit exceeded/, log_output.string)
         end
 
+        test "chat raises on truncated response" do
+          stub_request(:post, "https://api.anthropic.com/v1/messages")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: {
+                content: [{ type: "text", text: "Truncated content..." }],
+                stop_reason: "max_tokens",
+                usage: { output_tokens: 16_384 }
+              }.to_json
+            )
+
+          error = assert_raises(ArnoldPipeline::Error) do
+            @provider.chat(messages: [{ role: :user, content: "Generate a long spec" }])
+          end
+          assert_match(/Response truncated/, error.message)
+          assert_match(/16384/, error.message)
+        end
+
         # -- chat_json tests --
 
         test "chat_json returns parsed hash from tool_use response" do

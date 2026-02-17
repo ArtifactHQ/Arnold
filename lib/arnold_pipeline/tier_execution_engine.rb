@@ -11,6 +11,7 @@ require "arnold_pipeline/test_execution/test_result_parser"
 require "arnold_pipeline/test_execution/test_runner"
 require "arnold_pipeline/spec_test_progress_tracker"
 require "arnold_pipeline/spec_test_progress"
+require "arnold_pipeline/corrective_task_generator"
 require "open3"
 
 module ArnoldPipeline

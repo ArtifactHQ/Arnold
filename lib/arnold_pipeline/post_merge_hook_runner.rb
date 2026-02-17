@@ -26,7 +26,9 @@ module ArnoldPipeline
         return { name: hook.name, triggered: false, success: nil, stdout: nil, stderr: nil, exit_code: nil }
       end
 
-      stdout, stderr, status = Open3.capture3(hook.command, chdir: @repo_path)
+      stdout, stderr, status = Bundler.with_unbundled_env do
+        Open3.capture3(hook.command, chdir: @repo_path)
+      end
 
       result = {
         name: hook.name,

@@ -86,6 +86,23 @@ module ArnoldPipeline
           assert_match(/OpenAI API 400: invalid request/, log_output.string)
         end
 
+        test "chat raises on truncated response" do
+          stub_request(:post, "https://api.openai.com/v1/chat/completions")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: {
+                choices: [{ message: { role: "assistant", content: "Truncated..." }, finish_reason: "length" }]
+              }.to_json
+            )
+
+          error = assert_raises(ArnoldPipeline::Error) do
+            @provider.chat(messages: [{ role: :user, content: "Generate a long spec" }])
+          end
+          assert_match(/Response truncated/, error.message)
+          assert_match(/finish_reason: length/, error.message)
+        end
+
         # -- chat_json tests --
 
         test "chat_json returns parsed hash from structured output response" do
