@@ -464,5 +464,66 @@ module ArnoldPipeline
       assert_no_match(/Setup DB.*resolved/, output)
       assert_no_match(/Add API.*resolved/, output)
     end
+
+    # --- End-to-end integration ---
+
+    test "full pipeline run renders complete structured output" do
+      # Preamble
+      @run.pipeline_events.create!(event_type: :library_selection, stage: "spec_generation",
+        summary: { "persona" => "General Analyst", "recipe" => "Generic", "domain_type" => "PRODUCTIVITY" })
+      @run.pipeline_events.create!(event_type: :spec_generated, stage: "spec_generation",
+        summary: { "spec_version" => 1, "content_length" => 29296 }, duration_ms: 57000.0)
+      @run.pipeline_events.create!(event_type: :tasks_broken, stage: "task_breakdown",
+        summary: { "task_count" => 12, "tier_count" => 9, "dependency_edge_count" => 18 }, duration_ms: 55100.0)
+
+      # Tier 0
+      @run.pipeline_events.create!(event_type: :tier_execution_started, stage: "execution", tier_number: 0,
+        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => ["Project bootstrap"] })
+      @run.pipeline_events.create!(event_type: :tier_execution_completed, stage: "execution", tier_number: 0,
+        summary: { "tier_number" => 0, "resolved_count" => 1, "failed_count" => 0 })
+      @run.pipeline_events.create!(event_type: :post_merge_hooks, stage: "execution", tier_number: 0,
+        summary: { "hook_count" => 2, "triggered_count" => 2, "success_count" => 2 })
+      @run.pipeline_events.create!(event_type: :verification_checks, stage: "execution", tier_number: 0,
+        summary: { "all_passed" => true, "summary" => "4 passed, 0 failed" })
+      @run.pipeline_events.create!(event_type: :criteria_check, stage: "tier_gate", tier_number: 0,
+        summary: { "mode" => "advisory", "verified_count" => 1, "failed_count" => 4, "unverified_count" => 2 })
+      @run.pipeline_events.create!(event_type: :tier_gate_evaluated, stage: "tier_gate", tier_number: 0,
+        summary: { "pass" => true, "decision_source" => "verification_tests_passed" })
+
+      # Analysis
+      @run.pipeline_events.create!(event_type: :analysis_completed, stage: "analysis", iteration_number: 1,
+        summary: { "decision" => "done", "confidence" => 85 }, duration_ms: 54600.0)
+      @run.pipeline_events.create!(event_type: :iteration_decision, stage: "iteration", iteration_number: 1,
+        summary: { "decision" => "done" })
+
+      # Terminal
+      @run.pipeline_events.create!(event_type: :pipeline_completed, stage: "lifecycle",
+        summary: { "total_iterations" => 1, "total_tasks" => 12, "tasks_succeeded" => 12, "tasks_failed" => 0, "total_duration_ms" => 600000.0, "final_confidence" => 85 })
+
+      formatter = LogFormatter.new(@run.pipeline_events.chronological, pipeline_run: @run, color: false)
+      output = formatter.render
+
+      # Verify structure
+      assert_match(/Pipeline Run ##{@run.id}/, output)
+      assert_match(/library.*persona=General Analyst/, output)
+      assert_match(/spec.*v1 generated/, output)
+      assert_match(/tasks.*12 tasks/, output)
+      assert_match(/TIER 0/, output)
+      assert_match(/Project bootstrap/, output)
+      assert_match(/PASS/, output)
+      assert_match(/ANALYSIS.*iteration 1/, output)
+      assert_match(/DONE/, output)
+      assert_match(/PIPELINE COMPLETED/, output)
+      assert_match(/85% confidence/, output)
+
+      # Verify ordering: preamble before tier, tier before analysis, analysis before terminal
+      preamble_pos = output.index("library")
+      tier_pos = output.index("TIER 0")
+      analysis_pos = output.index("ANALYSIS")
+      terminal_pos = output.index("PIPELINE COMPLETED")
+      assert preamble_pos < tier_pos, "preamble should come before tier"
+      assert tier_pos < analysis_pos, "tier should come before analysis"
+      assert analysis_pos < terminal_pos, "analysis should come before terminal"
+    end
   end
 end
