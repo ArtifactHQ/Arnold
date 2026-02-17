@@ -752,15 +752,28 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 #### Command: log [SPEC-CLI-008]
 - GIVEN a pipeline run with ID exists.
 - WHEN `arnold_pipeline log ID` is executed.
-- THEN the event timeline is displayed chronologically.
-- AND each event shows timestamp, stage, event_type, and formatted summary.
+- THEN the event timeline is displayed as a block-structured, color-coded report (see SPEC-CLI-009).
 - WHEN the --stage flag is provided (e.g., `arnold_pipeline log ID --stage analysis`).
 - THEN only events matching the specified stage are shown.
 - WHEN the --json flag is provided.
-- THEN events are output as a JSON array.
+- THEN events are output as a JSON array (color is suppressed; --no_color and --verbose are ignored for JSON mode).
 - WHEN the --verbose flag is provided.
-- THEN full payload data is included in the output.
+- THEN full payload data is included inline beneath each event line.
+- WHEN the --no_color flag is provided, OR `$stdout` is not a TTY, OR the `NO_COLOR` environment variable is set.
+- THEN ANSI color codes are omitted from the output.
+- Options: --json (boolean), --stage (string), --verbose (boolean), --no_color (boolean, disables ANSI color).
 - Exit code 0 on success, 1 if not found.
+
+#### Scenario: Block-Structured Log Display [SPEC-CLI-009]
+- GIVEN `arnold_pipeline log ID` is executed without --json.
+- WHEN the LogFormatter renders events.
+- THEN events are grouped into structural blocks rather than a flat chronological list:
+  - **Preamble block** — Events before the first tier (e.g., library_selection, spec_generated, tasks_broken) rendered as plain indented lines.
+  - **Tier blocks** — One block per tier, introduced by a `▶ TIER N  (M tasks)` header followed by bullet-listed task titles; tier stage is conveyed by the block header rather than per-event stage labels.
+  - **Analysis blocks** — One block per analysis iteration, introduced by a `◆ ANALYSIS (iteration N)` header with optional duration.
+  - **Terminal banner** — A styled final line for pipeline_completed (`✓ PIPELINE COMPLETED`), pipeline_failed (`✗ PIPELINE FAILED`), or pipeline_paused (`⏸ PIPELINE PAUSED`) with aggregate summary data (total iterations, task counts, duration, final confidence).
+- AND tier and analysis blocks are visually separated from each other by a horizontal rule (`─` × 70).
+- AND when --no_color is in effect, block headers and status badges are rendered as plain text without ANSI escape codes.
 
 #### Command: iterate [SPEC-CLI-ITERATE-001]
 - GIVEN a pipeline run ID and a natural language change request.
