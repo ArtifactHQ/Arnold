@@ -25,7 +25,8 @@ module ArnoldPipeline
       @event_recorder = event_recorder
     end
 
-    def execute_tiers!(pipeline_run)
+    def execute_tiers!(pipeline_run, iteration_number: nil)
+      @current_iteration_number = iteration_number
       pipeline_run.update!(status: :executing)
       logger.info { "[Arnold] Publishing tasks..." }
 
@@ -46,7 +47,8 @@ module ArnoldPipeline
         event_recorder&.record(
           event_type: :tier_execution_started, stage: "execution",
           summary: { tier_number: tier_num, task_count: tier_tasks.size, task_titles: tier_tasks.map(&:title) },
-          tier_number: tier_num
+          tier_number: tier_num,
+          iteration_number: @current_iteration_number
         )
 
         prior_context = build_prior_context(accumulated_context)
@@ -84,7 +86,8 @@ module ArnoldPipeline
               outcome
             }
           },
-          tier_number: tier_num
+          tier_number: tier_num,
+          iteration_number: @current_iteration_number
         )
 
         logger.info { "[Arnold] Tier #{tier_num + 1}/#{max_tier + 1} complete. Running gate check..." }
@@ -132,6 +135,8 @@ module ArnoldPipeline
           end
         end
       end
+    ensure
+      @current_iteration_number = nil
     end
 
     def merge_all_results!(pipeline_run)
@@ -696,25 +701,33 @@ module ArnoldPipeline
       return [] if repo_path.nil? || hooks.empty?
 
       changed_files = collect_changed_files(tier_tasks)
-      results = PostMergeHookRunner.call(repo_path:, changed_files:, hooks:, logger:)
 
-      triggered = results.select { |r| r[:triggered] }
-      event_recorder&.record(
-        event_type: :post_merge_hooks, stage: "execution",
-        tier_number: tier_number,
-        summary: {
-          hook_count: results.size,
-          triggered_count: triggered.size,
-          success_count: triggered.count { |r| r[:success] },
-          results: results.map { |r|
-            entry = { name: r[:name], triggered: r[:triggered], success: r[:success] }
-            entry[:exit_code] = r[:exit_code] if r[:triggered]
-            entry[:error] = r[:error] if r[:error]
-            entry
-          }
-        },
-        payload: { changed_files: changed_files, results: results }
-      )
+      results = if event_recorder
+        event_recorder.timed(
+          event_type: :post_merge_hooks, stage: "execution",
+          summary: ->(r) {
+            triggered = r.select { |res| res[:triggered] }
+            {
+              hook_count: r.size,
+              triggered_count: triggered.size,
+              success_count: triggered.count { |res| res[:success] },
+              results: r.map { |res|
+                entry = { name: res[:name], triggered: res[:triggered], success: res[:success] }
+                entry[:exit_code] = res[:exit_code] if res[:triggered]
+                entry[:error] = res[:error] if res[:error]
+                entry
+              }
+            }
+          },
+          payload: ->(r) { { changed_files: changed_files, results: r } },
+          tier_number: tier_number,
+          iteration_number: @current_iteration_number
+        ) do
+          PostMergeHookRunner.call(repo_path:, changed_files:, hooks:, logger:)
+        end
+      else
+        PostMergeHookRunner.call(repo_path:, changed_files:, hooks:, logger:)
+      end
 
       results
     rescue => e
@@ -728,14 +741,19 @@ module ArnoldPipeline
       checks = build_checks
       return nil if repo_path.nil? || checks.empty?
 
-      results = ArnoldPipeline::VerificationRunner.call(repo_path:, checks:, logger:)
-
-      event_recorder&.record(
-        event_type: :verification_checks, stage: "execution",
-        tier_number: tier_number,
-        summary: { all_passed: results[:all_passed], summary: results[:summary] },
-        payload: results
-      )
+      results = if event_recorder
+        event_recorder.timed(
+          event_type: :verification_checks, stage: "execution",
+          summary: ->(r) { { all_passed: r[:all_passed], summary: r[:summary] } },
+          payload: ->(r) { r },
+          tier_number: tier_number,
+          iteration_number: @current_iteration_number
+        ) do
+          ArnoldPipeline::VerificationRunner.call(repo_path:, checks:, logger:)
+        end
+      else
+        ArnoldPipeline::VerificationRunner.call(repo_path:, checks:, logger:)
+      end
 
       results
     rescue => e
@@ -803,28 +821,34 @@ module ArnoldPipeline
       logger.info { "[Arnold] Running criteria check (#{all_criteria.size} criteria)..." }
       all_criteria.each { |c| logger.debug { "[Arnold]   [#{c.type}] #{c.description}" } }
 
-      check_result = CriteriaChecker.call(criteria: all_criteria, repo_path:)
+      check_result = if event_recorder
+        event_recorder.timed(
+          event_type: :criteria_check, stage: "tier_gate",
+          summary: ->(r) {
+            criteria_details = []
+            r[:verified].each { |c| criteria_details << { type: c.type, description: c.description, result: "verified" } }
+            r[:failed].each { |c| criteria_details << { type: c.type, description: c.description, result: "failed" } }
+            r[:unverified].each { |c| criteria_details << { type: c.type, description: c.description, result: "unverified" } }
+            {
+              verified_count: r[:verified].size,
+              failed_count: r[:failed].size,
+              unverified_count: r[:unverified].size,
+              criteria: criteria_details
+            }
+          },
+          tier_number: tier_number,
+          iteration_number: @current_iteration_number
+        ) do
+          CriteriaChecker.call(criteria: all_criteria, repo_path:)
+        end
+      else
+        CriteriaChecker.call(criteria: all_criteria, repo_path:)
+      end
 
       logger.info { "[Arnold] Criteria results: #{check_result[:verified].size} verified, #{check_result[:failed].size} failed, #{check_result[:unverified].size} unverified" }
       check_result[:verified].each { |c| logger.debug { "[Arnold]   PASS: #{c.description} (#{c.type})" } }
       check_result[:failed].each { |c| logger.debug { "[Arnold]   FAIL: #{c.description} (#{c.type})" } }
       check_result[:unverified].each { |c| logger.debug { "[Arnold]   UNVERIFIED: #{c.description} (#{c.type})" } }
-
-      criteria_details = []
-      check_result[:verified].each { |c| criteria_details << { type: c.type, description: c.description, result: "verified" } }
-      check_result[:failed].each { |c| criteria_details << { type: c.type, description: c.description, result: "failed" } }
-      check_result[:unverified].each { |c| criteria_details << { type: c.type, description: c.description, result: "unverified" } }
-
-      event_recorder&.record(
-        event_type: :criteria_check, stage: "tier_gate",
-        tier_number: tier_number,
-        summary: {
-          verified_count: check_result[:verified].size,
-          failed_count: check_result[:failed].size,
-          unverified_count: check_result[:unverified].size,
-          criteria: criteria_details
-        }
-      )
 
       format_criteria_summary(check_result)
     rescue => e

@@ -3,6 +3,7 @@ require "octokit"
 require "faraday"
 require "arnold_pipeline/tier_execution_engine"
 require "arnold_pipeline/corrective_task_generator"
+require "arnold_pipeline/pipeline_event_recorder"
 
 module ArnoldPipeline
   class TierExecutionEngineTest < ActiveSupport::TestCase
@@ -1969,6 +1970,148 @@ module ArnoldPipeline
         result_diff: '[{"filename":"app.rb"}]')
 
       assert_equal "execution_error", @engine.send(:task_failure_reason, task)
+    end
+
+    # --- iteration_number propagation ---
+
+    test "execute_tiers! propagates iteration_number to all events" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :pending)
+      task = pipeline_run.tasks.create!(title: "Fix bug", position: 0, tier: 0, status: :pending)
+
+      event_recorder = PipelineEventRecorder.new(pipeline_run:)
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      # Simulate task resolution during executor.call
+      @executor.stubs(:call).with { |tasks:, **|
+        tasks.first.update!(external_id: "1", result_diff: '[{"filename":"fix.rb"}]', status: :completed)
+        true
+      }
+      @executor.stubs(:await_results)
+      @executor.stubs(:merge_results)
+
+      engine.execute_tiers!(pipeline_run, iteration_number: 2)
+
+      started = pipeline_run.pipeline_events.find_by(event_type: :tier_execution_started)
+      completed = pipeline_run.pipeline_events.find_by(event_type: :tier_execution_completed)
+
+      assert_not_nil started, "Expected a tier_execution_started event"
+      assert_not_nil completed, "Expected a tier_execution_completed event"
+      assert_equal 2, started.iteration_number
+      assert_equal 2, completed.iteration_number
+    end
+
+    test "execute_tiers! without iteration_number leaves it nil" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :pending)
+      task = pipeline_run.tasks.create!(title: "Fix bug", position: 0, tier: 0, status: :pending)
+
+      event_recorder = PipelineEventRecorder.new(pipeline_run:)
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      # Simulate task resolution during executor.call
+      @executor.stubs(:call).with { |tasks:, **|
+        tasks.first.update!(external_id: "1", result_diff: '[{"filename":"fix.rb"}]', status: :completed)
+        true
+      }
+      @executor.stubs(:await_results)
+      @executor.stubs(:merge_results)
+
+      engine.execute_tiers!(pipeline_run)
+
+      started = pipeline_run.pipeline_events.find_by(event_type: :tier_execution_started)
+      assert_not_nil started, "Expected a tier_execution_started event"
+      assert_nil started.iteration_number
+    end
+
+    # --- duration_ms on validation events ---
+
+    test "verification_checks event includes duration_ms" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :pending)
+
+      event_recorder = PipelineEventRecorder.new(pipeline_run:)
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      ArnoldPipeline.configure do |c|
+        c.claude_code_repo_path = "/tmp/test-repo"
+        c.verification_checks = [{ "name" => "boot", "command" => "echo ok", "type" => "boot_check" }]
+      end
+
+      ArnoldPipeline::VerificationRunner.stubs(:call).returns({
+        all_passed: true, summary: "All passed",
+        checks: [{ name: "boot", success: true, type: :boot_check }]
+      })
+
+      engine.send(:run_verification_checks)
+
+      event = pipeline_run.pipeline_events.find_by(event_type: :verification_checks)
+      assert_not_nil event, "Expected a verification_checks event"
+      assert_not_nil event.duration_ms, "Expected duration_ms to be recorded"
+      assert event.duration_ms >= 0
+    end
+
+    test "post_merge_hooks event includes duration_ms" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :pending)
+      task = pipeline_run.tasks.create!(title: "Setup", position: 0, tier: 0, external_id: "1",
+        result_diff: '[{"filename":"Gemfile"}]')
+
+      event_recorder = PipelineEventRecorder.new(pipeline_run:)
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      ArnoldPipeline.configure do |c|
+        c.claude_code_repo_path = "/tmp/test-repo"
+        c.post_merge_hooks = [{ "name" => "test", "trigger_paths" => ["Gemfile"], "command" => "echo ok" }]
+      end
+
+      ArnoldPipeline::PostMergeHookRunner.stubs(:call).returns([
+        { name: "test", triggered: true, success: true, exit_code: 0 }
+      ])
+
+      engine.send(:run_post_merge_hooks, [task])
+
+      event = pipeline_run.pipeline_events.find_by(event_type: :post_merge_hooks)
+      assert_not_nil event, "Expected a post_merge_hooks event"
+      assert_not_nil event.duration_ms, "Expected duration_ms to be recorded"
+      assert event.duration_ms >= 0
+    end
+
+    test "criteria_check event includes duration_ms" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :pending)
+      task = pipeline_run.tasks.create!(
+        title: "Setup", position: 0, tier: 1,
+        acceptance_criteria: [{ "type" => "file_exists", "description" => "Gemfile exists", "params" => { "path" => "Gemfile" } }]
+      )
+
+      event_recorder = PipelineEventRecorder.new(pipeline_run:)
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      ArnoldPipeline.configure do |c|
+        c.claude_code_repo_path = "/tmp/test-repo"
+        c.tier_gate_enabled = true
+        c.criteria_check_mode = :advisory
+      end
+
+      ArnoldPipeline::CriteriaChecker.stubs(:call).returns({ verified: [], failed: [], unverified: [] })
+
+      engine.send(:run_criteria_check!, pipeline_run, [task])
+
+      event = pipeline_run.pipeline_events.find_by(event_type: :criteria_check)
+      assert_not_nil event, "Expected a criteria_check event"
+      assert_not_nil event.duration_ms, "Expected duration_ms to be recorded"
+      assert event.duration_ms >= 0
     end
 
     # --- Error handling ---
