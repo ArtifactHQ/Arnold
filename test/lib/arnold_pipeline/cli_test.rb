@@ -535,6 +535,20 @@ module ArnoldPipeline
       assert_equal({ "content_length" => 100 }, parsed.first["summary"])
     end
 
+    test "log --json includes pipeline_run_id" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :pipeline_completed, stage: "lifecycle",
+        summary: { total_iterations: 1, total_tasks: 5 }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s, "--json"]) }
+      data = JSON.parse(output)
+
+      assert_equal 1, data.size
+      assert_equal run_record.id, data.first["pipeline_run_id"]
+    end
+
     test "log --verbose includes payloads" do
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
       run_record.pipeline_events.create!(
@@ -608,6 +622,22 @@ module ArnoldPipeline
       assert_match(/Criteria: 3 verified, 1 failed, 2 unverified/, output)
       # Without --verbose, individual criteria should not show
       assert_no_match(/PASS:/, output)
+    end
+
+    test "log formats criteria_check event with mode label" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :criteria_check, stage: "tier_gate",
+        summary: {
+          "mode" => "advisory",
+          "verified_count" => 2, "failed_count" => 1, "unverified_count" => 0,
+          "criteria" => []
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/Criteria \(advisory\): 2 verified, 1 failed, 0 unverified/, output)
     end
 
     test "log --verbose shows per-criterion results for criteria_check" do

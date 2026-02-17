@@ -2114,6 +2114,33 @@ module ArnoldPipeline
       assert event.duration_ms >= 0
     end
 
+    test "criteria_check event includes mode field" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :pending)
+      task = pipeline_run.tasks.create!(
+        title: "Setup", position: 0, tier: 1,
+        acceptance_criteria: [{ "type" => "file_exists", "description" => "Gemfile exists", "params" => { "path" => "Gemfile" } }]
+      )
+
+      event_recorder = PipelineEventRecorder.new(pipeline_run:)
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      ArnoldPipeline.configure do |c|
+        c.claude_code_repo_path = "/tmp/test-repo"
+        c.tier_gate_enabled = true
+        c.criteria_check_mode = :advisory
+      end
+
+      ArnoldPipeline::CriteriaChecker.stubs(:call).returns({ verified: [], failed: [], unverified: [] })
+
+      engine.send(:run_criteria_check!, pipeline_run, [task])
+
+      event = pipeline_run.pipeline_events.find_by(event_type: :criteria_check)
+      assert_equal "advisory", event.summary["mode"]
+    end
+
     # --- Error handling ---
 
     test "falls back to generic task when CorrectiveTaskGenerator fails" do

@@ -628,6 +628,7 @@ module ArnoldPipeline
 
     def event_to_hash(event, include_payload: false)
       hash = {
+        pipeline_run_id: event.pipeline_run_id,
         event_type: event.event_type,
         stage: event.stage,
         summary: event.summary,
@@ -668,10 +669,11 @@ module ArnoldPipeline
           end
         end
       when "criteria_check"
+        mode = summary["mode"] ? " (#{summary['mode']})" : ""
         v = summary["verified_count"] || 0
         f = summary["failed_count"] || 0
         u = summary["unverified_count"] || 0
-        say "  Criteria: #{v} verified, #{f} failed, #{u} unverified"
+        say "  Criteria#{mode}: #{v} verified, #{f} failed, #{u} unverified"
         if options[:verbose] && summary["criteria"]
           summary["criteria"].each do |c|
             label = case c["result"]

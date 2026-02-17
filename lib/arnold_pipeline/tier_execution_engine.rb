@@ -834,6 +834,7 @@ module ArnoldPipeline
             r[:failed].each { |c| criteria_details << { type: c.type, description: c.description, result: "failed" } }
             r[:unverified].each { |c| criteria_details << { type: c.type, description: c.description, result: "unverified" } }
             {
+              mode: ArnoldPipeline.configuration.criteria_check_mode.to_s,
               verified_count: r[:verified].size,
               failed_count: r[:failed].size,
               unverified_count: r[:unverified].size,
