@@ -457,7 +457,7 @@ ArnoldPipeline.configure do |config|
   config.verification_checks = [
     {
       name: "Boot check",
-      command: "bin/rails runner 'puts :ok'",
+      command: "bin/rails runner 'ActiveRecord::Migration.check_all_pending!; puts :ok'",
       type: :boot,
       required: true
     },
@@ -759,15 +759,9 @@ Check results (pass/fail, stdout/stderr, exit code) are passed to the tier gate 
 config.verification_checks = [
   {
     name: "Boot check",
-    command: "bin/rails runner 'puts Rails.version'",
+    command: "bin/rails runner 'ActiveRecord::Migration.check_all_pending!; puts Rails.version'",
     type: :boot,
-    required: true  # Pipeline pauses if this fails
-  },
-  {
-    name: "Database migrations up to date",
-    command: "bin/rails db:migrate:status",
-    type: :custom,
-    required: false
+    required: true  # Pipeline pauses if this fails — also catches pending migrations
   },
   {
     name: "Test suite",
@@ -783,14 +777,9 @@ config.verification_checks = [
 ```yaml
 verification_checks:
   - name: "Boot check"
-    command: "bin/rails runner 'puts Rails.version'"
+    command: "bin/rails runner 'ActiveRecord::Migration.check_all_pending!; puts Rails.version'"
     type: boot
     required: true
-
-  - name: "Database migrations up to date"
-    command: "bin/rails db:migrate:status"
-    type: custom
-    required: false
 
   - name: "Test suite"
     command: "bin/rails test"
