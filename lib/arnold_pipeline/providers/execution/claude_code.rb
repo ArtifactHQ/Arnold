@@ -230,10 +230,11 @@ module ArnoldPipeline
 
           cmd = build_cli_command(prompt)
 
-          # Unset CLAUDECODE env var so child claude processes don't refuse to start
-          # when arnold is launched from within a Claude Code session.
-          # Setting to nil tells Process.spawn to remove it from the child environment.
-          output, status = Open3.capture2({ "CLAUDECODE" => nil }, cmd, chdir: worktree_path)
+          # Clear Bundler env so the child process uses its own Gemfile (not arnold_pipeline's).
+          # Unset CLAUDECODE so child claude processes don't refuse to start nested sessions.
+          output, status = Bundler.with_unbundled_env do
+            Open3.capture2({ "CLAUDECODE" => nil }, cmd, chdir: worktree_path)
+          end
 
           if status.success?
             { success: true, output: output, error: nil }
@@ -339,7 +340,9 @@ module ArnoldPipeline
           )
 
           cmd = build_cli_command(prompt)
-          _output, status = Open3.capture2(cmd, chdir: repo_path)
+          _output, status = Bundler.with_unbundled_env do
+            Open3.capture2({ "CLAUDECODE" => nil }, cmd, chdir: repo_path)
+          end
 
           unless status.success?
             abort_merge_if_needed
