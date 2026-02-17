@@ -8,12 +8,14 @@ module ArnoldPipeline
         name: "spec_iteration_result",
         schema: {
           type: "object",
+          additionalProperties: false,
           properties: {
             summary: { type: "string" },
             deltas: {
               type: "array",
               items: {
                 type: "object",
+                additionalProperties: false,
                 properties: {
                   operation: { type: "string", enum: %w[added modified removed] },
                   section: { type: "string" },
@@ -23,7 +25,7 @@ module ArnoldPipeline
                   after_content: { type: "string" },
                   rationale: { type: "string" }
                 },
-                required: %w[operation section rationale]
+                required: %w[operation section requirement content before_content after_content rationale]
               }
             }
           },
