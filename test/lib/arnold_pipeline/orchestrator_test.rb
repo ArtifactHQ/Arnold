@@ -154,6 +154,53 @@ module ArnoldPipeline
       assert event.summary["backtrace"].is_a?(Array)
     end
 
+    test "pipeline_completed event includes aggregate health summary" do
+      stub_spec_generation!
+      stub_task_breakdown!(times: 1)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      result = @orchestrator.call(nl_input: "Build a todo app")
+
+      event = result.pipeline_events.find_by(event_type: :pipeline_completed)
+      assert_not_nil event
+      summary = event.summary
+      assert_includes summary.keys, "total_iterations"
+      assert_includes summary.keys, "total_tasks"
+      assert_includes summary.keys, "total_duration_ms"
+      assert_includes summary.keys, "tasks_succeeded"
+      assert_includes summary.keys, "tasks_failed"
+      assert_includes summary.keys, "tasks_superseded"
+      assert_includes summary.keys, "tier_count"
+      assert_includes summary.keys, "final_confidence"
+      assert_equal 95, summary["final_confidence"]
+      assert summary["total_duration_ms"].is_a?(Numeric), "total_duration_ms should be numeric"
+      assert_equal 5, summary["total_tasks"]
+      assert_equal 1, summary["total_iterations"]
+    end
+
+    test "pipeline_failed event includes task counts and duration" do
+      stub_spec_generation!
+      stub_task_breakdown!(times: 1)
+      @executor.stubs(:call).raises(StandardError, "GitHub API timeout")
+
+      assert_raises(StandardError) do
+        @orchestrator.call(nl_input: "Build a todo app")
+      end
+
+      event = PipelineRun.last.pipeline_events.find_by(event_type: :pipeline_failed)
+      assert_not_nil event
+      summary = event.summary
+      assert_includes summary.keys, "total_tasks"
+      assert_includes summary.keys, "tasks_succeeded"
+      assert_includes summary.keys, "tasks_failed"
+      assert_includes summary.keys, "total_duration_ms"
+      assert summary["total_duration_ms"].is_a?(Numeric), "total_duration_ms should be numeric"
+      assert_equal 5, summary["total_tasks"]
+    end
+
     test "call validates configuration before running" do
       ArnoldPipeline.configure { |c| c.llm_provider = :invalid }
       assert_raises(ArnoldPipeline::ConfigurationError) do

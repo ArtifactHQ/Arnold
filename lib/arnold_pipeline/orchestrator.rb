@@ -198,10 +198,7 @@ module ArnoldPipeline
 
         @event_recorder&.record(
           event_type: :pipeline_completed, stage: "lifecycle",
-          summary: {
-            total_iterations: pipeline_run.iterations.count,
-            total_tasks: pipeline_run.tasks.count
-          }
+          summary: build_completion_summary(pipeline_run)
         )
       rescue TierGateError => e
         @event_recorder&.record(
@@ -220,7 +217,11 @@ module ArnoldPipeline
             llm_provider: config.llm_provider.to_s,
             llm_model: config.llm_model,
             execution_provider: config.execution_provider.to_s,
-            backtrace: e.backtrace&.first(10)
+            backtrace: e.backtrace&.first(10),
+            total_tasks: pipeline_run.tasks.count,
+            tasks_succeeded: pipeline_run.tasks.where(status: :completed).count,
+            tasks_failed: pipeline_run.tasks.where(status: :failed).count,
+            total_duration_ms: ((Time.current - pipeline_run.created_at) * 1000).round(1)
           }
         )
         pipeline_run.update!(status: :failed, metadata: (pipeline_run.metadata || {}).merge(
@@ -371,6 +372,20 @@ module ArnoldPipeline
       pipeline_run.update!(metadata: metadata.merge("baseline_commit_sha" => sha.strip))
     rescue => e
       logger.warn { "[Arnold] Failed to capture baseline SHA: #{e.message}" }
+    end
+
+    def build_completion_summary(pipeline_run)
+      tasks = pipeline_run.tasks
+      {
+        total_iterations: pipeline_run.iterations.count,
+        total_tasks: tasks.count,
+        total_duration_ms: ((Time.current - pipeline_run.created_at) * 1000).round(1),
+        tasks_succeeded: tasks.where(status: :completed).count,
+        tasks_failed: tasks.where(status: :failed).count,
+        tasks_superseded: tasks.where(status: :superseded).count,
+        tier_count: (tasks.maximum(:tier) || -1) + 1,
+        final_confidence: pipeline_run.iterations.order(:number).last&.confidence
+      }
     end
 
     def resolve_recipes(pipeline_run)
