@@ -1711,6 +1711,184 @@ module ArnoldPipeline
       assert_not_nil result
     end
 
+    # --- tier_number on validation events ---
+
+    test "post_merge_hooks event includes tier_number" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :pending)
+      task = pipeline_run.tasks.create!(title: "Setup", position: 0, tier: 0, external_id: "1",
+        result_diff: '[{"filename":"Gemfile"}]')
+
+      event_recorder = build_recording_event_recorder
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      ArnoldPipeline.configure do |c|
+        c.claude_code_repo_path = "/tmp/test-repo"
+        c.post_merge_hooks = [{ "name" => "test", "trigger_paths" => ["Gemfile"], "command" => "echo ok" }]
+      end
+
+      ArnoldPipeline::PostMergeHookRunner.stubs(:call).returns([
+        { name: "test", triggered: true, success: true, exit_code: 0 }
+      ])
+
+      engine.send(:run_post_merge_hooks, [task], 2)
+      event = event_recorder.events.find { |e| e[:event_type] == :post_merge_hooks }
+      assert_not_nil event, "Expected a post_merge_hooks event"
+      assert_equal 2, event[:tier_number]
+    end
+
+    test "verification_checks event includes tier_number" do
+      ArnoldPipeline.configure do |c|
+        c.claude_code_repo_path = "/tmp/test-repo"
+        c.verification_checks = [
+          { name: "boot", command: "bin/rails runner 'true'", type: :boot }
+        ]
+      end
+
+      event_recorder = build_recording_event_recorder
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      ArnoldPipeline::VerificationRunner.stubs(:call).returns({
+        checks: [{ name: "boot", type: :boot, success: true }],
+        all_passed: true,
+        summary: "1 passed, 0 failed: boot=OK"
+      })
+
+      engine.send(:run_verification_checks, 3)
+      event = event_recorder.events.find { |e| e[:event_type] == :verification_checks }
+      assert_not_nil event, "Expected a verification_checks event"
+      assert_equal 3, event[:tier_number]
+    end
+
+    test "criteria_check event includes tier_number" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = File.expand_path("../../..", __dir__)
+        c.tier_gate_enabled = true
+        c.criteria_check_mode = :advisory
+      end
+
+      event_recorder = build_recording_event_recorder
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0,
+        acceptance_criteria: [
+          { "type" => "file_exists", "description" => "Gemfile exists", "path" => "Gemfile" }
+        ]
+      )
+
+      verified = ArnoldPipeline::AcceptanceCriterion.new(type: "file_exists", description: "Gemfile exists", params: {})
+      ArnoldPipeline::CriteriaChecker.stubs(:call).returns({
+        verified: [verified], failed: [], unverified: []
+      })
+
+      engine.send(:run_criteria_check!, pipeline_run, [task], 5)
+      event = event_recorder.events.find { |e| e[:event_type] == :criteria_check }
+      assert_not_nil event, "Expected a criteria_check event"
+      assert_equal 5, event[:tier_number]
+    end
+
+    test "repo_context_scanned event includes tier_number" do
+      ArnoldPipeline.configure do |c|
+        c.claude_code_repo_path = File.expand_path("../../..", __dir__)
+      end
+
+      event_recorder = build_recording_event_recorder
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+
+      engine.send(:build_repo_context, pipeline_run, 4)
+      event = event_recorder.events.find { |e| e[:event_type] == :repo_context_scanned }
+      assert_not_nil event, "Expected a repo_context_scanned event"
+      assert_equal 4, event[:tier_number]
+    end
+
+    test "spec_test_execution generation event includes tier_number" do
+      ArnoldPipeline.configure do |c|
+        c.claude_code_repo_path = Dir.mktmpdir
+        c.spec_test_generation_enabled = true
+        c.spec_test_directory = "test/spec_scenarios"
+      end
+
+      event_recorder = build_recording_event_recorder
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.create_specification!(content: "# Test Spec\n## Purpose\nTest app")
+
+      require "arnold_pipeline/agents/spec_test_generator"
+      ArnoldPipeline::Agents::SpecTestGenerator.any_instance.stubs(:call).returns({
+        "test_files" => [{ "path" => "test/spec_scenarios/test_basic.rb", "content" => "# test" }]
+      })
+      progress_stub = Data.define(:total_tests, :total_passing, :pass_rate, :still_failing, :newly_passing, :regressions)
+      ArnoldPipeline::SpecTestProgressTracker.stubs(:call).returns(
+        progress_stub.new(total_tests: 1, total_passing: 0, pass_rate: 0, still_failing: ["test_basic"], newly_passing: [], regressions: [])
+      )
+
+      engine.send(:run_spec_test_generation!, pipeline_run, 0)
+      event = event_recorder.events.find { |e| e[:event_type] == :spec_test_execution && e[:summary][:phase] == "generation" }
+      assert_not_nil event, "Expected a spec_test_execution generation event"
+      assert_equal 0, event[:tier_number]
+    ensure
+      FileUtils.rm_rf(ArnoldPipeline.configuration.claude_code_repo_path)
+    end
+
+    test "spec_test_execution progress event includes tier_number" do
+      tmpdir = Dir.mktmpdir
+      test_dir = File.join(tmpdir, "test/spec_scenarios")
+      FileUtils.mkdir_p(test_dir)
+      File.write(File.join(test_dir, "test_basic.rb"), "# test")
+
+      ArnoldPipeline.configure do |c|
+        c.claude_code_repo_path = tmpdir
+        c.spec_test_generation_enabled = true
+        c.spec_test_directory = "test/spec_scenarios"
+      end
+
+      event_recorder = build_recording_event_recorder
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+
+      progress_stub = Data.define(:total_tests, :total_passing, :pass_rate, :still_failing, :newly_passing, :regressions, :to_gate_summary)
+      ArnoldPipeline::SpecTestProgressTracker.stubs(:call).returns(
+        progress_stub.new(
+          total_tests: 2, total_passing: 1, pass_rate: 50,
+          still_failing: ["test_a"], newly_passing: ["test_b"], regressions: [],
+          to_gate_summary: "1/2 passing (50%)"
+        )
+      )
+
+      engine.send(:run_spec_test_progress!, pipeline_run, 3)
+      event = event_recorder.events.find { |e| e[:event_type] == :spec_test_execution && e[:summary][:phase] == "progress_check" }
+      assert_not_nil event, "Expected a spec_test_execution progress event"
+      assert_equal 3, event[:tier_number]
+    ensure
+      FileUtils.rm_rf(tmpdir)
+    end
+
     # --- Error handling ---
 
     test "falls back to generic task when CorrectiveTaskGenerator fails" do

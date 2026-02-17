@@ -81,26 +81,26 @@ module ArnoldPipeline
         logger.info { "[Arnold] Tier #{tier_num + 1}/#{max_tier + 1} complete. Running gate check..." }
 
         # Run post-merge hooks after merge (before gate)
-        run_post_merge_hooks(tier_tasks)
+        run_post_merge_hooks(tier_tasks, tier_num)
 
         # Run verification checks after hooks (before gate)
-        verification_results = run_verification_checks
+        verification_results = run_verification_checks(tier_num)
 
         # Run spec test generation after bootstrap tier (tier 0.5) if enabled
         if tier_num == 0 && spec_test_generation_enabled?
-          run_spec_test_generation!(pipeline_run)
+          run_spec_test_generation!(pipeline_run, tier_num)
         end
 
         # Run spec test progress tracking after merge if enabled
         spec_test_progress_summary = nil
         if spec_test_generation_enabled?
-          spec_test_progress_summary = run_spec_test_progress!(pipeline_run)
+          spec_test_progress_summary = run_spec_test_progress!(pipeline_run, tier_num)
         end
 
         # Run criteria check for this tier's tasks (gate feature only, not context propagation)
         acceptance_criteria_summary = nil
         if ArnoldPipeline.configuration.tier_gate_enabled && ArnoldPipeline.configuration.criteria_check_mode != :disabled
-          acceptance_criteria_summary = run_criteria_check!(pipeline_run, tier_tasks)
+          acceptance_criteria_summary = run_criteria_check!(pipeline_run, tier_tasks, tier_num)
         end
 
         # Gate check + context (when either feature is enabled)
@@ -188,7 +188,7 @@ module ArnoldPipeline
       }.join("\n")
       diffs = DiffSummarizer.call(tier_tasks.map(&:result_diff).compact)
       comments = format_task_comments(tier_tasks)
-      repo_context = build_repo_context(pipeline_run)
+      repo_context = build_repo_context(pipeline_run, tier_num)
 
       if verification_results && has_test_suite_result?(verification_results)
         return evaluate_with_verification(
@@ -497,8 +497,8 @@ module ArnoldPipeline
 
         # Re-run empirical checks and gate check
         all_tier_tasks = pipeline_run.tasks.in_tier(tier_num).to_a
-        acceptance_criteria_summary = run_criteria_check!(pipeline_run, all_tier_tasks)
-        retry_verification_results = run_verification_checks
+        acceptance_criteria_summary = run_criteria_check!(pipeline_run, all_tier_tasks, tier_num)
+        retry_verification_results = run_verification_checks(tier_num)
         gate_result = run_tier_gate!(pipeline_run, tier_num, all_tier_tasks,
                                      acceptance_criteria_summary:,
                                      verification_results: retry_verification_results)
@@ -544,7 +544,7 @@ module ArnoldPipeline
       ArnoldPipeline.configuration.spec_test_generation_enabled
     end
 
-    def run_spec_test_generation!(pipeline_run)
+    def run_spec_test_generation!(pipeline_run, tier_number = nil)
       cfg = ArnoldPipeline.configuration
       repo_path = cfg.claude_code_repo_path
       return unless repo_path && Dir.exist?(repo_path)
@@ -560,6 +560,7 @@ module ArnoldPipeline
       result = if event_recorder
         event_recorder.timed(
           event_type: :spec_test_execution, stage: "execution",
+          tier_number: tier_number,
           summary: ->(r) {
             {
               phase: "generation",
@@ -606,7 +607,7 @@ module ArnoldPipeline
       logger.warn { "[Arnold] Spec test generation failed (non-fatal): #{e.class}: #{e.message}" }
     end
 
-    def run_spec_test_progress!(pipeline_run)
+    def run_spec_test_progress!(pipeline_run, tier_number = nil)
       cfg = ArnoldPipeline.configuration
       repo_path = cfg.claude_code_repo_path
       return nil unless repo_path && Dir.exist?(repo_path)
@@ -622,6 +623,7 @@ module ArnoldPipeline
       progress = if event_recorder
         event_recorder.timed(
           event_type: :spec_test_execution, stage: "tier_gate",
+          tier_number: tier_number,
           summary: ->(r) {
             {
               phase: "progress_check",
@@ -669,7 +671,7 @@ module ArnoldPipeline
       nil
     end
 
-    def run_post_merge_hooks(tier_tasks)
+    def run_post_merge_hooks(tier_tasks, tier_number = nil)
       config = ArnoldPipeline.configuration
       repo_path = config.claude_code_repo_path
       hooks = build_hooks
@@ -681,6 +683,7 @@ module ArnoldPipeline
       triggered = results.select { |r| r[:triggered] }
       event_recorder&.record(
         event_type: :post_merge_hooks, stage: "execution",
+        tier_number: tier_number,
         summary: {
           hook_count: results.size,
           triggered_count: triggered.size,
@@ -701,7 +704,7 @@ module ArnoldPipeline
       []
     end
 
-    def run_verification_checks
+    def run_verification_checks(tier_number = nil)
       config = ArnoldPipeline.configuration
       repo_path = config.claude_code_repo_path
       checks = build_checks
@@ -711,6 +714,7 @@ module ArnoldPipeline
 
       event_recorder&.record(
         event_type: :verification_checks, stage: "execution",
+        tier_number: tier_number,
         summary: { all_passed: results[:all_passed], summary: results[:summary] },
         payload: results
       )
@@ -766,7 +770,7 @@ module ArnoldPipeline
       end
     end
 
-    def run_criteria_check!(pipeline_run, tier_tasks)
+    def run_criteria_check!(pipeline_run, tier_tasks, tier_number = nil)
       return nil if ArnoldPipeline.configuration.criteria_check_mode == :disabled
 
       all_criteria = tier_tasks.flat_map do |task|
@@ -795,6 +799,7 @@ module ArnoldPipeline
 
       event_recorder&.record(
         event_type: :criteria_check, stage: "tier_gate",
+        tier_number: tier_number,
         summary: {
           verified_count: check_result[:verified].size,
           failed_count: check_result[:failed].size,
@@ -834,7 +839,7 @@ module ArnoldPipeline
       lines.join("\n")
     end
 
-    def build_repo_context(pipeline_run)
+    def build_repo_context(pipeline_run, tier_number = nil)
       repo_path = ArnoldPipeline.configuration.claude_code_repo_path
       return nil unless repo_path
 
@@ -845,6 +850,7 @@ module ArnoldPipeline
 
       event_recorder&.record(
         event_type: :repo_context_scanned, stage: "tier_gate",
+        tier_number: tier_number,
         summary: { file_count: file_list.size, directories: file_list.map { |f| File.dirname(f) }.uniq },
         payload: { file_list: file_list }
       )
