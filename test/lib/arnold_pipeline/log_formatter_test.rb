@@ -377,5 +377,92 @@ module ArnoldPipeline
       output = formatter.render
       assert_match(/x{200}\.\.\./, output)
     end
+
+    # --- Verbose mode ---
+
+    test "verbose mode shows per-task outcomes for tier_execution_completed" do
+      @run.pipeline_events.create!(
+        event_type: :tier_execution_started, stage: "execution", tier_number: 0,
+        summary: { "tier_number" => 0, "task_count" => 2, "task_titles" => ["Setup DB", "Add API"] }
+      )
+      @run.pipeline_events.create!(
+        event_type: :tier_execution_completed, stage: "execution", tier_number: 0,
+        summary: {
+          "tier_number" => 0, "resolved_count" => 1, "failed_count" => 1,
+          "task_outcomes" => [
+            { "title" => "Setup DB", "status" => "resolved" },
+            { "title" => "Add API", "status" => "failed", "failure_reason" => "empty_diff" }
+          ]
+        }
+      )
+      formatter = LogFormatter.new(@run.pipeline_events.chronological, pipeline_run: @run, color: false, verbose: true)
+      output = formatter.render
+      assert_match(/Setup DB/, output)
+      assert_match(/Add API.*empty_diff/, output)
+    end
+
+    test "verbose mode shows per-criterion results" do
+      @run.pipeline_events.create!(
+        event_type: :tier_execution_started, stage: "execution", tier_number: 0,
+        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => ["X"] }
+      )
+      @run.pipeline_events.create!(
+        event_type: :criteria_check, stage: "tier_gate", tier_number: 0,
+        summary: {
+          "verified_count" => 1, "failed_count" => 1, "unverified_count" => 0,
+          "criteria" => [
+            { "type" => "file_exists", "description" => "Gemfile exists", "result" => "verified" },
+            { "type" => "route_exists", "description" => "Health check route", "result" => "failed" }
+          ]
+        }
+      )
+      formatter = LogFormatter.new(@run.pipeline_events.chronological, pipeline_run: @run, color: false, verbose: true)
+      output = formatter.render
+      assert_match(/PASS: Gemfile exists/, output)
+      assert_match(/FAIL: Health check route/, output)
+    end
+
+    test "verbose mode shows corrective tasks for failed gate" do
+      @run.pipeline_events.create!(
+        event_type: :tier_execution_started, stage: "execution", tier_number: 0,
+        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => ["X"] }
+      )
+      @run.pipeline_events.create!(
+        event_type: :tier_gate_evaluated, stage: "tier_gate", tier_number: 0,
+        summary: {
+          "pass" => false, "issues" => ["Missing route"],
+          "corrective_tasks" => [
+            { "title" => "Add route", "description" => "Add GET /up" }
+          ]
+        }
+      )
+      formatter = LogFormatter.new(@run.pipeline_events.chronological, pipeline_run: @run, color: false, verbose: true)
+      output = formatter.render
+      assert_match(/Corrective tasks/, output)
+      assert_match(/1\. Add route/, output)
+    end
+
+    test "non-verbose mode hides per-task outcomes" do
+      @run.pipeline_events.create!(
+        event_type: :tier_execution_started, stage: "execution", tier_number: 0,
+        summary: { "tier_number" => 0, "task_count" => 2, "task_titles" => ["Setup DB", "Add API"] }
+      )
+      @run.pipeline_events.create!(
+        event_type: :tier_execution_completed, stage: "execution", tier_number: 0,
+        summary: {
+          "tier_number" => 0, "resolved_count" => 2, "failed_count" => 0,
+          "task_outcomes" => [
+            { "title" => "Setup DB", "status" => "resolved" },
+            { "title" => "Add API", "status" => "resolved" }
+          ]
+        }
+      )
+      formatter = LogFormatter.new(@run.pipeline_events.chronological, pipeline_run: @run, color: false, verbose: false)
+      output = formatter.render
+      # Task titles appear in the tier header bullets, but per-task outcome lines
+      # (with checkmark + status) should NOT appear in non-verbose mode
+      assert_no_match(/Setup DB.*resolved/, output)
+      assert_no_match(/Add API.*resolved/, output)
+    end
   end
 end
