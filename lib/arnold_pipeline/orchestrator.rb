@@ -130,7 +130,8 @@ module ArnoldPipeline
         status: :pending,
         metadata: {
           "forked_from_run_id" => pipeline_run.id,
-          "fork_change_request" => change_request
+          "fork_change_request" => change_request,
+          "fork_deltas" => raw_deltas
         }
       )
 
@@ -301,7 +302,13 @@ module ArnoldPipeline
 
     def break_tasks!(pipeline_run)
       pipeline_run.update!(status: :breaking_tasks)
-      logger.info { "[Arnold] Breaking specification into tasks..." }
+
+      fork_deltas = (pipeline_run.metadata || {})["fork_deltas"]
+      if fork_deltas.present?
+        logger.info { "[Arnold] Breaking specification into delta-scoped tasks (#{fork_deltas.size} deltas)..." }
+      else
+        logger.info { "[Arnold] Breaking specification into tasks..." }
+      end
 
       pipeline_run.tasks.destroy_all
 
@@ -312,13 +319,14 @@ module ArnoldPipeline
           {
             task_count: tasks.count,
             tier_count: (tasks.map(&:tier).compact.uniq.size),
-            dependency_edge_count: tasks.sum { |t| (t.depends_on || []).size }
+            dependency_edge_count: tasks.sum { |t| (t.depends_on || []).size },
+            delta_scoped: fork_deltas.present?
           }
         },
         payload: ->(_) { { spec_content: pipeline_run.specification&.content } }
       ) do
         recipe, supporting_recipes = resolve_recipes(pipeline_run)
-        task_data = task_breaker.call(spec_content: pipeline_run.specification.content, recipe:, supporting_recipes:)
+        task_data = task_breaker.call(spec_content: pipeline_run.specification.content, recipe:, supporting_recipes:, deltas: fork_deltas)
 
         task_data.each do |td|
           pipeline_run.tasks.create!(

@@ -341,6 +341,43 @@ module ArnoldPipeline
       @orchestrator.call(nl_input: "Build a todo app", stop_after: :tasks)
     end
 
+    test "break_tasks passes fork_deltas to task_breaker for forked runs" do
+      run = PipelineRun.create!(
+        nl_input: "Build a todo app",
+        status: :paused,
+        metadata: {
+          "paused_at" => "spec",
+          "forked_from_run_id" => 1,
+          "fork_deltas" => sample_deltas
+        }
+      )
+      run.create_specification!(
+        content: "# Spec with dark mode",
+        structured_data: { "features" => ["crud"] },
+        version: 2
+      )
+
+      @task_breaker.expects(:call).with { |kwargs|
+        kwargs[:deltas] == sample_deltas &&
+          kwargs[:spec_content] == "# Spec with dark mode"
+      }.returns([
+        { "title" => "Add dark mode", "description" => "Implement dark mode", "priority" => 0, "labels" => ["frontend"], "position" => 0, "depends_on" => [] }
+      ])
+
+      @orchestrator.resume(pipeline_run: run, stop_after: :tasks)
+      assert_equal 1, run.tasks.reload.count
+    end
+
+    test "break_tasks passes nil deltas for non-forked runs" do
+      stub_spec_generation!
+
+      @task_breaker.expects(:call).with { |kwargs|
+        kwargs[:deltas].nil?
+      }.returns(sample_tasks)
+
+      @orchestrator.call(nl_input: "Build a todo app", stop_after: :tasks)
+    end
+
     test "execute! records baseline_commit_sha in metadata" do
       ArnoldPipeline.configure do |c|
         c.llm_api_key = "test"
@@ -756,6 +793,22 @@ module ArnoldPipeline
         orchestrator.fork!(pipeline_run: run, change_request: "Change")
       end
       assert_match(/has no specification/, error.message)
+    end
+
+    test "fork! stores fork_deltas in metadata" do
+      run = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run.create_specification!(content: "# Original Spec", version: 1)
+
+      spec_iterator = stub("spec_iterator")
+      spec_iterator.stubs(:call).returns(sample_agent_result)
+
+      orchestrator = build_iterate_orchestrator(spec_iterator:)
+      orchestrator.delta_merger.stubs(:apply!).returns({ merge_strategy: "append", delta_count: 1, new_version: 2 })
+
+      result = orchestrator.fork!(pipeline_run: run, change_request: "Add dark mode")
+
+      new_run = result[:pipeline_run]
+      assert_equal sample_deltas, new_run.metadata["fork_deltas"]
     end
 
     test "fork! raises when no deltas generated" do

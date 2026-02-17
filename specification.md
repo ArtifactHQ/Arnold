@@ -816,6 +816,16 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 - AND `iterate_spec` decisions are suppressed because the spec has already advanced past the task generation version.
 - AND a pipeline event is recorded noting the version skew with `suppressed_from: "iterate_spec"` and `reason: "spec_version_skew"`.
 
+#### Scenario: Delta-Scoped Task Generation for Forked Runs [SPEC-CLI-ITERATE-006]
+- GIVEN a pipeline run was forked from a completed parent run via `iterate` on a completed run.
+- AND the fork stored raw spec deltas in `pipeline_run.metadata["fork_deltas"]`.
+- WHEN `break_tasks!` is called during resume of the forked run.
+- THEN the TaskBreaker agent receives the deltas and generates tasks scoped ONLY to the changed requirements.
+- AND the system prompt uses delta-scoped rules (no bootstrap task, no minimum task count).
+- AND the user prompt instructs the LLM that the application is already built.
+- AND the full spec is still provided as context so the LLM understands the broader application.
+- AND when `fork_deltas` is absent from metadata (non-forked runs), task generation uses the standard full-spec behavior.
+
 ### Requirement: Configuration
 The system SHALL be configurable via a Ruby block (`ArnoldPipeline.configure`) or YAML config file.
 When multiple sources provide the same key, CLI flags take precedence over YAML config, which takes precedence over defaults (CLI > YAML > defaults).

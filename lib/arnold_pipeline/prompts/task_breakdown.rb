@@ -1,7 +1,7 @@
 module ArnoldPipeline
   module Prompts
     module TaskBreakdown
-      def self.system_prompt(recipe: nil, supporting_recipes: [])
+      def self.system_prompt(recipe: nil, supporting_recipes: [], deltas: nil)
         <<~PROMPT
           You are a technical project manager breaking down a software specification into
           granular, actionable tasks for AI coding agents.
@@ -24,29 +24,7 @@ module ArnoldPipeline
 
           #{technology_context(recipe, supporting_recipes)}
 
-          # Rules
-
-          - Aim for 5 to 20 tasks
-          - Each task must be independently executable by a coding agent
-          - Tasks MUST be ordered by dependencies (e.g., database setup before API endpoints)
-          - Each task should have clear acceptance criteria in its description
-          - Use per-feature acceptance criteria from the spec directly in task descriptions
-          - Assign appropriate labels (e.g., "backend", "frontend", "database", "testing")
-          - Set priority: 0 = highest priority, higher numbers = lower priority
-          - The FIRST task (position 0) MUST be a project bootstrap task that sets up the
-            foundational structure (project skeleton, dependencies, database configuration).
-            ALL other tasks MUST depend on position 0, either directly or transitively
-            through other dependencies. This ensures a single foundation task runs first.
-          - Task descriptions MUST reference specific tools, gems, generators, and commands
-            from the spec and recipe context. Be prescriptive, not generic.
-            WRONG: "Set up the project with a database and CSS framework"
-            RIGHT: "Run `rails new` with PostgreSQL (`--database=postgresql`), install Tailwind CSS via `tailwindcss-rails`, configure Propshaft asset pipeline"
-            WRONG: "Implement authentication"
-            RIGHT: "Implement authentication using Rails 8 authentication generator (`bin/rails generate authentication`), configure `has_secure_password`, add `bcrypt` gem"
-          - The bootstrap task (position 0) MUST name the specific framework, database,
-            CSS framework, and asset pipeline from the recipe context
-          - For each spec section, name the specific tools and libraries that apply to
-            that section's tasks (e.g., ActiveRecord for models, Turbo Streams for real-time)
+          #{rules_section(deltas)}
 
           # Local Execution Requirements
 
@@ -133,12 +111,22 @@ module ArnoldPipeline
         PROMPT
       end
 
-      def self.user_prompt(spec_content:)
-        <<~PROMPT
-          Break down the following specification into tasks:
+      def self.user_prompt(spec_content:, deltas: nil)
+        if deltas.present?
+          <<~PROMPT
+            The application described by the following specification is already built and working.
+            Generate tasks ONLY for the deltas described in the system prompt — do not regenerate
+            tasks for existing functionality.
 
-          #{spec_content}
-        PROMPT
+            #{spec_content}
+          PROMPT
+        else
+          <<~PROMPT
+            Break down the following specification into tasks:
+
+            #{spec_content}
+          PROMPT
+        end
       end
 
       def self.technology_context(recipe, supporting_recipes)
@@ -238,7 +226,71 @@ module ArnoldPipeline
         parts.join("\n")
       end
 
-      private_class_method :technology_context, :framework_section, :sections_detail, :format_section, :supporting_recipes_brief, :verification_context
+      def self.rules_section(deltas)
+        if deltas.present?
+          <<~RULES
+            # Delta Scope
+
+            This is a FORKED pipeline run. The application already exists and is fully built.
+            You are generating tasks ONLY for the following spec deltas:
+
+            #{delta_scoping_context(deltas)}
+
+            # Rules (Delta-Scoped)
+
+            - Generate ONLY tasks that implement the deltas above — no bootstrap, no existing features
+            - There is NO minimum task count — 1 task for 1 delta is perfectly fine
+            - Do NOT include a project bootstrap/setup task — the project already exists
+            - Tasks may depend on existing code (models, routes, etc.) — assume they exist
+            - Each task must be independently executable by a coding agent
+            - Tasks MUST be ordered by dependencies
+            - Each task should have clear acceptance criteria in its description
+            - Assign appropriate labels (e.g., "backend", "frontend", "database", "testing")
+            - Set priority: 0 = highest priority, higher numbers = lower priority
+            - Task descriptions MUST reference specific tools, gems, generators, and commands
+            - Position numbering starts at 0
+          RULES
+        else
+          <<~RULES
+            # Rules
+
+            - Aim for 5 to 20 tasks
+            - Each task must be independently executable by a coding agent
+            - Tasks MUST be ordered by dependencies (e.g., database setup before API endpoints)
+            - Each task should have clear acceptance criteria in its description
+            - Use per-feature acceptance criteria from the spec directly in task descriptions
+            - Assign appropriate labels (e.g., "backend", "frontend", "database", "testing")
+            - Set priority: 0 = highest priority, higher numbers = lower priority
+            - The FIRST task (position 0) MUST be a project bootstrap task that sets up the
+              foundational structure (project skeleton, dependencies, database configuration).
+              ALL other tasks MUST depend on position 0, either directly or transitively
+              through other dependencies. This ensures a single foundation task runs first.
+            - Task descriptions MUST reference specific tools, gems, generators, and commands
+              from the spec and recipe context. Be prescriptive, not generic.
+              WRONG: "Set up the project with a database and CSS framework"
+              RIGHT: "Run `rails new` with PostgreSQL (`--database=postgresql`), install Tailwind CSS via `tailwindcss-rails`, configure Propshaft asset pipeline"
+              WRONG: "Implement authentication"
+              RIGHT: "Implement authentication using Rails 8 authentication generator (`bin/rails generate authentication`), configure `has_secure_password`, add `bcrypt` gem"
+            - The bootstrap task (position 0) MUST name the specific framework, database,
+              CSS framework, and asset pipeline from the recipe context
+            - For each spec section, name the specific tools and libraries that apply to
+              that section's tasks (e.g., ActiveRecord for models, Turbo Streams for real-time)
+          RULES
+        end
+      end
+
+      def self.delta_scoping_context(deltas)
+        deltas.map.with_index(1) do |delta, i|
+          parts = ["## Delta #{i}: #{delta['operation']&.upcase || 'CHANGED'}"]
+          parts << "Section: #{delta['section']}" if delta["section"]
+          parts << "Requirement: #{delta['requirement']}" if delta["requirement"]
+          parts << "" << delta["content"] if delta["content"]
+          parts << "" << "Rationale: #{delta['rationale']}" if delta["rationale"]
+          parts.join("\n")
+        end.join("\n\n")
+      end
+
+      private_class_method :technology_context, :framework_section, :sections_detail, :format_section, :supporting_recipes_brief, :verification_context, :rules_section, :delta_scoping_context
     end
   end
 end

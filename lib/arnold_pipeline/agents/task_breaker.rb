@@ -38,15 +38,17 @@ module ArnoldPipeline
         }
       }.freeze
 
-      def call(spec_content:, recipe: nil, supporting_recipes: [])
-        if recipe
+      def call(spec_content:, recipe: nil, supporting_recipes: [], deltas: nil)
+        if deltas.present?
+          logger.info { "Breaking spec into delta-scoped tasks (#{deltas.size} deltas)" }
+        elsif recipe
           logger.info { "Breaking spec into tasks (recipe: #{recipe.name})" }
         else
           logger.info { "Breaking spec into tasks" }
         end
 
-        system = Prompts::TaskBreakdown.system_prompt(recipe:, supporting_recipes:)
-        user = Prompts::TaskBreakdown.user_prompt(spec_content:)
+        system = Prompts::TaskBreakdown.system_prompt(recipe:, supporting_recipes:, deltas:)
+        user = Prompts::TaskBreakdown.user_prompt(spec_content:, deltas:)
 
         result = chat_json(
           messages: [{ role: :user, content: user }],
@@ -58,7 +60,7 @@ module ArnoldPipeline
         raise Error, "LLM returned no tasks (got #{result.keys.inspect})" unless tasks.is_a?(Array)
 
         decode_criteria_params!(tasks)
-        validate_tasks!(tasks)
+        validate_tasks!(tasks, delta_scoped: deltas.present?)
         tasks
       end
 
@@ -75,11 +77,12 @@ module ArnoldPipeline
         end
       end
 
-      def validate_tasks!(tasks)
+      def validate_tasks!(tasks, delta_scoped: false)
         raise Error, "Expected array of tasks, got #{tasks.class}" unless tasks.is_a?(Array)
 
-        if tasks.size < MIN_TASKS || tasks.size > MAX_TASKS
-          logger.warn { "Task count #{tasks.size} outside expected range #{MIN_TASKS}-#{MAX_TASKS}" }
+        min = delta_scoped ? 1 : MIN_TASKS
+        if tasks.size < min || tasks.size > MAX_TASKS
+          logger.warn { "Task count #{tasks.size} outside expected range #{min}-#{MAX_TASKS}" }
         end
 
         tasks.each_with_index do |task, i|
