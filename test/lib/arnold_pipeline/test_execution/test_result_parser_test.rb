@@ -284,11 +284,19 @@ module ArnoldPipeline
         assert_equal "error: command not found", result.summary
       end
 
-      test "generic result truncates long summary" do
-        long_output = "x" * 300
+      test "generic result truncates very long summary at 2000 chars" do
+        long_output = "x" * 3000
         result = TestResultParser.call(stdout: long_output, stderr: "", exit_code: 0)
 
-        assert result.summary.length <= 200
+        assert result.summary.length <= 2000
+      end
+
+      test "generic result preserves summaries under 2000 chars without truncation" do
+        # Simulate a realistic long line (e.g., 500 char test name + message)
+        long_output = "TasksControllerTest#test_should_handle_authentication" + ("_extra" * 50) + ": Expected 200 got 401"
+        result = TestResultParser.call(stdout: long_output, stderr: "", exit_code: 1)
+
+        assert_equal long_output.strip, result.summary
       end
 
       # --- Output in stderr ---

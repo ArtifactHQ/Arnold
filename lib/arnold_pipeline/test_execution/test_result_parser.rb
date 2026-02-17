@@ -213,8 +213,9 @@ module ArnoldPipeline
         output = @stdout.strip
         output = @stderr.strip if output.empty?
         summary = output.lines.last&.strip || "exit code #{@exit_code}"
-        # Truncate summary if it's too long
-        summary = summary[0, 200] if summary.length > 200
+        # Truncate summary if it's too long — use generous limit so gate
+        # issue strings are not cut mid-word (e.g., "TasksControllerTe…")
+        summary = summary[0, 2000] if summary.length > 2000
 
         TestResult.new(
           passed: @exit_code == 0,

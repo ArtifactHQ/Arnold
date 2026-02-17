@@ -2141,6 +2141,38 @@ module ArnoldPipeline
       assert_equal "advisory", event.summary["mode"]
     end
 
+    # --- extract_failure_summary ---
+
+    test "extract_failure_summary does not truncate long test names or messages" do
+      long_name = "TasksControllerTest#test_should_handle_authentication_and_return_proper_error_responses_for_all_endpoints"
+      long_message = "Expected response to be a <200: OK> but was a <401: Unauthorized>. The authentication token was expired and the refresh mechanism failed."
+
+      test_result = TestExecution::TestResult.new(
+        passed: false, exit_code: 1,
+        summary: "38 runs, 81 assertions, 2 failures, 0 errors, 0 skips",
+        failures: [
+          { name: long_name, location: "test/controllers/tasks_controller_test.rb:42", message: long_message }
+        ]
+      )
+
+      issues = @engine.send(:extract_failure_summary, test_result)
+      assert_equal 1, issues.size
+      assert_includes issues.first, long_name
+      assert_includes issues.first, long_message
+    end
+
+    test "extract_failure_summary preserves full summary when no failures parsed" do
+      long_summary = "38 runs, 81 assertions, 2 failures, 0 errors, 0 skips"
+      test_result = TestExecution::TestResult.new(
+        passed: false, exit_code: 1,
+        summary: long_summary, failures: []
+      )
+
+      issues = @engine.send(:extract_failure_summary, test_result)
+      assert_equal 1, issues.size
+      assert_includes issues.first, long_summary
+    end
+
     # --- Error handling ---
 
     test "falls back to generic task when CorrectiveTaskGenerator fails" do
