@@ -1,0 +1,2087 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arnold Pipeline — AI Agent Orchestration for Ruby</title>
+<meta name="description" content="Orchestrate AI coding agents through structured specs, dependency-ordered execution, quality gates, and iterative refinement.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=JetBrains+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   DESIGN TOKENS
+   ============================================================ */
+:root {
+  /* Warm neutral palette with a confident teal accent */
+  --bg-primary: #FAFAF8;
+  --bg-surface: #FFFFFF;
+  --bg-code: #1B1F24;
+  --bg-code-inline: #F0EFEB;
+  --bg-sidebar: #F5F4F0;
+  --bg-hero: #1B1F24;
+  --bg-callout-info: #EEF6F8;
+  --bg-callout-warn: #FFF8ED;
+  --bg-callout-tip: #F0F8EE;
+  --bg-hover: #EEEDEA;
+  --bg-active: #E6E5E1;
+  --bg-badge: #E8F5F0;
+
+  --text-primary: #1A1D21;
+  --text-secondary: #5A5D63;
+  --text-tertiary: #8A8D93;
+  --text-on-dark: #F0EFEB;
+  --text-code: #E8E6DF;
+  --text-link: #0E7C6B;
+
+  --accent: #0E9A83;
+  --accent-dark: #0B7A68;
+  --accent-light: #D4F0EA;
+  --accent-subtle: #F0FAF7;
+  --border: #E5E4E0;
+  --border-strong: #D0CFCB;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.08);
+  --shadow-code: 0 4px 16px rgba(0,0,0,0.3);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  --sidebar-width: 280px;
+  --header-height: 60px;
+  --content-max: 780px;
+}
+
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--header-height) + 24px);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+}
+
+::selection { background: var(--accent-light); color: var(--accent-dark); }
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.site-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  height: var(--header-height);
+  background: rgba(250, 250, 248, 0.88);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+}
+
+.header-inner {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text-primary);
+}
+
+.logo-mark {
+  width: 32px;
+  height: 32px;
+  background: var(--bg-hero);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 20px;
+  color: var(--accent);
+  font-weight: 400;
+  letter-spacing: -0.5px;
+}
+
+.logo-text {
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.3px;
+}
+
+.logo-tag {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 400;
+  margin-left: 2px;
+  padding: 2px 8px;
+  background: var(--bg-hover);
+  border-radius: 20px;
+}
+
+.header-links {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.header-links a {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.header-links a:hover { color: var(--text-primary); }
+
+.gh-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--bg-hero);
+  color: white !important;
+  border-radius: var(--radius-sm);
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  transition: background 0.15s;
+}
+.gh-link:hover { background: #2D3238 !important; color: white !important; }
+.gh-link svg { width: 16px; height: 16px; }
+
+.menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  color: var(--text-primary);
+}
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+.layout {
+  display: flex;
+  min-height: 100vh;
+  padding-top: var(--header-height);
+}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+.sidebar {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-width);
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 20px 0;
+  z-index: 50;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+
+.sidebar-section {
+  padding: 0 16px;
+  margin-bottom: 8px;
+}
+
+.sidebar-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-tertiary);
+  padding: 12px 12px 6px;
+}
+
+.sidebar-link {
+  display: block;
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  transition: all 0.12s;
+  font-weight: 450;
+  line-height: 1.5;
+}
+
+.sidebar-link:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.sidebar-link.active {
+  color: var(--accent-dark);
+  background: var(--accent-subtle);
+  font-weight: 550;
+}
+
+.sidebar-sub {
+  padding-left: 12px;
+  border-left: 1.5px solid var(--border);
+  margin-left: 22px;
+}
+
+.sidebar-sub .sidebar-link {
+  font-size: 13px;
+  padding: 4px 12px;
+  color: var(--text-tertiary);
+}
+.sidebar-sub .sidebar-link:hover { color: var(--text-secondary); }
+
+/* ============================================================
+   MAIN CONTENT
+   ============================================================ */
+.main-content {
+  flex: 1;
+  margin-left: var(--sidebar-width);
+  min-width: 0;
+}
+
+.content-wrapper {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 48px 40px 120px;
+}
+
+/* ============================================================
+   HERO
+   ============================================================ */
+.hero {
+  margin: -48px -40px 48px;
+  padding: 64px 40px 56px;
+  background: var(--bg-hero);
+  color: var(--text-on-dark);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 80% 20%, rgba(14, 154, 131, 0.15) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 60% at 10% 80%, rgba(14, 154, 131, 0.08) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.hero-content { position: relative; max-width: 620px; }
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: rgba(14, 154, 131, 0.15);
+  border: 1px solid rgba(14, 154, 131, 0.25);
+  border-radius: 20px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #5FCDB8;
+  margin-bottom: 20px;
+}
+
+.hero h1 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 44px;
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.5px;
+  margin-bottom: 16px;
+}
+
+.hero h1 em {
+  font-style: italic;
+  color: var(--accent);
+}
+
+.hero p {
+  font-size: 17px;
+  line-height: 1.65;
+  color: #B0AFA8;
+  max-width: 540px;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.hero-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 550;
+  text-decoration: none;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.hero-btn-primary {
+  background: var(--accent);
+  color: white;
+}
+.hero-btn-primary:hover { background: var(--accent-dark); }
+
+.hero-btn-secondary {
+  background: rgba(255,255,255,0.08);
+  color: var(--text-on-dark);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.hero-btn-secondary:hover { background: rgba(255,255,255,0.14); }
+
+.hero-install {
+  margin-top: 28px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+  max-width: fit-content;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13.5px;
+  color: #B0AFA8;
+}
+
+.hero-install code { color: var(--text-on-dark); }
+.hero-install .prompt { color: var(--accent); user-select: none; }
+
+/* ============================================================
+   TYPOGRAPHY
+   ============================================================ */
+.content-wrapper h2 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 32px;
+  font-weight: 400;
+  letter-spacing: -0.3px;
+  color: var(--text-primary);
+  margin: 56px 0 16px;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+  line-height: 1.2;
+}
+
+.content-wrapper h2:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.content-wrapper h3 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--text-primary);
+  margin: 36px 0 12px;
+  line-height: 1.3;
+}
+
+.content-wrapper h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 28px 0 8px;
+}
+
+.content-wrapper p {
+  margin-bottom: 16px;
+  color: var(--text-secondary);
+}
+
+.content-wrapper a {
+  color: var(--text-link);
+  text-decoration: none;
+  font-weight: 500;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+.content-wrapper a:hover { border-bottom-color: var(--text-link); }
+
+.content-wrapper strong { color: var(--text-primary); font-weight: 600; }
+
+/* ============================================================
+   SECTION ANCHORS
+   ============================================================ */
+section[id] { scroll-margin-top: calc(var(--header-height) + 24px); }
+
+.section-anchor {
+  color: var(--text-tertiary);
+  text-decoration: none;
+  margin-left: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  font-size: 0.8em;
+}
+h2:hover .section-anchor,
+h3:hover .section-anchor { opacity: 1; }
+
+/* ============================================================
+   CODE BLOCKS
+   ============================================================ */
+.code-block-wrapper {
+  position: relative;
+  margin: 16px 0 24px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-code);
+}
+
+.code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: #14171B;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.code-lang {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #6B7078;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.copy-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #6B7078;
+  font-size: 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+.copy-btn:hover { color: #A0A4AA; border-color: rgba(255,255,255,0.15); }
+.copy-btn.copied { color: var(--accent); border-color: var(--accent); }
+.copy-btn svg { width: 13px; height: 13px; }
+
+pre {
+  background: var(--bg-code);
+  padding: 16px 20px;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-code);
+  tab-size: 2;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+pre::-webkit-scrollbar { height: 4px; }
+pre::-webkit-scrollbar-track { background: transparent; }
+pre::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+code {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Inline code */
+p code, li code, td code {
+  background: var(--bg-code-inline);
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 0.88em;
+  color: var(--text-primary);
+  font-weight: 500;
+  border: 1px solid var(--border);
+}
+
+/* Syntax colors */
+.tok-comment { color: #6B7078; font-style: italic; }
+.tok-keyword { color: #C688E0; }
+.tok-string { color: #7EC89E; }
+.tok-number { color: #E0A46A; }
+.tok-func { color: #7AB8D9; }
+.tok-var { color: #E8E6DF; }
+.tok-flag { color: #E0A46A; }
+.tok-prompt { color: var(--accent); user-select: none; }
+.tok-op { color: #C688E0; }
+.tok-env { color: #D9AB7A; }
+.tok-val { color: #7EC89E; }
+
+/* ============================================================
+   CALLOUTS
+   ============================================================ */
+.callout {
+  display: flex;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  margin: 20px 0 24px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  border: 1px solid transparent;
+}
+
+.callout-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+}
+
+.callout p { margin: 0; font-size: inherit; }
+.callout p + p { margin-top: 8px; }
+
+.callout-info {
+  background: var(--bg-callout-info);
+  border-color: #C4DDE6;
+}
+.callout-info .callout-icon { color: #2C8DAF; }
+
+.callout-tip {
+  background: var(--bg-callout-tip);
+  border-color: #C0DEB8;
+}
+.callout-tip .callout-icon { color: #3D8F2E; }
+
+.callout-warn {
+  background: var(--bg-callout-warn);
+  border-color: #EDD8A8;
+}
+.callout-warn .callout-icon { color: #B8860B; }
+
+/* ============================================================
+   TABLES
+   ============================================================ */
+.table-wrapper {
+  margin: 16px 0 24px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+thead {
+  background: var(--bg-sidebar);
+}
+
+th {
+  text-align: left;
+  padding: 10px 16px;
+  font-weight: 600;
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border);
+}
+
+td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(0,0,0,0.015); }
+
+td:first-child { color: var(--text-primary); font-weight: 500; }
+
+/* ============================================================
+   PIPELINE FLOW DIAGRAM
+   ============================================================ */
+.flow-diagram {
+  margin: 24px 0 32px;
+  padding: 32px 24px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  overflow-x: auto;
+}
+
+.flow-step {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  width: 100%;
+  max-width: 520px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.flow-step:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+.flow-step-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-badge);
+  color: var(--accent-dark);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.flow-step-content { flex: 1; }
+
+.flow-step-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.flow-step-desc {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  line-height: 1.45;
+}
+
+.flow-arrow {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+  color: var(--border-strong);
+}
+
+.flow-branch {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+  margin-top: 0;
+}
+
+.flow-branch-item {
+  flex: 1;
+  text-align: center;
+  padding: 10px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.flow-branch-item strong { color: var(--text-primary); font-size: 13px; display: block; margin-bottom: 2px; }
+
+/* ============================================================
+   PROVIDER COMPARISON CARDS
+   ============================================================ */
+.provider-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 20px 0 28px;
+}
+
+.provider-card {
+  padding: 24px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.provider-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+.provider-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.provider-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.provider-card-title {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.provider-card-subtitle {
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+
+.provider-card ul {
+  list-style: none;
+  padding: 0;
+}
+
+.provider-card li {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+  padding-left: 18px;
+  position: relative;
+}
+
+.provider-card li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 11px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.4;
+}
+
+/* ============================================================
+   CONFIG TABLE STYLES
+   ============================================================ */
+.config-group {
+  margin: 24px 0;
+}
+
+.config-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 16px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.config-group .table-wrapper {
+  margin: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* ============================================================
+   TABS
+   ============================================================ */
+.tabs {
+  margin: 20px 0 4px;
+}
+
+.tab-buttons {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab-btn {
+  padding: 8px 18px;
+  font-size: 13.5px;
+  font-weight: 550;
+  color: var(--text-tertiary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  margin-bottom: -1px;
+}
+
+.tab-btn:hover { color: var(--text-secondary); }
+.tab-btn.active {
+  color: var(--accent-dark);
+  border-bottom-color: var(--accent);
+}
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ============================================================
+   LISTS
+   ============================================================ */
+.content-wrapper ul, .content-wrapper ol {
+  padding-left: 24px;
+  margin-bottom: 16px;
+}
+
+.content-wrapper li {
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+}
+
+.content-wrapper li::marker { color: var(--border-strong); }
+
+/* ============================================================
+   ON-THIS-PAGE (RIGHT SIDEBAR MINIMAL)
+   ============================================================ */
+.on-this-page {
+  position: fixed;
+  top: calc(var(--header-height) + 32px);
+  right: 32px;
+  width: 200px;
+  font-size: 12.5px;
+}
+
+.on-this-page-title {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-tertiary);
+  margin-bottom: 10px;
+  font-size: 11px;
+}
+
+.on-this-page a {
+  display: block;
+  padding: 3px 0;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  transition: color 0.12s;
+  line-height: 1.5;
+}
+.on-this-page a:hover { color: var(--text-secondary); }
+.on-this-page a.active { color: var(--accent-dark); font-weight: 550; }
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+.doc-footer {
+  margin-top: 64px;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.doc-footer-text {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.doc-footer-links { display: flex; gap: 16px; }
+.doc-footer-links a {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  text-decoration: none;
+}
+.doc-footer-links a:hover { color: var(--text-secondary); }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 1200px) {
+  .on-this-page { display: none; }
+}
+
+@media (max-width: 860px) {
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    background: var(--bg-surface);
+    box-shadow: var(--shadow-lg);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .main-content { margin-left: 0; }
+  .content-wrapper { padding: 32px 20px 80px; }
+  .hero { margin: -32px -20px 32px; padding: 48px 20px 40px; }
+  .hero h1 { font-size: 32px; }
+  .menu-toggle { display: block; }
+  .header-links .hide-mobile { display: none; }
+  .provider-cards { grid-template-columns: 1fr; }
+  .flow-branch { flex-direction: column; }
+  .logo-tag { display: none; }
+}
+
+/* ============================================================
+   MISC UTILITY
+   ============================================================ */
+.badge {
+  display: inline-flex;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 4px;
+  background: var(--bg-badge);
+  color: var(--accent-dark);
+}
+
+.badge-default {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.spacer { height: 12px; }
+
+.mb-0 { margin-bottom: 0 !important; }
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     HEADER
+     ============================================================ -->
+<header class="site-header">
+  <div class="header-inner">
+    <div style="display:flex;align-items:center;gap:16px;">
+      <button class="menu-toggle" onclick="toggleSidebar()" aria-label="Toggle navigation">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h14M3 10h14M3 14h14"/></svg>
+      </button>
+      <a href="#" class="logo">
+        <div class="logo-mark">A</div>
+        <span class="logo-text">Arnold</span>
+        <span class="logo-tag">Docs</span>
+      </a>
+    </div>
+    <div class="header-links">
+      <a href="#quick-start" class="hide-mobile">Quick Start</a>
+      <a href="#configuration" class="hide-mobile">Config</a>
+      <a href="https://github.com/your-org/arnold_pipeline" class="gh-link" target="_blank">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+</header>
+
+<!-- ============================================================
+     SIDEBAR
+     ============================================================ -->
+<nav class="sidebar" id="sidebar">
+
+  <div class="sidebar-section">
+    <div class="sidebar-label">Getting Started</div>
+    <a href="#overview" class="sidebar-link active">Overview</a>
+    <a href="#quick-start" class="sidebar-link">Quick Start</a>
+    <a href="#how-it-works" class="sidebar-link">How It Works</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-label">Execution</div>
+    <a href="#providers" class="sidebar-link">Execution Providers</a>
+    <div class="sidebar-sub">
+      <a href="#provider-github" class="sidebar-link">GitHub</a>
+      <a href="#provider-claude-code" class="sidebar-link">Claude Code</a>
+    </div>
+    <a href="#coding-agent-setup" class="sidebar-link">Coding Agent Setup</a>
+    <a href="#tier-gating" class="sidebar-link">Tier Gating &amp; Context</a>
+    <a href="#hooks-checks" class="sidebar-link">Hooks &amp; Checks</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-label">Usage</div>
+    <a href="#cli" class="sidebar-link">CLI Reference</a>
+    <a href="#rails" class="sidebar-link">Rails Integration</a>
+    <a href="#partial-execution" class="sidebar-link">Partial Execution</a>
+    <a href="#openspec" class="sidebar-link">OpenSpec Integration</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-label">Configuration</div>
+    <a href="#configuration" class="sidebar-link">Config Reference</a>
+    <a href="#concepts" class="sidebar-link">Key Concepts</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-label">Extending</div>
+    <a href="#custom-personas" class="sidebar-link">Custom Personas</a>
+    <a href="#custom-recipes" class="sidebar-link">Custom Recipes</a>
+    <a href="#custom-providers" class="sidebar-link">Custom Providers</a>
+    <a href="#architecture" class="sidebar-link">Architecture</a>
+    <a href="#testing" class="sidebar-link">Testing</a>
+  </div>
+
+</nav>
+
+<!-- ============================================================
+     MAIN CONTENT
+     ============================================================ -->
+<main class="main-content">
+<div class="content-wrapper">
+
+<!-- HERO -->
+<div class="hero" id="overview">
+  <div class="hero-content">
+    <div class="hero-badge">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      Ruby Gem
+    </div>
+    <h1>Orchestrate AI agents into <em>structured</em> software</h1>
+    <p>Arnold Pipeline turns a natural-language description into a specification, breaks it into dependency-ordered tasks, dispatches them to your coding agent of choice, and iterates until the implementation matches the spec.</p>
+    <div class="hero-actions">
+      <a href="#quick-start" class="hero-btn hero-btn-primary">Get Started →</a>
+      <a href="#how-it-works" class="hero-btn hero-btn-secondary">How It Works</a>
+    </div>
+    <div class="hero-install">
+      <span class="prompt">$</span>&nbsp;<code>gem install arnold_pipeline</code>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     QUICK START
+     ============================================================ -->
+<section id="quick-start">
+<h2>Quick Start <a href="#quick-start" class="section-anchor">#</a></h2>
+
+<p>Arnold is <strong>not another AI code editor</strong>. It doesn't write code itself. It automates the methodology that separates good AI-assisted development from chaotic AI-assisted development: structured specs, dependency-ordered execution, quality gates, and iterative refinement. The actual code generation happens through whatever coding agent you plug in.</p>
+
+<div class="tabs">
+  <div class="tab-buttons">
+    <button class="tab-btn active" onclick="switchTab(event, 'qs-github')">GitHub (default)</button>
+    <button class="tab-btn" onclick="switchTab(event, 'qs-claude')">Claude Code (local)</button>
+  </div>
+  <div id="qs-github" class="tab-panel active">
+    <div class="code-block-wrapper">
+      <div class="code-header">
+        <span class="code-lang">bash</span>
+        <button class="copy-btn" onclick="copyCode(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          Copy
+        </button>
+      </div>
+      <pre><code><span class="tok-prompt">$</span> gem install arnold_pipeline
+
+<span class="tok-comment"># Set your API keys</span>
+<span class="tok-prompt">$</span> <span class="tok-keyword">export</span> <span class="tok-env">ANTHROPIC_API_KEY</span>=<span class="tok-val">sk-ant-...</span>   <span class="tok-comment"># or OPENAI_API_KEY=sk-...</span>
+<span class="tok-prompt">$</span> <span class="tok-keyword">export</span> <span class="tok-env">GITHUB_TOKEN</span>=<span class="tok-val">ghp_...</span>
+
+<span class="tok-comment"># Run the full pipeline</span>
+<span class="tok-prompt">$</span> arnold run <span class="tok-string">"Build a todo list app with user auth and real-time updates"</span> \
+    <span class="tok-flag">--repo</span> owner/repo
+
+<span class="tok-comment"># Trigger a specific coding agent on generated issues</span>
+<span class="tok-prompt">$</span> arnold run <span class="tok-string">"Build a todo list app"</span> <span class="tok-flag">--repo</span> owner/repo <span class="tok-flag">--issue-mention</span> <span class="tok-string">"@claude"</span>
+
+<span class="tok-comment"># Using OpenAI instead of Anthropic</span>
+<span class="tok-prompt">$</span> arnold run <span class="tok-string">"Build a todo list app"</span> <span class="tok-flag">--provider</span> openai <span class="tok-flag">--repo</span> owner/repo</code></pre>
+    </div>
+  </div>
+  <div id="qs-claude" class="tab-panel">
+    <div class="code-block-wrapper">
+      <div class="code-header">
+        <span class="code-lang">bash</span>
+        <button class="copy-btn" onclick="copyCode(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          Copy
+        </button>
+      </div>
+      <pre><code><span class="tok-prompt">$</span> gem install arnold_pipeline
+<span class="tok-prompt">$</span> npm install -g @anthropic-ai/claude-code
+
+<span class="tok-prompt">$</span> <span class="tok-keyword">export</span> <span class="tok-env">ANTHROPIC_API_KEY</span>=<span class="tok-val">sk-ant-...</span>
+
+<span class="tok-prompt">$</span> mkdir my-app && cd my-app && git init
+<span class="tok-prompt">$</span> arnold run <span class="tok-string">"Build a todo list app with user auth and real-time updates"</span> \
+    <span class="tok-flag">--execution-provider</span> claude_code \
+    <span class="tok-flag">--claude-code-repo-path</span> .</code></pre>
+    </div>
+  </div>
+</div>
+
+<h3>Partial execution</h3>
+<p>Don't want to run the whole pipeline at once? Stop at any stage and pick up where you left off.</p>
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">bash</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code><span class="tok-prompt">$</span> arnold run <span class="tok-string">"Build a todo list app"</span> <span class="tok-flag">--stop-after</span> tasks  <span class="tok-comment"># Review spec + tasks first</span>
+<span class="tok-prompt">$</span> arnold resume 1                                       <span class="tok-comment"># Continue from where you left off</span>
+<span class="tok-prompt">$</span> arnold resume 1 <span class="tok-flag">--stop-after</span> executed                  <span class="tok-comment"># Resume and pause again later</span></code></pre>
+</div>
+
+<div class="callout callout-info">
+  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+  <div>
+    <p>The CLI stores runs in a SQLite database at <code>~/.arnold_pipeline/pipeline.sqlite3</code>, created automatically on first use.</p>
+  </div>
+</div>
+
+</section>
+
+<!-- ============================================================
+     HOW IT WORKS
+     ============================================================ -->
+<section id="how-it-works">
+<h2>How It Works <a href="#how-it-works" class="section-anchor">#</a></h2>
+
+<p>Arnold follows a structured, multi-stage workflow. Each stage feeds into the next, with quality gates and a feedback loop that iterates until the implementation aligns with the spec — or flags decisions for human review.</p>
+
+<div class="flow-diagram">
+  <div class="flow-step">
+    <div class="flow-step-num">1</div>
+    <div class="flow-step-content">
+      <div class="flow-step-title">Library Manager</div>
+      <div class="flow-step-desc">Matches your description to a persona + recipe via keyword matching</div>
+    </div>
+  </div>
+  <div class="flow-arrow"><svg width="16" height="24" viewBox="0 0 16 24"><path d="M8 0v20M2 14l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></div>
+  <div class="flow-step">
+    <div class="flow-step-num">2</div>
+    <div class="flow-step-content">
+      <div class="flow-step-title">Spec Generator</div>
+      <div class="flow-step-desc">NL input + persona + recipe → OpenSpec-format Markdown with GIVEN/WHEN/THEN scenarios</div>
+    </div>
+  </div>
+  <div class="flow-arrow"><svg width="16" height="24" viewBox="0 0 16 24"><path d="M8 0v20M2 14l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></div>
+  <div class="flow-step">
+    <div class="flow-step-num">3</div>
+    <div class="flow-step-content">
+      <div class="flow-step-title">Task Breaker</div>
+      <div class="flow-step-desc">Spec → 5–20 dependency-ordered tasks with tier assignments</div>
+    </div>
+  </div>
+  <div class="flow-arrow"><svg width="16" height="24" viewBox="0 0 16 24"><path d="M8 0v20M2 14l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></div>
+  <div class="flow-step">
+    <div class="flow-step-num">4</div>
+    <div class="flow-step-content">
+      <div class="flow-step-title">Executor → Tier Gate</div>
+      <div class="flow-step-desc">Dispatches tasks tier-by-tier to your chosen provider. Each tier is validated before advancing.</div>
+    </div>
+  </div>
+  <div class="flow-arrow"><svg width="16" height="24" viewBox="0 0 16 24"><path d="M8 0v20M2 14l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></div>
+  <div class="flow-step">
+    <div class="flow-step-num">5</div>
+    <div class="flow-step-content">
+      <div class="flow-step-title">Analyzer</div>
+      <div class="flow-step-desc">Compares diffs against spec → decision + confidence score</div>
+    </div>
+  </div>
+  <div class="flow-arrow"><svg width="16" height="24" viewBox="0 0 16 24"><path d="M8 0v20M2 14l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></div>
+  <div class="flow-branch">
+    <div class="flow-branch-item"><strong>Done</strong> ≥70% confidence → merge &amp; complete</div>
+    <div class="flow-branch-item"><strong>Iterate Tasks</strong> Replace tasks, re-execute</div>
+    <div class="flow-branch-item"><strong>Iterate Spec</strong> Structured deltas, re-break</div>
+  </div>
+</div>
+
+<p><strong>Agents</strong> are stateless service objects — input in, output out. The <strong>Orchestrator</strong> owns state, persistence, and the feedback loop. Max 3 iterations, then stop. Confidence below 70% flags for human review.</p>
+
+</section>
+
+<!-- ============================================================
+     EXECUTION PROVIDERS
+     ============================================================ -->
+<section id="providers">
+<h2>Execution Providers <a href="#providers" class="section-anchor">#</a></h2>
+
+<p>The execution provider controls how tasks are dispatched and how results are collected. Everything else — spec generation, task breakdown, analysis, tier gating — works the same regardless of provider.</p>
+
+<div class="provider-cards">
+  <div class="provider-card" id="provider-github">
+    <div class="provider-card-header">
+      <div class="provider-card-icon" style="background:#1B1F24;color:white;">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </div>
+      <div>
+        <div class="provider-card-title">GitHub <span class="badge">Default</span></div>
+        <div class="provider-card-subtitle">Async — team workflows &amp; CI</div>
+      </div>
+    </div>
+    <ul>
+      <li>Creates GitHub Issues for each task</li>
+      <li>Polls for PRs that reference the issue</li>
+      <li>Merges PRs via GitHub API</li>
+      <li>Requires <code>GITHUB_TOKEN</code> + coding agent on repo</li>
+    </ul>
+  </div>
+  <div class="provider-card" id="provider-claude-code">
+    <div class="provider-card-header">
+      <div class="provider-card-icon" style="background:var(--accent-light);color:var(--accent-dark);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      </div>
+      <div>
+        <div class="provider-card-title">Claude Code</div>
+        <div class="provider-card-subtitle">Sync — solo dev, rapid iteration</div>
+      </div>
+    </div>
+    <ul>
+      <li>Dispatches directly to Claude Code CLI</li>
+      <li>Each task runs in an isolated git worktree</li>
+      <li>Captures diffs immediately — no polling</li>
+      <li>Requires <code>ANTHROPIC_API_KEY</code> + local repo</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout callout-tip">
+  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+  <div>
+    <p>The <code>llm_provider</code> / <code>llm_api_key</code> config is required regardless of execution provider — it powers spec generation, task breakdown, analysis, and tier gate checks. The execution provider only controls how tasks are dispatched.</p>
+  </div>
+</div>
+
+</section>
+
+<!-- ============================================================
+     CODING AGENT SETUP
+     ============================================================ -->
+<section id="coding-agent-setup">
+<h2>Coding Agent Setup <a href="#coding-agent-setup" class="section-anchor">#</a></h2>
+
+<p>This section applies to the <strong>GitHub execution provider</strong>. When using Claude Code, Arnold dispatches directly — no agent setup needed.</p>
+
+<p>Arnold creates GitHub Issues but doesn't write code itself — it expects a coding agent on your repo to pick up issues, work on branches, and open PRs. Without this, Arnold will create issues and then time out waiting for results.</p>
+
+<h3>What Arnold creates</h3>
+<p>Each issue body contains the task description, prior implementation context (if <code>context_propagation_enabled</code>), an agent mention (if configured), dependency references, and a pipeline run footer.</p>
+
+<h3>What Arnold expects back</h3>
+<p>A pull request whose title or body contains <code>#&lt;issue_number&gt;</code>. Arnold scans all repo PRs for this substring — no special labels or webhooks required.</p>
+
+<div class="callout callout-info">
+  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+  <div>
+    <p><strong>Open PR with a diff</strong> = task resolved (merged after tier completes). <strong>No PR + closed issue</strong> = task failed. <strong>Only WIP comments</strong> = still polling. <strong>Substantive comments</strong> = task resolved.</p>
+  </div>
+</div>
+
+<h3>Agent options</h3>
+
+<div class="tabs">
+  <div class="tab-buttons">
+    <button class="tab-btn active" onclick="switchTab(event, 'agent-claude')">Actions + Claude Code</button>
+    <button class="tab-btn" onclick="switchTab(event, 'agent-codex')">Actions + OpenAI Codex</button>
+    <button class="tab-btn" onclick="switchTab(event, 'agent-copilot')">Copilot Agent</button>
+  </div>
+
+  <div id="agent-claude" class="tab-panel active">
+    <p style="margin-top:16px;">Create <code>.github/workflows/arnold-agent.yml</code>:</p>
+    <div class="code-block-wrapper">
+      <div class="code-header">
+        <span class="code-lang">yaml</span>
+        <button class="copy-btn" onclick="copyCode(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          Copy
+        </button>
+      </div>
+      <pre><code><span class="tok-keyword">name:</span> Arnold Agent (Claude Code)
+
+<span class="tok-keyword">on:</span>
+  <span class="tok-keyword">issues:</span>
+    <span class="tok-keyword">types:</span> [opened]
+
+<span class="tok-keyword">jobs:</span>
+  <span class="tok-keyword">solve:</span>
+    <span class="tok-keyword">if:</span> <span class="tok-string">contains(github.event.issue.body, 'Pipeline Run')</span>
+    <span class="tok-keyword">runs-on:</span> ubuntu-latest
+    <span class="tok-keyword">permissions:</span>
+      <span class="tok-keyword">contents:</span> write
+      <span class="tok-keyword">pull-requests:</span> write
+      <span class="tok-keyword">issues:</span> read
+
+    <span class="tok-keyword">steps:</span>
+      - <span class="tok-keyword">name:</span> Checkout repository
+        <span class="tok-keyword">uses:</span> actions/checkout@v4
+        <span class="tok-keyword">with:</span>
+          <span class="tok-keyword">fetch-depth:</span> <span class="tok-number">0</span>
+
+      - <span class="tok-keyword">name:</span> Install Claude Code
+        <span class="tok-keyword">run:</span> npm install -g @anthropic-ai/claude-code
+
+      - <span class="tok-keyword">name:</span> Create branch &amp; run
+        <span class="tok-keyword">env:</span>
+          <span class="tok-env">ANTHROPIC_API_KEY</span>: <span class="tok-string">${{ secrets.ANTHROPIC_API_KEY }}</span>
+          <span class="tok-env">GH_TOKEN</span>: <span class="tok-string">${{ secrets.GITHUB_TOKEN }}</span>
+        <span class="tok-keyword">run:</span> |
+          BRANCH=<span class="tok-string">"arnold/issue-${{ github.event.issue.number }}"</span>
+          git checkout -b <span class="tok-string">"$BRANCH"</span>
+          claude -p <span class="tok-string">"Work on issue #${{ github.event.issue.number }}. ${{ github.event.issue.body }}"</span>
+          git push origin <span class="tok-string">"$BRANCH"</span>
+          gh pr create \
+            --title <span class="tok-string">"Resolve #${{ github.event.issue.number }}"</span> \
+            --body <span class="tok-string">"Resolves #${{ github.event.issue.number }}"</span> \
+            --head <span class="tok-string">"$BRANCH"</span></code></pre>
+    </div>
+    <p>Add <code>ANTHROPIC_API_KEY</code> to your repo's <strong>Settings → Secrets → Actions</strong>.</p>
+  </div>
+
+  <div id="agent-codex" class="tab-panel">
+    <p style="margin-top:16px;">Same workflow structure, swap in the OpenAI Codex CLI:</p>
+    <div class="code-block-wrapper">
+      <div class="code-header">
+        <span class="code-lang">yaml</span>
+        <button class="copy-btn" onclick="copyCode(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          Copy
+        </button>
+      </div>
+      <pre><code><span class="tok-comment"># Key differences from the Claude Code version:</span>
+- <span class="tok-keyword">name:</span> Install Codex
+  <span class="tok-keyword">run:</span> npm install -g @openai/codex
+
+- <span class="tok-keyword">name:</span> Run Codex
+  <span class="tok-keyword">env:</span>
+    <span class="tok-env">OPENAI_API_KEY</span>: <span class="tok-string">${{ secrets.OPENAI_API_KEY }}</span>
+  <span class="tok-keyword">run:</span> |
+    codex --approval-mode full-auto \
+      -q <span class="tok-string">"Work on issue #${{ github.event.issue.number }}. ..."</span></code></pre>
+    </div>
+  </div>
+
+  <div id="agent-copilot" class="tab-panel">
+    <p style="margin-top:16px;">The shortest path — no workflow file needed. <a href="https://docs.github.com/en/copilot/using-github-copilot/using-copilot-coding-agent" target="_blank">GitHub Copilot Coding Agent</a> can be assigned to issues directly.</p>
+    <ol style="margin-top:12px;">
+      <li>Enable Copilot Coding Agent on your repo (requires Copilot Enterprise or Business with agent support)</li>
+      <li>Set <code>config.github_issue_mention = "@copilot"</code></li>
+      <li>Copilot automatically picks up issues, works on a branch, and opens a PR</li>
+    </ol>
+    <p>No workflow file, no API keys beyond your existing Copilot subscription.</p>
+  </div>
+</div>
+
+<h3>Tips</h3>
+<ul>
+  <li><strong>PRs must reference the issue number</strong> — Arnold matches <code>#&lt;issue_number&gt;</code> as a substring. Use formats like <code>Resolves #42</code>.</li>
+  <li><strong>Set <code>polling_timeout</code> generously</strong> — complex tasks may take 5–10 minutes. The 30-minute default works for most cases.</li>
+  <li><strong>Dependency ordering is automatic</strong> — later-tier issues won't appear until earlier tiers merge.</li>
+  <li><strong>Context propagation helps your agent</strong> — each issue includes a summary of prior tiers, so the coding agent doesn't have to guess what exists.</li>
+</ul>
+
+</section>
+
+<!-- ============================================================
+     TIER GATING & CONTEXT
+     ============================================================ -->
+<section id="tier-gating">
+<h2>Tier Gating &amp; Context Propagation <a href="#tier-gating" class="section-anchor">#</a></h2>
+
+<p>Tasks execute tier-by-tier (tier 0 first, then tier 1, etc.). After each tier's results merge, two optional features kick in:</p>
+
+<h3>Tier gate check</h3>
+<p>When <code>tier_gate_enabled</code> is true, an LLM reviews each tier's diffs and decides pass/fail. On failure, corrective tasks are created and re-executed, up to <code>max_tier_retries</code> times. If retries are exhausted, the pipeline pauses for human review. Gate checks are lenient by default — only critical, build-breaking issues cause a failure.</p>
+
+<h3>Context propagation</h3>
+<p>When <code>context_propagation_enabled</code> is true, each gate check also produces a 2–3 sentence summary of what was built. These summaries accumulate across tiers and are prepended to the next tier's task bodies, giving coding agents explicit context about what already exists.</p>
+
+<p>Both features use a single LLM call per tier. If the gate check errors (e.g. LLM timeout), it's treated as non-fatal and the pipeline continues.</p>
+
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">ruby</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code><span class="tok-comment"># Disable both for faster execution (no per-tier LLM calls)</span>
+config.tier_gate_enabled = <span class="tok-keyword">false</span>
+config.context_propagation_enabled = <span class="tok-keyword">false</span>
+
+<span class="tok-comment"># Keep context but skip gate enforcement</span>
+config.tier_gate_enabled = <span class="tok-keyword">false</span>
+config.context_propagation_enabled = <span class="tok-keyword">true</span>
+
+<span class="tok-comment"># Pause immediately on first gate failure (zero retries)</span>
+config.max_tier_retries = <span class="tok-number">0</span></code></pre>
+</div>
+
+</section>
+
+<!-- ============================================================
+     HOOKS & CHECKS
+     ============================================================ -->
+<section id="hooks-checks">
+<h2>Post-Merge Hooks &amp; Verification Checks <a href="#hooks-checks" class="section-anchor">#</a></h2>
+
+<p>After each tier merges, Arnold can run <strong>post-merge hooks</strong> to fix derived files and <strong>verification checks</strong> to validate the build. These run locally, so they apply to the Claude Code provider. For GitHub, set <code>claude_code_repo_path</code> to keep the local repo in sync.</p>
+
+<h3>Post-merge hooks</h3>
+<p>Hooks trigger when changed files match configured glob patterns. Use them to regenerate derived files after tier merges.</p>
+
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">ruby</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code>config.post_merge_hooks = [
+  {
+    <span class="tok-string">name:</span> <span class="tok-string">"Regenerate database schema"</span>,
+    <span class="tok-string">trigger_paths:</span> [<span class="tok-string">"db/migrate/**/*.rb"</span>],
+    <span class="tok-string">command:</span> <span class="tok-string">"bin/rails db:prepare && bin/rails db:schema:dump"</span>,
+    <span class="tok-string">commit_paths:</span> [<span class="tok-string">"db/schema.rb"</span>],
+    <span class="tok-string">commit_message:</span> <span class="tok-string">"Regenerate schema.rb after tier merge"</span>
+  },
+  {
+    <span class="tok-string">name:</span> <span class="tok-string">"Bundle install on Gemfile changes"</span>,
+    <span class="tok-string">trigger_paths:</span> [<span class="tok-string">"Gemfile"</span>, <span class="tok-string">"Gemfile.lock"</span>],
+    <span class="tok-string">command:</span> <span class="tok-string">"bundle install"</span>,
+    <span class="tok-string">commit_paths:</span> [<span class="tok-string">"Gemfile.lock"</span>],
+    <span class="tok-string">commit_message:</span> <span class="tok-string">"Update Gemfile.lock after tier merge"</span>
+  }
+]</code></pre>
+</div>
+
+<h3>Verification checks</h3>
+<p>Checks run shell commands to verify application health. Each check has a <code>type</code> (<code>:boot</code>, <code>:test_suite</code>, or <code>:custom</code>) and can be marked <code>required</code>. Required checks short-circuit on failure — subsequent checks are skipped.</p>
+
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">ruby</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code>config.verification_checks = [
+  {
+    <span class="tok-string">name:</span> <span class="tok-string">"Boot check"</span>,
+    <span class="tok-string">command:</span> <span class="tok-string">"bin/rails runner 'puts Rails.version'"</span>,
+    <span class="tok-string">type:</span> <span class="tok-keyword">:boot</span>,
+    <span class="tok-string">required:</span> <span class="tok-keyword">true</span>   <span class="tok-comment"># Pipeline pauses if this fails</span>
+  },
+  {
+    <span class="tok-string">name:</span> <span class="tok-string">"Test suite"</span>,
+    <span class="tok-string">command:</span> <span class="tok-string">"bin/rails test"</span>,
+    <span class="tok-string">type:</span> <span class="tok-keyword">:test_suite</span>,
+    <span class="tok-string">required:</span> <span class="tok-keyword">false</span>  <span class="tok-comment"># Gate sees results but doesn't auto-fail</span>
+  }
+]</code></pre>
+</div>
+
+<div class="callout callout-tip">
+  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+  <div>
+    <p><strong>Non-fatal by design.</strong> Hook and check failures don't crash the pipeline. Results are passed to the tier gate check agent, which decides whether to fail the tier (triggering corrective tasks) or pass despite issues.</p>
+  </div>
+</div>
+
+</section>
+
+<!-- ============================================================
+     CLI
+     ============================================================ -->
+<section id="cli">
+<h2>CLI Reference <a href="#cli" class="section-anchor">#</a></h2>
+
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">bash</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code><span class="tok-prompt">$</span> arnold run <span class="tok-string">"description"</span> [options]   <span class="tok-comment"># Run the full pipeline</span>
+<span class="tok-prompt">$</span> arnold resume ID [options]           <span class="tok-comment"># Resume a paused or failed run</span>
+<span class="tok-prompt">$</span> arnold status ID [options]           <span class="tok-comment"># Check a pipeline run</span>
+<span class="tok-prompt">$</span> arnold list [options]                <span class="tok-comment"># List all runs</span>
+<span class="tok-prompt">$</span> arnold spec ID [options]             <span class="tok-comment"># Export a run's specification</span>
+<span class="tok-prompt">$</span> arnold tasks ID [options]            <span class="tok-comment"># Export a run's tasks</span>
+<span class="tok-prompt">$</span> arnold log ID [options]              <span class="tok-comment"># Show event audit trail</span>
+<span class="tok-prompt">$</span> arnold version                       <span class="tok-comment"># Show version</span>
+<span class="tok-prompt">$</span> arnold tree                          <span class="tok-comment"># Print command tree</span></code></pre>
+</div>
+
+<h3><code>arnold run</code> options</h3>
+<div class="table-wrapper">
+<table>
+  <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>--config FILE</code></td><td>YAML config file</td></tr>
+    <tr><td><code>--provider NAME</code></td><td>LLM provider (<code>anthropic</code> / <code>openai</code>)</td></tr>
+    <tr><td><code>--model NAME</code></td><td>Model name</td></tr>
+    <tr><td><code>--repo OWNER/REPO</code></td><td>GitHub repository</td></tr>
+    <tr><td><code>--issue-mention MENTION</code></td><td>Include in issue body (e.g. <code>@claude</code>)</td></tr>
+    <tr><td><code>--execution-provider NAME</code></td><td><code>github</code> / <code>claude_code</code> / <code>null</code></td></tr>
+    <tr><td><code>--claude-code-repo-path PATH</code></td><td>Local repo path for Claude Code</td></tr>
+    <tr><td><code>--stop-after STAGE</code></td><td>Pause after: <code>spec</code>, <code>tasks</code>, <code>executed</code></td></tr>
+    <tr><td><code>--preview</code> / <code>--dry-run</code></td><td>Generate spec + tasks without publishing</td></tr>
+    <tr><td><code>--verbose</code></td><td>Enable verbose event logging</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Exporting specs &amp; tasks</h3>
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">bash</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code><span class="tok-comment"># Specs</span>
+<span class="tok-prompt">$</span> arnold spec 1                      <span class="tok-comment"># Print spec markdown</span>
+<span class="tok-prompt">$</span> arnold spec 1 <span class="tok-flag">--json</span>              <span class="tok-comment"># Structured JSON</span>
+<span class="tok-prompt">$</span> arnold spec 1 <span class="tok-flag">-o</span> spec.md           <span class="tok-comment"># Write to file</span>
+<span class="tok-prompt">$</span> arnold spec 1 <span class="tok-flag">--history</span>            <span class="tok-comment"># Revision timeline with delta summaries</span>
+<span class="tok-prompt">$</span> arnold spec 1 <span class="tok-flag">--version</span> 2          <span class="tok-comment"># Spec content at version 2</span>
+
+<span class="tok-comment"># Tasks</span>
+<span class="tok-prompt">$</span> arnold tasks 1                     <span class="tok-comment"># Print as markdown</span>
+<span class="tok-prompt">$</span> arnold tasks 1 <span class="tok-flag">--json</span>             <span class="tok-comment"># JSON with IDs and URLs</span>
+<span class="tok-prompt">$</span> arnold tasks 1 <span class="tok-flag">-o</span> tasks.md        <span class="tok-comment"># Write to file</span></code></pre>
+</div>
+</section>
+
+<!-- ============================================================
+     RAILS
+     ============================================================ -->
+<section id="rails">
+<h2>Rails Integration <a href="#rails" class="section-anchor">#</a></h2>
+
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">bash</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code><span class="tok-comment"># Add to Gemfile, then:</span>
+<span class="tok-prompt">$</span> bundle install
+<span class="tok-prompt">$</span> rails generate arnold_pipeline:install
+<span class="tok-prompt">$</span> rails db:migrate</code></pre>
+</div>
+
+<p>Configure in <code>config/initializers/arnold_pipeline.rb</code>:</p>
+
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">ruby</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code>ArnoldPipeline.configure <span class="tok-keyword">do</span> |config|
+  config.llm_provider   = <span class="tok-keyword">:anthropic</span>
+  config.llm_api_key    = <span class="tok-func">ENV</span>[<span class="tok-string">"ANTHROPIC_API_KEY"</span>]
+  config.llm_model      = <span class="tok-string">"claude-sonnet-4-20250514"</span>
+  config.github_token   = <span class="tok-func">ENV</span>[<span class="tok-string">"GITHUB_TOKEN"</span>]
+  config.github_repo    = <span class="tok-string">"owner/repo"</span>
+  config.max_iterations = <span class="tok-number">3</span>
+
+  <span class="tok-comment"># Mention so an agent picks up the issue</span>
+  config.github_issue_mention = <span class="tok-string">"@claude"</span>
+<span class="tok-keyword">end</span></code></pre>
+</div>
+
+<h3>Programmatic usage</h3>
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">ruby</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code>orchestrator = ArnoldPipeline::Orchestrator.new
+
+<span class="tok-comment"># Full pipeline</span>
+result = orchestrator.call(<span class="tok-string">nl_input:</span> <span class="tok-string">"Build a REST API for inventory management"</span>)
+result.status       <span class="tok-comment"># => "completed"</span>
+result.tasks.count  <span class="tok-comment"># => 12</span>
+
+<span class="tok-comment"># Partial execution — review before continuing</span>
+run = orchestrator.call(<span class="tok-string">nl_input:</span> <span class="tok-string">"Build a dashboard app"</span>, <span class="tok-string">stop_after:</span> <span class="tok-keyword">:tasks</span>)
+run.status  <span class="tok-comment"># => "paused"</span>
+result = orchestrator.resume(<span class="tok-string">pipeline_run:</span> run)
+
+<span class="tok-comment"># Async (via ActiveJob)</span>
+run = ArnoldPipeline::PipelineRun.create!(<span class="tok-string">nl_input:</span> <span class="tok-string">"Build a dashboard app"</span>)
+ArnoldPipeline::PipelineJob.perform_later(run.id)</code></pre>
+</div>
+</section>
+
+<!-- ============================================================
+     PARTIAL EXECUTION
+     ============================================================ -->
+<section id="partial-execution">
+<h2>Partial Execution &amp; Resume <a href="#partial-execution" class="section-anchor">#</a></h2>
+
+<p>The pipeline can be paused at any stage and resumed later — useful for reviewing intermediate results or recovering from failures.</p>
+
+<div class="table-wrapper">
+<table>
+  <thead><tr><th><code>stop_after</code></th><th>Stops after</th><th>What exists when paused</th></tr></thead>
+  <tbody>
+    <tr><td><code>:spec</code></td><td>Spec generation</td><td>Specification (markdown + structured data)</td></tr>
+    <tr><td><code>:tasks</code></td><td>Task breakdown</td><td>Specification + 5–20 ordered tasks</td></tr>
+    <tr><td><code>:executed</code></td><td>Dispatch + result collection</td><td>Tasks with external IDs, diffs, and comments</td></tr>
+    <tr><td><code>nil</code></td><td>Full pipeline</td><td>Everything including analysis iterations</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>How resume infers the stage</h3>
+<p>The orchestrator inspects existing data to figure out where to pick up:</p>
+
+<div class="table-wrapper">
+<table>
+  <thead><tr><th>State</th><th>Resumes from</th></tr></thead>
+  <tbody>
+    <tr><td>No specification</td><td>Spec generation</td></tr>
+    <tr><td>Spec exists, no tasks</td><td>Task breakdown</td></tr>
+    <tr><td>Tasks exist, no external IDs</td><td>Task dispatch</td></tr>
+    <tr><td>Tasks have IDs, incomplete results</td><td>Result collection</td></tr>
+    <tr><td>All tasks have results</td><td>Analysis</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Already-published tasks aren't duplicated on resume — only remaining tasks are dispatched.</p>
+</section>
+
+<!-- ============================================================
+     OPENSPEC
+     ============================================================ -->
+<section id="openspec">
+<h2>OpenSpec Integration <a href="#openspec" class="section-anchor">#</a></h2>
+
+<p><a href="https://github.com/fission-ai/openspec" target="_blank">OpenSpec</a> is an optional Node.js CLI that enables surgical spec merging during <code>iterate_spec</code> decisions. Instead of appending new requirements, OpenSpec can add, modify, or remove individual requirements in-place.</p>
+
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">bash</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code><span class="tok-prompt">$</span> npm install -g @fission-ai/openspec</code></pre>
+</div>
+
+<p>When installed, Arnold writes the current spec and structured deltas to a temporary workspace, calls OpenSpec to merge them, and creates a new <code>SpecRevision</code> with the result.</p>
+
+<p><strong>Fallback chain:</strong> If OpenSpec is installed but merge fails → structured append. If OpenSpec isn't installed or is disabled → append directly. Both paths are functional; OpenSpec just produces cleaner specs across iterations.</p>
+
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">ruby</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code>config.openspec_enabled  = <span class="tok-keyword">true</span>       <span class="tok-comment"># default — use when available</span>
+config.openspec_enabled  = <span class="tok-keyword">false</span>      <span class="tok-comment"># always use append fallback</span>
+config.openspec_cli_path = <span class="tok-string">"openspec"</span> <span class="tok-comment"># or an absolute path</span></code></pre>
+</div>
+</section>
+
+<!-- ============================================================
+     CONFIGURATION
+     ============================================================ -->
+<section id="configuration">
+<h2>Configuration Reference <a href="#configuration" class="section-anchor">#</a></h2>
+
+<div class="config-group">
+  <div class="config-group-title">LLM Provider</div>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>llm_provider</code></td><td><code>:anthropic</code></td><td><code>:anthropic</code> or <code>:openai</code></td></tr>
+      <tr><td><code>llm_api_key</code></td><td>—</td><td>Auto-detected from provider env var</td></tr>
+      <tr><td><code>llm_model</code></td><td>per-provider</td><td><code>claude-sonnet-4-20250514</code> / <code>gpt-4o</code></td></tr>
+      <tr><td><code>llm_request_timeout</code></td><td><code>600</code></td><td>API timeout in seconds</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="config-group">
+  <div class="config-group-title">GitHub Provider</div>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>github_token</code></td><td>—</td><td>Personal access token with repo scope</td></tr>
+      <tr><td><code>github_repo</code></td><td>—</td><td>Target repo (<code>owner/repo</code>)</td></tr>
+      <tr><td><code>github_issue_mention</code></td><td><code>nil</code></td><td>Mention in issue body (e.g. <code>@claude</code>)</td></tr>
+      <tr><td><code>workflow_status_enabled</code></td><td><code>true</code></td><td>Check Actions workflow before resolving</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="config-group">
+  <div class="config-group-title">Claude Code Provider</div>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>claude_code_repo_path</code></td><td><code>nil</code></td><td>Local repo path</td></tr>
+      <tr><td><code>claude_code_model</code></td><td><code>"sonnet"</code></td><td>Model for Claude Code CLI</td></tr>
+      <tr><td><code>claude_code_max_turns</code></td><td><code>nil</code></td><td>Max turns per task</td></tr>
+      <tr><td><code>claude_code_permission_mode</code></td><td><code>"bypassPermissions"</code></td><td>Permission mode</td></tr>
+      <tr><td><code>claude_code_max_concurrency</code></td><td><code>4</code></td><td>Parallel execution slots (1–16)</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="config-group">
+  <div class="config-group-title">Pipeline Control</div>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>max_iterations</code></td><td><code>3</code></td><td>Feedback loop cap (1–10)</td></tr>
+      <tr><td><code>tier_gate_enabled</code></td><td><code>true</code></td><td>LLM validates each tier's output</td></tr>
+      <tr><td><code>context_propagation_enabled</code></td><td><code>true</code></td><td>Prepend tier summaries to next tier</td></tr>
+      <tr><td><code>max_tier_retries</code></td><td><code>2</code></td><td>Corrective retries per tier (0–5)</td></tr>
+      <tr><td><code>library_path</code></td><td>built-in</td><td>Custom personas/recipes directory</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="config-group">
+  <div class="config-group-title">Polling (GitHub)</div>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>polling_interval</code></td><td><code>30</code></td><td>Seconds between checks</td></tr>
+      <tr><td><code>polling_timeout</code></td><td><code>1800</code></td><td>Max wait (30 min)</td></tr>
+      <tr><td><code>polling_max_interval</code></td><td><code>300</code></td><td>Backoff cap (5 min)</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="config-group">
+  <div class="config-group-title">Diff &amp; OpenSpec</div>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>max_diff_chars</code></td><td><code>100000</code></td><td>Max total diff chars sent to LLM</td></tr>
+      <tr><td><code>max_diff_per_file_chars</code></td><td><code>10000</code></td><td>Max diff chars per file</td></tr>
+      <tr><td><code>openspec_enabled</code></td><td><code>true</code></td><td>Use OpenSpec for spec merging</td></tr>
+      <tr><td><code>openspec_cli_path</code></td><td><code>"openspec"</code></td><td>Path to OpenSpec binary</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+</section>
+
+<!-- ============================================================
+     KEY CONCEPTS
+     ============================================================ -->
+<section id="concepts">
+<h2>Key Concepts <a href="#concepts" class="section-anchor">#</a></h2>
+
+<h3>Tiers</h3>
+<p>Tasks are grouped into execution tiers computed from the <code>depends_on</code> DAG. Tier 0 has no dependencies, tier 1 depends only on tier 0, and so on. Each tier is published, executed, and merged before the next starts.</p>
+
+<h3>Spec deltas</h3>
+<p>When the analyzer decides <code>iterate_spec</code>, it produces structured requirement-level changes (add, modify, or remove) rather than free-text appends. Each delta includes an operation, section, requirement content, and rationale — keeping specs clean across iterations.</p>
+
+<h3>Personas, recipes &amp; domain types</h3>
+<p>Arnold's library system is loaded from YAML files. <strong>Personas</strong> define agent behavior (Software Architect, Domain Expert, QA Analyst). <strong>Recipes</strong> define application structure templates (Web App, API Service). <strong>Domain types</strong> provide a domain-specific prompting lens (FINTECH, GAME, HEALTH, etc. — 13 built-in types). The Library Manager matches your input to the best combination via keyword matching, with generic fallbacks.</p>
+
+<h3>Pipeline events</h3>
+<p>An audit trail of every stage transition and decision: library selection, spec generation, task breakdown, tier execution, gate checks, analysis decisions, and lifecycle events. View via <code>arnold log ID</code>.</p>
+
+</section>
+
+<!-- ============================================================
+     CUSTOM PERSONAS
+     ============================================================ -->
+<section id="custom-personas">
+<h2>Custom Personas <a href="#custom-personas" class="section-anchor">#</a></h2>
+
+<p>Create YAML files in a custom directory and point Arnold at them:</p>
+
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">yaml</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code><span class="tok-comment"># my_library/personas/fintech_expert.yml</span>
+<span class="tok-keyword">name:</span> Fintech Expert
+<span class="tok-keyword">role:</span> domain_analysis
+<span class="tok-keyword">keywords:</span> [fintech, banking, payments, trading, compliance]
+<span class="tok-keyword">description:</span> Specializes in financial technology applications
+<span class="tok-keyword">system_prompt:</span> You are a fintech domain expert...</code></pre>
+</div>
+
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">ruby</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code>ArnoldPipeline.configure <span class="tok-keyword">do</span> |config|
+  config.library_path = <span class="tok-string">"path/to/my_library"</span>
+<span class="tok-keyword">end</span></code></pre>
+</div>
+</section>
+
+<!-- ============================================================
+     CUSTOM RECIPES
+     ============================================================ -->
+<section id="custom-recipes">
+<h2>Custom Recipes <a href="#custom-recipes" class="section-anchor">#</a></h2>
+
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">yaml</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code><span class="tok-comment"># my_library/recipes/mobile_app.yml</span>
+<span class="tok-keyword">name:</span> Mobile App
+<span class="tok-keyword">type:</span> mobile_app
+<span class="tok-keyword">keywords:</span> [mobile, ios, android, react native, flutter]
+<span class="tok-keyword">description:</span> Native or cross-platform mobile application
+<span class="tok-keyword">sections:</span>
+  - <span class="tok-keyword">name:</span> Screens
+    <span class="tok-keyword">description:</span> UI screens and navigation flow
+  - <span class="tok-keyword">name:</span> API Integration
+    <span class="tok-keyword">description:</span> Backend API calls and data sync</code></pre>
+</div>
+</section>
+
+<!-- ============================================================
+     CUSTOM PROVIDERS
+     ============================================================ -->
+<section id="custom-providers">
+<h2>Custom Execution Providers <a href="#custom-providers" class="section-anchor">#</a></h2>
+
+<p>See the <a href="docs/execution_providers.md">provider development guide</a> and the <a href="docs/provider_conformance_checklist.md">conformance checklist</a> for building your own execution provider.</p>
+</section>
+
+<!-- ============================================================
+     ARCHITECTURE
+     ============================================================ -->
+<section id="architecture">
+<h2>Architecture <a href="#architecture" class="section-anchor">#</a></h2>
+
+<h3>Key classes</h3>
+<ul>
+  <li><strong>Orchestrator</strong> — The pipeline driver. <code>call(nl_input:, stop_after:)</code> for new runs, <code>resume(pipeline_run:, stop_after:)</code> for continuation. Owns the state machine and delegates to agents.</li>
+  <li><strong>AnalysisLoop</strong> — Extracted iteration logic. Runs the analyzer, interprets the decision, drives the next cycle.</li>
+  <li><strong>TierExecutionEngine</strong> — Tier-by-tier execution: publish, await, gate check, merge, advance.</li>
+  <li><strong>Agents</strong> — Stateless service objects with a <code>call(**kwargs)</code> interface. Each builds an LLM prompt, makes an API call, parses the response.</li>
+  <li><strong>Providers</strong> — Pluggable backends. LLM providers handle API calls. Execution providers handle task dispatch and results. Both use a <code>build</code> factory pattern.</li>
+  <li><strong>Library::Manager</strong> — Loads personas, recipes, and domain types from YAML. Matches via keyword overlap with generic fallbacks.</li>
+</ul>
+
+<h3>Directory structure</h3>
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">text</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code>lib/arnold_pipeline/
+  agents/
+    base_agent.rb          <span class="tok-comment"># Shared agent interface</span>
+    analyzer.rb            <span class="tok-comment"># Post-execution analysis &amp; confidence scoring</span>
+    executor.rb            <span class="tok-comment"># Dispatches tasks to execution provider</span>
+    spec_generator.rb      <span class="tok-comment"># NL input → structured specification</span>
+    task_breaker.rb        <span class="tok-comment"># Specification → ordered task list</span>
+    tier_gate_check.rb     <span class="tok-comment"># Per-tier diff validation</span>
+  library/
+    manager.rb             <span class="tok-comment"># Keyword-based retrieval</span>
+    persona.rb / recipe.rb <span class="tok-comment"># Data.define value objects</span>
+  prompts/                 <span class="tok-comment"># ERB prompt templates</span>
+  providers/
+    execution/             <span class="tok-comment"># GitHub, Claude Code, Null</span>
+    llm/                   <span class="tok-comment"># Anthropic, OpenAI</span>
+  orchestrator.rb          <span class="tok-comment"># Main pipeline driver</span>
+  analysis_loop.rb         <span class="tok-comment"># Iteration logic</span>
+  tier_execution_engine.rb <span class="tok-comment"># Tier-by-tier loop</span>
+  configuration.rb         <span class="tok-comment"># Config with defaults &amp; validation</span></code></pre>
+</div>
+</section>
+
+<!-- ============================================================
+     TESTING
+     ============================================================ -->
+<section id="testing">
+<h2>Testing <a href="#testing" class="section-anchor">#</a></h2>
+
+<div class="code-block-wrapper">
+  <div class="code-header">
+    <span class="code-lang">bash</span>
+    <button class="copy-btn" onclick="copyCode(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <pre><code><span class="tok-prompt">$</span> bundle exec rails test                              <span class="tok-comment"># Full suite (700+ tests)</span>
+<span class="tok-prompt">$</span> bundle exec rails test test/agents/                  <span class="tok-comment"># Specific directory</span>
+<span class="tok-prompt">$</span> bundle exec rails test test/agents/analyzer_test.rb:42 <span class="tok-comment"># Specific line</span></code></pre>
+</div>
+
+<p>The test suite uses <strong>Mocha</strong> for stubs/mocks, <strong>WebMock</strong> for HTTP stubs, and a dummy Rails app at <code>test/dummy/</code> for the engine harness. Always call <code>ArnoldPipeline.reset_configuration!</code> in teardown to prevent config leaking between tests.</p>
+</section>
+
+<!-- FOOTER -->
+<footer class="doc-footer">
+  <span class="doc-footer-text">Arnold Pipeline — MIT License</span>
+  <div class="doc-footer-links">
+    <a href="https://github.com/your-org/arnold_pipeline" target="_blank">GitHub</a>
+    <a href="https://rubygems.org/gems/arnold_pipeline" target="_blank">RubyGems</a>
+  </div>
+</footer>
+
+</div>
+</main>
+
+<!-- ============================================================
+     SCRIPTS
+     ============================================================ -->
+<script>
+// Copy button
+function copyCode(btn) {
+  const pre = btn.closest('.code-block-wrapper').querySelector('pre');
+  const text = pre.textContent.replace(/^\$ /gm, '');
+  navigator.clipboard.writeText(text).then(() => {
+    btn.classList.add('copied');
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!`;
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy`;
+    }, 2000);
+  });
+}
+
+// Tabs
+function switchTab(e, panelId) {
+  const tabGroup = e.target.closest('.tabs');
+  tabGroup.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  tabGroup.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  e.target.classList.add('active');
+  document.getElementById(panelId).classList.add('active');
+}
+
+// Mobile sidebar
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// Close sidebar on link click (mobile)
+document.querySelectorAll('.sidebar-link').forEach(link => {
+  link.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.remove('open');
+  });
+});
+
+// Active sidebar link on scroll
+const sections = document.querySelectorAll('section[id]');
+const sidebarLinks = document.querySelectorAll('.sidebar-link');
+
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const id = entry.target.id;
+      sidebarLinks.forEach(link => {
+        link.classList.toggle('active',
+          link.getAttribute('href') === `#${id}`
+        );
+      });
+    }
+  });
+}, { rootMargin: '-20% 0px -60% 0px' });
+
+sections.forEach(s => observer.observe(s));
+
+// Also observe the hero/overview
+const hero = document.getElementById('overview');
+if (hero) observer.observe(hero);
+</script>
+
+</body>
+</html>
