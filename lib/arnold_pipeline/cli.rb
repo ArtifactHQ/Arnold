@@ -3,6 +3,7 @@ require "yaml"
 require "json"
 require "logger"
 require "fileutils"
+require_relative "log_formatter"
 
 module ArnoldPipeline
   class Cli < Thor
@@ -325,6 +326,7 @@ module ArnoldPipeline
     option :json, type: :boolean, default: false, desc: "Output as JSON"
     option :stage, type: :string, desc: "Filter events by stage"
     option :verbose, type: :boolean, default: false, desc: "Include full payloads"
+    option :no_color, type: :boolean, default: false, desc: "Disable color output"
     def log(id)
       setup_standalone!
 
@@ -348,21 +350,14 @@ module ArnoldPipeline
         return
       end
 
-      say "Pipeline Run ##{run_record.id} — Event Timeline (#{events.size} events)\n", :green
-
-      events.each do |event|
-        timestamp = event.created_at.strftime("%H:%M:%S")
-        duration = event.duration_ms ? " (#{event.duration_ms.round(0)}ms)" : ""
-        say "[#{timestamp}] #{event.stage} / #{event.event_type}#{duration}"
-
-        format_event_summary(event)
-
-        if options[:verbose] && event.payload.present?
-          say "  Payload: #{JSON.pretty_generate(event.payload).gsub("\n", "\n  ")}"
-        end
-
-        say ""
-      end
+      color = !options[:no_color] && $stdout.tty? && !ENV["NO_COLOR"]
+      formatter = LogFormatter.new(
+        events,
+        pipeline_run: run_record,
+        color: color,
+        verbose: options[:verbose]
+      )
+      say formatter.render
     end
 
     desc "tasks ID", "Export the tasks for a pipeline run"

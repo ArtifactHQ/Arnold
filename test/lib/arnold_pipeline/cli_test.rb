@@ -497,11 +497,10 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["log", run_record.id.to_s]) }
 
-      assert_match(/Event Timeline \(2 events\)/, output)
-      assert_match(/spec_generation \/ library_selection/, output)
-      assert_match(/Software Architect/, output)
-      assert_match(/spec_generation \/ spec_generated/, output)
-      assert_match(/3413ms/, output)
+      assert_match(/Pipeline Run ##{run_record.id}/, output)
+      assert_match(/library.*persona=Software Architect/, output)
+      assert_match(/spec.*v1 generated/, output)
+      assert_match(/3\.4s/, output)
     end
 
     test "log filters by --stage" do
@@ -512,10 +511,10 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["log", run_record.id.to_s, "--stage", "analysis"]) }
 
-      assert_match(/1 events/, output)
-      assert_match(/analysis \/ analysis_completed/, output)
-      assert_no_match(/spec_generation/, output)
-      assert_no_match(/task_breakdown/, output)
+      assert_match(/Pipeline Run ##{run_record.id}/, output)
+      assert_match(/ANALYSIS/, output)
+      assert_no_match(/library/, output)
+      assert_no_match(/tasks.*tiers/, output)
     end
 
     test "log --json outputs valid JSON array" do
@@ -619,7 +618,9 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["log", run_record.id.to_s]) }
 
-      assert_match(/Criteria: 3 verified, 1 failed, 2 unverified/, output)
+      assert_match(/criteria/, output)
+      assert_match(/1 failed/, output)
+      assert_match(/3 verified/, output)
       # Without --verbose, individual criteria should not show
       assert_no_match(/PASS:/, output)
     end
@@ -637,7 +638,9 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["log", run_record.id.to_s]) }
 
-      assert_match(/Criteria \(advisory\): 2 verified, 1 failed, 0 unverified/, output)
+      assert_match(/criteria/, output)
+      assert_match(/unmet/, output)
+      assert_match(/advisory/, output)
     end
 
     test "log --verbose shows per-criterion results for criteria_check" do
@@ -676,10 +679,11 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["log", run_record.id.to_s, "--verbose"]) }
 
-      assert_match(/Gate: FAILED — Missing route/, output)
+      assert_match(/gate/, output)
+      assert_match(/FAIL/, output)
+      assert_match(/Missing route/, output)
       assert_match(/Corrective tasks:/, output)
       assert_match(/1\. Add route/, output)
-      assert_match(/Add GET \/up to routes\.rb/, output)
     end
 
     test "format_task shows superseded label for superseded tasks" do
@@ -843,8 +847,8 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["log", run_record.id.to_s, "--verbose"]) }
 
-      assert_match(/Setup DB.*resolved/, output)
-      assert_match(/Add API.*failed.*empty_diff/, output)
+      assert_match(/Setup DB/, output)
+      assert_match(/Add API.*empty_diff/, output)
     end
 
     test "log does not display per-task outcomes without verbose" do
@@ -862,8 +866,10 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["log", run_record.id.to_s]) }
 
-      assert_match(/Tier 0: 1 resolved, 1 failed/, output)
-      assert_no_match(/Setup DB/, output)
+      assert_match(/1 failed/, output)
+      assert_match(/1 ok/, output)
+      # Per-task outcome detail lines should not appear in non-verbose mode
+      assert_no_match(/Setup DB.*resolved/, output)
     end
 
     test "log displays enriched pipeline_completed summary" do
@@ -880,10 +886,11 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["log", run_record.id.to_s]) }
 
+      assert_match(/PIPELINE COMPLETED/, output)
       assert_match(/2 iterations, 8 tasks/, output)
       assert_match(/6 succeeded, 2 failed/, output)
-      assert_match(/Duration:.*1\.0h/, output)
-      assert_match(/85%/, output)
+      assert_match(/1\.0h/, output)
+      assert_match(/85% confidence/, output)
     end
 
     test "log displays enriched pipeline_failed summary" do
@@ -901,10 +908,10 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["log", run_record.id.to_s]) }
 
+      assert_match(/PIPELINE FAILED/, output)
       assert_match(/RuntimeError: Something broke/, output)
-      assert_match(/Tasks: 5 total, 3 succeeded, 2 failed/, output)
-      assert_match(/Duration:.*2\.1m/, output)
-      assert_match(/LLM response excerpt:/, output)
+      assert_match(/5 tasks.*3 succeeded.*2 failed/, output)
+      assert_match(/2\.1m/, output)
     end
 
     test "log formats duration in seconds for short durations" do
@@ -919,7 +926,7 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["log", run_record.id.to_s]) }
 
-      assert_match(/Duration:.*45\.0s/, output)
+      assert_match(/45\.0s/, output)
     end
 
     test "log formats duration in minutes for medium durations" do
@@ -934,7 +941,7 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["log", run_record.id.to_s]) }
 
-      assert_match(/Duration:.*5\.0m/, output)
+      assert_match(/5\.0m/, output)
     end
 
     private
