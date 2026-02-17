@@ -3,6 +3,7 @@ require "yaml"
 require "json"
 require "logger"
 require "fileutils"
+require_relative "log_formatter"
 
 module ArnoldPipeline
   class Cli < Thor
@@ -140,6 +141,66 @@ module ArnoldPipeline
       end
     end
 
+    desc "iterate ID CHANGE_REQUEST", "Iterate on a pipeline run's specification with a natural language change"
+    option :config, type: :string, desc: "Path to YAML config file"
+    option :provider, type: :string, desc: "LLM provider (anthropic or openai)"
+    option :model, type: :string, desc: "LLM model name"
+    option :dry_run, type: :boolean, default: false, desc: "Show proposed deltas without applying"
+    option :json, type: :boolean, default: false, desc: "Output delta details as JSON"
+    option :verbose, type: :boolean, default: false, desc: "Show full before/after for modified requirements"
+    option :yes, type: :boolean, default: false, aliases: ["-y"], desc: "Skip confirmation prompt"
+    def iterate(id, change_request)
+      if id == "--help" || id == "-h"
+        invoke :help, ["iterate"]
+        return
+      end
+      with_error_handling do
+        setup_standalone!
+        load_config!(options)
+        require "arnold_pipeline/orchestrator"
+        require "arnold_pipeline/delta_presenter"
+
+        run_record = PipelineRun.find_by(id:)
+        unless run_record
+          say_error "Pipeline run ##{id} not found", :red
+          raise SystemExit.new(1)
+        end
+
+        if change_request.strip.empty?
+          say_error "Change request cannot be empty", :red
+          raise SystemExit.new(1)
+        end
+
+        logger = build_logger(options[:verbose])
+        ArnoldPipeline.configuration.verbose_event_logging = true if options[:verbose]
+        orchestrator = Orchestrator.new(logger:)
+
+        if run_record.completed?
+          handle_iterate_fork!(orchestrator, run_record, change_request)
+          return
+        end
+
+        if options[:dry_run]
+          handle_iterate_dry_run!(orchestrator, run_record, change_request)
+          return
+        end
+
+        quiet_say "Iterating specification for pipeline run ##{id}...", :green
+        result = orchestrator.iterate_spec!(pipeline_run: run_record, change_request:)
+
+        quiet_say "\nSpecification updated to v#{result[:spec_version]}", :green
+        quiet_say "  Deltas applied: #{result[:deltas][:delta_count]}"
+        quiet_say "  Merge strategy: #{result[:deltas][:merge_strategy]}"
+
+        superseded_count = run_record.tasks.where(status: :superseded).count
+        if superseded_count > 0
+          quiet_say "  Tasks superseded: #{superseded_count}"
+        end
+
+        quiet_say "\nRun 'arnold resume #{id}' to continue the pipeline with the updated spec.", :yellow
+      end
+    end
+
     desc "status ID", "Show the status of a pipeline run"
     option :json, type: :boolean, default: false, desc: "Output as JSON"
     def status(id)
@@ -238,7 +299,7 @@ module ArnoldPipeline
       end
 
       if options[:history]
-        show_spec_history(spec)
+        show_spec_lineage(run_record)
         return
       end
 
@@ -265,6 +326,7 @@ module ArnoldPipeline
     option :json, type: :boolean, default: false, desc: "Output as JSON"
     option :stage, type: :string, desc: "Filter events by stage"
     option :verbose, type: :boolean, default: false, desc: "Include full payloads"
+    option :no_color, type: :boolean, default: false, desc: "Disable color output"
     def log(id)
       setup_standalone!
 
@@ -288,21 +350,14 @@ module ArnoldPipeline
         return
       end
 
-      say "Pipeline Run ##{run_record.id} — Event Timeline (#{events.size} events)\n", :green
-
-      events.each do |event|
-        timestamp = event.created_at.strftime("%H:%M:%S")
-        duration = event.duration_ms ? " (#{event.duration_ms.round(0)}ms)" : ""
-        say "[#{timestamp}] #{event.stage} / #{event.event_type}#{duration}"
-
-        format_event_summary(event)
-
-        if options[:verbose] && event.payload.present?
-          say "  Payload: #{JSON.pretty_generate(event.payload).gsub("\n", "\n  ")}"
-        end
-
-        say ""
-      end
+      color = !options[:no_color] && $stdout.tty? && !ENV["NO_COLOR"]
+      formatter = LogFormatter.new(
+        events,
+        pipeline_run: run_record,
+        color: color,
+        verbose: options[:verbose]
+      )
+      say formatter.render
     end
 
     desc "tasks ID", "Export the tasks for a pipeline run"
@@ -476,6 +531,35 @@ module ArnoldPipeline
       say(message, *args) unless options[:quiet]
     end
 
+    def handle_iterate_dry_run!(orchestrator, run_record, change_request)
+      result = orchestrator.iterate_spec_dry_run!(pipeline_run: run_record, change_request:)
+
+      presenter = DeltaPresenter.new(
+        result[:deltas],
+        from_version: result[:current_version],
+        to_version: result[:current_version] + 1
+      )
+
+      if options[:json]
+        say JSON.pretty_generate(presenter.to_json_data)
+      else
+        say presenter.to_s
+        say "\nNo changes applied (dry run).", :yellow
+      end
+    end
+
+    def handle_iterate_fork!(orchestrator, run_record, change_request)
+      quiet_say "Pipeline run ##{run_record.id} is completed. Forking into new run...", :green
+      result = orchestrator.fork!(pipeline_run: run_record, change_request:)
+      new_run = result[:pipeline_run]
+
+      quiet_say "\nNew pipeline run created!", :green
+      quiet_say "  New run ID: #{new_run.id}"
+      quiet_say "  Forked from: ##{run_record.id}"
+      quiet_say "  Spec version: #{new_run.specification.version}"
+      quiet_say "\nRun 'arnold resume #{new_run.id}' to continue.", :yellow
+    end
+
     def task_to_hash(task)
       {
         id: task.id,
@@ -494,7 +578,8 @@ module ArnoldPipeline
 
     def format_task(task)
       lines = []
-      lines << "## [#{task.position}] #{task.title}"
+      label = task.superseded? ? " [superseded]" : ""
+      lines << "## [#{task.position}] #{task.title}#{label}"
       lines << "Tier: #{task.tier} | Priority: #{task.priority} | Status: #{task.status}"
       lines << "Labels: #{task.labels.join(', ')}" if task.labels.any?
       lines << "Depends on: #{task.depends_on.join(', ')}" if task.depends_on.any?
@@ -502,6 +587,90 @@ module ArnoldPipeline
       lines << ""
       lines << task.description if task.description.present?
       lines.join("\n")
+    end
+
+    def show_spec_lineage(pipeline_run)
+      root = find_root_run(pipeline_run)
+      tree = build_lineage_tree(root)
+      say "Spec Lineage for Run ##{pipeline_run.id}:\n", :green
+      render_lineage_tree(tree, pipeline_run.id)
+    end
+
+    def find_root_run(run)
+      current = run
+      while (parent_id = current.metadata&.dig("forked_from_run_id"))
+        parent = PipelineRun.find_by(id: parent_id)
+        break unless parent
+        current = parent
+      end
+      current
+    end
+
+    def build_lineage_tree(root)
+      children = PipelineRun.where("json_extract(metadata, '$.forked_from_run_id') = ?", root.id)
+                            .order(:created_at)
+                            .map { |child| build_lineage_tree(child) }
+      { run: root, children: children }
+    end
+
+    def render_lineage_tree(node, current_run_id, prefix: "", is_last: true, is_root: true)
+      run = node[:run]
+      spec = run.specification
+
+      # Build the connector prefix
+      if is_root
+        line_prefix = ""
+        child_prefix = ""
+      else
+        connector = is_last ? "└── " : "├── "
+        line_prefix = prefix + connector
+        child_prefix = prefix + (is_last ? "    " : "│   ")
+      end
+
+      # Build the main node line
+      current_marker = run.id == current_run_id ? "  ◄ current" : ""
+      version_str = spec ? "v#{spec.version}" : ""
+      timestamp = run.created_at.strftime("%Y-%m-%d %H:%M")
+      header = format(
+        "%s#%-4d [%s] %-6s%s  %s",
+        line_prefix, run.id, run.status, version_str, current_marker, timestamp
+      )
+      say header, lineage_status_color(run, current_run_id)
+
+      # Show change source for root (spec_generation) or change request for forks
+      change_request = run.metadata&.dig("fork_change_request")
+      if change_request
+        truncated = change_request.length > 70 ? "#{change_request[0...70]}..." : change_request
+        say "#{child_prefix}\"#{truncated}\""
+      elsif is_root
+        say "#{child_prefix}spec_generation"
+      end
+
+      # Show delta summaries from the fork's spec revision (user_iterate)
+      if change_request && spec
+        user_rev = spec.spec_revisions.where(change_source: "user_iterate").order(:version).last
+        if user_rev&.delta_summary.present?
+          user_rev.delta_summary.each { |s| say "#{child_prefix}  - #{s}" }
+        end
+      end
+
+      # Render children
+      node[:children].each_with_index do |child, i|
+        is_last_child = (i == node[:children].length - 1)
+        # Add a blank connector line before children if this node has content
+        say "#{child_prefix}│" if i == 0
+        render_lineage_tree(child, current_run_id, prefix: child_prefix, is_last: is_last_child, is_root: false)
+      end
+    end
+
+    def lineage_status_color(run, current_run_id)
+      return :cyan if run.id == current_run_id
+      case run.status
+      when "completed" then :green
+      when "failed" then :red
+      when "paused", "executing", "awaiting_results" then :yellow
+      else :white
+      end
     end
 
     def show_spec_history(spec)
@@ -538,6 +707,7 @@ module ArnoldPipeline
 
     def event_to_hash(event, include_payload: false)
       hash = {
+        pipeline_run_id: event.pipeline_run_id,
         event_type: event.event_type,
         stage: event.stage,
         summary: event.summary,
@@ -548,73 +718,6 @@ module ArnoldPipeline
       }
       hash[:payload] = event.payload if include_payload && event.payload.present?
       hash
-    end
-
-    def format_event_summary(event)
-      summary = event.summary || {}
-      case event.event_type
-      when "library_selection"
-        say "  Persona: #{summary['persona']} | Recipe: #{summary['recipe']} | Domain: #{summary['domain_type']}"
-      when "spec_generated"
-        say "  Spec v#{summary['spec_version']}, #{summary['content_length']} chars"
-      when "tasks_broken"
-        say "  #{summary['task_count']} tasks across #{summary['tier_count']} tiers, #{summary['dependency_edge_count']} dependency edges"
-      when "tier_execution_started"
-        say "  Tier #{summary['tier_number']}, #{summary['task_count']} tasks: #{(summary['task_titles'] || []).join(', ')}"
-      when "tier_execution_completed"
-        say "  Tier #{summary['tier_number']}: #{summary['resolved_count']} resolved, #{summary['failed_count']} failed"
-      when "tier_gate_evaluated"
-        status = summary["pass"] ? "PASSED" : "FAILED"
-        issues = (summary["issues"] || []).join("; ")
-        say "  Gate: #{status}#{issues.present? ? " — #{issues}" : ""}"
-        if options[:verbose]
-          corrective = summary["corrective_tasks"] || []
-          if corrective.any?
-            say "  Corrective tasks:"
-            corrective.each_with_index do |t, i|
-              say "    #{i + 1}. #{t['title']}"
-              say "       #{t['description']}" if t["description"].present?
-            end
-          end
-        end
-      when "criteria_check"
-        v = summary["verified_count"] || 0
-        f = summary["failed_count"] || 0
-        u = summary["unverified_count"] || 0
-        say "  Criteria: #{v} verified, #{f} failed, #{u} unverified"
-        if options[:verbose] && summary["criteria"]
-          summary["criteria"].each do |c|
-            label = case c["result"]
-            when "verified" then "PASS"
-            when "failed" then "FAIL"
-            else "UNVERIFIED"
-            end
-            say "    #{label}: #{c['description']} (#{c['type']})"
-          end
-        end
-      when "analysis_completed"
-        say "  Decision: #{summary['decision']} (#{summary['confidence']}% confidence)"
-        say "  Reasoning: #{summary['reasoning_excerpt']}" if summary["reasoning_excerpt"].present?
-      when "iteration_decision"
-        say "  Decision: #{summary['decision']}"
-      when "spec_delta_merged"
-        say "  Strategy: #{summary['merge_strategy']}, #{summary['delta_count']} deltas, new version: v#{summary['new_version']}"
-      when "pipeline_paused"
-        say "  Status: #{summary['status']}, reason: #{summary['reason']}"
-      when "pipeline_failed"
-        say "  #{summary['error_class']}: #{summary['error_message']}"
-        say "  Stage: #{summary['failed_stage']}" if summary["failed_stage"]
-        say "  Provider: #{summary['llm_provider']} / #{summary['llm_model']}" if summary["llm_provider"]
-        say "  Execution: #{summary['execution_provider']}" if summary["execution_provider"]
-        if options[:verbose] && summary["backtrace"]
-          say "  Backtrace:"
-          summary["backtrace"].each { |frame| say "    #{frame}" }
-        end
-      when "pipeline_completed"
-        say "  #{summary['total_iterations']} iterations, #{summary['total_tasks']} tasks"
-      else
-        say "  #{summary.inspect}"
-      end
     end
 
     def status_color(status)

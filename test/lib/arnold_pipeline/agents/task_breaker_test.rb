@@ -116,6 +116,67 @@ module ArnoldPipeline
         @agent.call(spec_content: "# A spec", recipe: recipe, supporting_recipes: supporting)
       end
 
+      # -- Delta-scoped tests --
+
+      test "forwards deltas to system and user prompts" do
+        deltas = [{ "operation" => "added", "section" => "Features", "requirement" => "Dark Mode", "content" => "Dark mode support" }]
+        tasks = [
+          { "title" => "Add dark mode", "description" => "Implement dark mode toggle", "priority" => 0, "labels" => ["frontend"], "position" => 0, "depends_on" => [], "section_ref" => "Features > Dark Mode" }
+        ]
+
+        @llm.expects(:chat_json).with { |kwargs|
+          kwargs[:system].include?("Delta Scope") &&
+            kwargs[:system].include?("Dark Mode") &&
+            kwargs[:messages].first[:content].include?("already built")
+        }.returns({ "tasks" => tasks })
+
+        result = @agent.call(spec_content: "# A spec", deltas: deltas)
+        assert_equal 1, result.size
+      end
+
+      test "does not warn for 1 task when delta-scoped" do
+        deltas = [{ "operation" => "added", "section" => "Features", "requirement" => "Fix", "content" => "Fix stuff" }]
+        tasks = [
+          { "title" => "Fix thing", "position" => 0, "depends_on" => [] }
+        ]
+        @llm.expects(:chat_json).returns({ "tasks" => tasks })
+
+        warned = false
+        logger = Logger.new(File::NULL)
+        logger.define_singleton_method(:warn) { |*args, &block| warned = true; block&.call }
+        agent = TaskBreaker.new(llm: @llm, logger: logger)
+        result = agent.call(spec_content: "spec", deltas: deltas)
+        assert_equal 1, result.size
+        refute warned, "Should not warn about task count when delta-scoped"
+      end
+
+      test "warns for 1 task when not delta-scoped" do
+        tasks = [
+          { "title" => "Solo task", "position" => 0, "depends_on" => [] }
+        ]
+        @llm.expects(:chat_json).returns({ "tasks" => tasks })
+
+        warned = false
+        logger = Logger.new(File::NULL)
+        logger.define_singleton_method(:warn) { |*args, &block| warned = true; block&.call }
+        agent = TaskBreaker.new(llm: @llm, logger: logger)
+        agent.call(spec_content: "spec")
+        assert warned, "Should have warned about task count outside range"
+      end
+
+      test "passes deltas nil by default (backward compatibility)" do
+        tasks = [
+          { "title" => "Bootstrap", "position" => 0, "depends_on" => [], "section_ref" => "Setup" }
+        ]
+
+        @llm.expects(:chat_json).with { |kwargs|
+          !kwargs[:system].include?("Delta Scope") &&
+            kwargs[:messages].first[:content].include?("Break down the following")
+        }.returns({ "tasks" => tasks })
+
+        @agent.call(spec_content: "# A spec")
+      end
+
       # -- Schema validation --
 
       test "RESPONSE_SCHEMA validates a well-formed task breakdown" do

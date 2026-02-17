@@ -3,6 +3,16 @@ require "logger"
 
 module ArnoldPipeline
   module Agents
+    class LlmParseError < StandardError
+      attr_reader :raw_response, :original_error
+
+      def initialize(message, raw_response: nil, original_error: nil)
+        super(message)
+        @raw_response = raw_response
+        @original_error = original_error
+      end
+    end
+
     class BaseAgent
       attr_reader :llm, :logger
 
@@ -42,7 +52,7 @@ module ArnoldPipeline
       rescue JSON::ParserError => e
         logger.error { "JSON parse failed: #{e.message}" }
         logger.debug { "Extracted content (first 200 chars): #{raw&.slice(0, 200).inspect}" }
-        raise
+        raise LlmParseError.new(e.message, raw_response: text, original_error: e)
       end
 
       def extract_json(text)

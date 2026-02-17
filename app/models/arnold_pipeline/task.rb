@@ -28,7 +28,8 @@ module ArnoldPipeline
       pending: 0,
       in_progress: 1,
       completed: 2,
-      failed: 3
+      failed: 3,
+      superseded: 4
     }
 
     belongs_to :pipeline_run

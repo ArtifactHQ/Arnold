@@ -1,6 +1,7 @@
 require "test_helper"
 require "arnold_pipeline/cli"
 require "arnold_pipeline/orchestrator"
+require "arnold_pipeline/delta_presenter"
 
 module ArnoldPipeline
   class CliTest < ActiveSupport::TestCase
@@ -431,33 +432,128 @@ module ArnoldPipeline
       end
     end
 
-    test "spec --history shows revision timeline" do
+    test "spec --history shows lineage for single run (no forks)" do
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
-      spec = run_record.create_specification!(content: "# Spec v2", version: 2)
-      spec.spec_revisions.create!(version: 1, content: "# Spec v1", change_source: "spec_generation")
-      spec.spec_revisions.create!(
-        version: 2,
-        content: "# Spec v2",
-        change_source: "iterate_spec",
-        delta_summary: ["ADDED: Auth > Password Reset", "MODIFIED: Auth > Login"]
-      )
+      run_record.create_specification!(content: "# Spec v1", version: 1)
 
       output = capture_output { Cli.start(["spec", run_record.id.to_s, "--history"]) }
 
-      assert_match(/Specification Revision History:/, output)
-      assert_match(/v1 \[spec_generation\]/, output)
-      assert_match(/v2 \[iterate_spec\]/, output)
-      assert_match(/ADDED: Auth > Password Reset/, output)
-      assert_match(/MODIFIED: Auth > Login/, output)
+      assert_match(/Spec Lineage for Run ##{run_record.id}/, output)
+      assert_match(/##{run_record.id}.*\[completed\].*v1/, output)
+      assert_match(/spec_generation/, output)
+      assert_match(/◄ current/, output)
     end
 
-    test "spec --history with no revisions shows message" do
-      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
-      run_record.create_specification!(content: "# Spec", version: 1)
+    test "spec --history shows fork lineage tree" do
+      root = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      root.create_specification!(content: "# Spec v1", version: 1)
 
-      output = capture_output { Cli.start(["spec", run_record.id.to_s, "--history"]) }
+      child = PipelineRun.create!(
+        nl_input: "Build a todo app",
+        status: :completed,
+        metadata: { "forked_from_run_id" => root.id, "fork_change_request" => "Add authentication" }
+      )
+      spec2 = child.create_specification!(content: "# Spec v2", version: 2)
+      spec2.spec_revisions.create!(
+        version: 2, content: "# Spec v2", change_source: "user_iterate",
+        delta_summary: ["ADDED: Auth > Login"]
+      )
 
-      assert_match(/No revision history available/, output)
+      output = capture_output { Cli.start(["spec", child.id.to_s, "--history"]) }
+
+      assert_match(/Spec Lineage for Run ##{child.id}/, output)
+      assert_match(/##{root.id}.*\[completed\].*v1/, output)
+      assert_match(/spec_generation/, output)
+      assert_match(/##{child.id}.*\[completed\].*v2/, output)
+      assert_match(/Add authentication/, output)
+      assert_match(/ADDED: Auth > Login/, output)
+      # current marker on the requested run
+      assert_match(/##{child.id}.*◄ current/, output)
+    end
+
+    test "spec --history shows deeply nested fork chain" do
+      root = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      root.create_specification!(content: "# v1", version: 1)
+
+      child1 = PipelineRun.create!(
+        nl_input: "Build a todo app", status: :completed,
+        metadata: { "forked_from_run_id" => root.id, "fork_change_request" => "First change" }
+      )
+      child1.create_specification!(content: "# v2", version: 2)
+
+      child2 = PipelineRun.create!(
+        nl_input: "Build a todo app", status: :executing,
+        metadata: { "forked_from_run_id" => child1.id, "fork_change_request" => "Second change" }
+      )
+      child2.create_specification!(content: "# v3", version: 3)
+
+      output = capture_output { Cli.start(["spec", child2.id.to_s, "--history"]) }
+
+      assert_match(/Spec Lineage for Run ##{child2.id}/, output)
+      assert_match(/##{root.id}/, output)
+      assert_match(/##{child1.id}/, output)
+      assert_match(/##{child2.id}.*◄ current/, output)
+      assert_match(/First change/, output)
+      assert_match(/Second change/, output)
+    end
+
+    test "spec --history shows multiple forks from same parent (branching)" do
+      root = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      root.create_specification!(content: "# v1", version: 1)
+
+      fork_a = PipelineRun.create!(
+        nl_input: "Build a todo app", status: :completed,
+        metadata: { "forked_from_run_id" => root.id, "fork_change_request" => "Branch A" }
+      )
+      fork_a.create_specification!(content: "# v2a", version: 2)
+
+      fork_b = PipelineRun.create!(
+        nl_input: "Build a todo app", status: :failed,
+        metadata: { "forked_from_run_id" => root.id, "fork_change_request" => "Branch B" }
+      )
+      fork_b.create_specification!(content: "# v2b", version: 2)
+
+      output = capture_output { Cli.start(["spec", fork_a.id.to_s, "--history"]) }
+
+      assert_match(/##{root.id}/, output)
+      assert_match(/##{fork_a.id}.*◄ current/, output)
+      assert_match(/##{fork_b.id}/, output)
+      assert_match(/Branch A/, output)
+      assert_match(/Branch B/, output)
+    end
+
+    test "spec --history marks current run distinctly" do
+      root = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      root.create_specification!(content: "# v1", version: 1)
+
+      child = PipelineRun.create!(
+        nl_input: "Build a todo app", status: :completed,
+        metadata: { "forked_from_run_id" => root.id, "fork_change_request" => "Change" }
+      )
+      child.create_specification!(content: "# v2", version: 2)
+
+      # Request history for the root — root should be marked current, not child
+      output = capture_output { Cli.start(["spec", root.id.to_s, "--history"]) }
+
+      assert_match(/##{root.id}.*◄ current/, output)
+      assert_no_match(/##{child.id}.*◄ current/, output)
+    end
+
+    test "spec --history truncates long change requests" do
+      root = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      root.create_specification!(content: "# v1", version: 1)
+
+      long_request = "A" * 100
+      child = PipelineRun.create!(
+        nl_input: "Build a todo app", status: :completed,
+        metadata: { "forked_from_run_id" => root.id, "fork_change_request" => long_request }
+      )
+      child.create_specification!(content: "# v2", version: 2)
+
+      output = capture_output { Cli.start(["spec", child.id.to_s, "--history"]) }
+
+      assert_match(/#{"A" * 70}\.\.\./, output)
+      assert_no_match(/#{"A" * 100}/, output)
     end
 
     test "spec --version shows specific version content" do
@@ -496,11 +592,10 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["log", run_record.id.to_s]) }
 
-      assert_match(/Event Timeline \(2 events\)/, output)
-      assert_match(/spec_generation \/ library_selection/, output)
-      assert_match(/Software Architect/, output)
-      assert_match(/spec_generation \/ spec_generated/, output)
-      assert_match(/3413ms/, output)
+      assert_match(/Pipeline Run ##{run_record.id}/, output)
+      assert_match(/library.*persona=Software Architect/, output)
+      assert_match(/spec.*v1 generated/, output)
+      assert_match(/3\.4s/, output)
     end
 
     test "log filters by --stage" do
@@ -511,10 +606,10 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["log", run_record.id.to_s, "--stage", "analysis"]) }
 
-      assert_match(/1 events/, output)
-      assert_match(/analysis \/ analysis_completed/, output)
-      assert_no_match(/spec_generation/, output)
-      assert_no_match(/task_breakdown/, output)
+      assert_match(/Pipeline Run ##{run_record.id}/, output)
+      assert_match(/ANALYSIS/, output)
+      assert_no_match(/library/, output)
+      assert_no_match(/tasks.*tiers/, output)
     end
 
     test "log --json outputs valid JSON array" do
@@ -532,6 +627,20 @@ module ArnoldPipeline
       assert_equal "spec_generated", parsed.first["event_type"]
       assert_equal "spec_generation", parsed.first["stage"]
       assert_equal({ "content_length" => 100 }, parsed.first["summary"])
+    end
+
+    test "log --json includes pipeline_run_id" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :pipeline_completed, stage: "lifecycle",
+        summary: { total_iterations: 1, total_tasks: 5 }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s, "--json"]) }
+      data = JSON.parse(output)
+
+      assert_equal 1, data.size
+      assert_equal run_record.id, data.first["pipeline_run_id"]
     end
 
     test "log --verbose includes payloads" do
@@ -604,9 +713,29 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["log", run_record.id.to_s]) }
 
-      assert_match(/Criteria: 3 verified, 1 failed, 2 unverified/, output)
+      assert_match(/criteria/, output)
+      assert_match(/1 failed/, output)
+      assert_match(/3 verified/, output)
       # Without --verbose, individual criteria should not show
       assert_no_match(/PASS:/, output)
+    end
+
+    test "log formats criteria_check event with mode label" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :criteria_check, stage: "tier_gate",
+        summary: {
+          "mode" => "advisory",
+          "verified_count" => 2, "failed_count" => 1, "unverified_count" => 0,
+          "criteria" => []
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/criteria/, output)
+      assert_match(/unmet/, output)
+      assert_match(/advisory/, output)
     end
 
     test "log --verbose shows per-criterion results for criteria_check" do
@@ -645,10 +774,145 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["log", run_record.id.to_s, "--verbose"]) }
 
-      assert_match(/Gate: FAILED — Missing route/, output)
+      assert_match(/gate/, output)
+      assert_match(/FAIL/, output)
+      assert_match(/Missing route/, output)
       assert_match(/Corrective tasks:/, output)
       assert_match(/1\. Add route/, output)
-      assert_match(/Add GET \/up to routes\.rb/, output)
+    end
+
+    test "format_task shows superseded label for superseded tasks" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      task = run_record.tasks.create!(title: "Setup project", tier: 0, position: 0, priority: 1, status: :superseded, labels: [], depends_on: [])
+
+      output = capture_output { Cli.start(["tasks", run_record.id.to_s]) }
+
+      assert_match(/\[0\] Setup project \[superseded\]/, output)
+      assert_match(/Status: superseded/, output)
+    end
+
+    test "format_task does not show superseded label for non-superseded tasks" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      run_record.tasks.create!(title: "Setup project", tier: 0, position: 0, priority: 1, status: :completed, labels: [], depends_on: [])
+
+      output = capture_output { Cli.start(["tasks", run_record.id.to_s]) }
+
+      assert_match(/\[0\] Setup project\n/, output)
+      assert_no_match(/\[superseded\]/, output)
+    end
+
+    # --- Iterate command tests ---
+
+    test "iterate with paused run shows success output" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
+      run_record.create_specification!(content: "# Spec", version: 1)
+      run_record.tasks.create!(title: "Setup DB", position: 0, tier: 0, status: :pending)
+
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:iterate_spec!).with(
+        pipeline_run: run_record, change_request: "Add auth"
+      ).returns({
+        pipeline_run: run_record,
+        deltas: { merge_strategy: "append", delta_count: 2, new_version: 2 },
+        spec_version: 2
+      })
+
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+
+      # Mark task as superseded to match what iterate_spec! would do
+      run_record.tasks.update_all(status: :superseded)
+
+      output = capture_output { Cli.start(["iterate", run_record.id.to_s, "Add auth"]) }
+
+      assert_match(/Iterating specification for pipeline run/, output)
+      assert_match(/Specification updated to v2/, output)
+      assert_match(/Deltas applied: 2/, output)
+      assert_match(/Merge strategy: append/, output)
+      assert_match(/Tasks superseded: 1/, output)
+      assert_match(/arnold resume #{run_record.id}/, output)
+    end
+
+    test "iterate with non-existent ID exits with error" do
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start(["iterate", "99999", "Add auth"]) }
+      end
+    end
+
+    test "iterate with empty change request exits with error" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
+
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start(["iterate", run_record.id.to_s, "   "]) }
+      end
+    end
+
+    test "iterate with empty change request shows error message" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
+
+      stderr_output = capture_stderr_through_exit { Cli.start(["iterate", run_record.id.to_s, "   "]) }
+      assert_match(/Change request cannot be empty/, stderr_output)
+    end
+
+    test "iterate --dry-run shows deltas without applying" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
+      run_record.create_specification!(content: "# Spec", version: 1)
+
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:iterate_spec_dry_run!).with(
+        pipeline_run: run_record, change_request: "Add auth"
+      ).returns({
+        deltas: [
+          { "operation" => "added", "section" => "Auth", "requirement" => "Login", "rationale" => "User needs login" }
+        ],
+        summary: "Adding authentication",
+        current_version: 1
+      })
+
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+
+      output = capture_output { Cli.start(["iterate", run_record.id.to_s, "Add auth", "--dry-run"]) }
+
+      assert_match(/Proposed changes to specification/, output)
+      assert_match(/ADDED: Auth > Login/, output)
+      assert_match(/No changes applied \(dry run\)/, output)
+    end
+
+    test "iterate --dry-run --json outputs JSON" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
+      run_record.create_specification!(content: "# Spec", version: 1)
+
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:iterate_spec_dry_run!).returns({
+        deltas: [
+          { "operation" => "added", "section" => "Auth", "requirement" => "Login", "rationale" => "Needs login" }
+        ],
+        summary: "Adding auth",
+        current_version: 1
+      })
+
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+
+      output = capture_output { Cli.start(["iterate", run_record.id.to_s, "Add auth", "--dry-run", "--json"]) }
+
+      parsed = JSON.parse(output)
+      assert_kind_of Array, parsed
+      assert_equal 1, parsed.length
+      assert_equal "added", parsed.first["operation"]
+      assert_equal "Auth", parsed.first["section"]
+    end
+
+    test "iterate with executing run shows error" do
+      run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :executing)
+
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:iterate_spec!).raises(
+        ArgumentError, "Cannot iterate a executing pipeline run. Pause or wait for completion first."
+      )
+
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+
+      stderr_output = capture_stderr_through_exit { Cli.start(["iterate", run_record.id.to_s, "Add auth"]) }
+      assert_match(/Cannot iterate a executing pipeline run/, stderr_output)
     end
 
     test "run --quiet suppresses informational output" do
@@ -661,6 +925,118 @@ module ArnoldPipeline
 
       output = capture_output { Cli.start(["run", "Build a todo app", "--quiet"]) }
       assert_equal "", output
+    end
+
+    test "log displays per-task outcomes in verbose mode" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :tier_execution_completed, stage: "execution", tier_number: 0,
+        summary: {
+          "tier_number" => 0, "resolved_count" => 1, "failed_count" => 1,
+          "task_outcomes" => [
+            { "title" => "Setup DB", "status" => "resolved" },
+            { "title" => "Add API", "status" => "failed", "failure_reason" => "empty_diff" }
+          ]
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s, "--verbose"]) }
+
+      assert_match(/Setup DB/, output)
+      assert_match(/Add API.*empty_diff/, output)
+    end
+
+    test "log does not display per-task outcomes without verbose" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :tier_execution_completed, stage: "execution", tier_number: 0,
+        summary: {
+          "tier_number" => 0, "resolved_count" => 1, "failed_count" => 1,
+          "task_outcomes" => [
+            { "title" => "Setup DB", "status" => "resolved" },
+            { "title" => "Add API", "status" => "failed", "failure_reason" => "empty_diff" }
+          ]
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/1 failed/, output)
+      assert_match(/1 ok/, output)
+      # Per-task outcome detail lines should not appear in non-verbose mode
+      assert_no_match(/Setup DB.*resolved/, output)
+    end
+
+    test "log displays enriched pipeline_completed summary" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :pipeline_completed, stage: "lifecycle",
+        summary: {
+          "total_iterations" => 2, "total_tasks" => 8,
+          "tasks_succeeded" => 6, "tasks_failed" => 2,
+          "total_duration_ms" => 3600000.0,
+          "final_confidence" => 85
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/PIPELINE COMPLETED/, output)
+      assert_match(/2 iterations, 8 tasks/, output)
+      assert_match(/6 succeeded, 2 failed/, output)
+      assert_match(/1\.0h/, output)
+      assert_match(/85% confidence/, output)
+    end
+
+    test "log displays enriched pipeline_failed summary" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :failed)
+      run_record.pipeline_events.create!(
+        event_type: :pipeline_failed, stage: "lifecycle",
+        summary: {
+          "error_class" => "RuntimeError", "error_message" => "Something broke",
+          "failed_stage" => "execution",
+          "total_tasks" => 5, "tasks_succeeded" => 3, "tasks_failed" => 2,
+          "total_duration_ms" => 125000.0,
+          "raw_response_excerpt" => "invalid JSON here that is too long" * 10
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/PIPELINE FAILED/, output)
+      assert_match(/RuntimeError: Something broke/, output)
+      assert_match(/5 tasks.*3 succeeded.*2 failed/, output)
+      assert_match(/2\.1m/, output)
+    end
+
+    test "log formats duration in seconds for short durations" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :pipeline_completed, stage: "lifecycle",
+        summary: {
+          "total_iterations" => 1, "total_tasks" => 2,
+          "total_duration_ms" => 45000.0
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/45\.0s/, output)
+    end
+
+    test "log formats duration in minutes for medium durations" do
+      run_record = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      run_record.pipeline_events.create!(
+        event_type: :pipeline_completed, stage: "lifecycle",
+        summary: {
+          "total_iterations" => 1, "total_tasks" => 3,
+          "total_duration_ms" => 300000.0
+        }
+      )
+
+      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+
+      assert_match(/5\.0m/, output)
     end
 
     private

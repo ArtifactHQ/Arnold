@@ -154,10 +154,11 @@ When a specification changes (via initial generation or `iterate_spec` decisions
 - `version`: Integer, matches the Specification's version at time of snapshot (unique per specification).
 - `content`: Full spec Markdown text at this version.
 - `structured_data`: JSON metadata block at this version.
-- `change_source`: One of `"spec_generation"` (initial spec or re-generation) or `"iterate_spec"` (analysis-driven refinement).
+- `change_source`: One of `"spec_generation"` (initial spec or re-generation), `"iterate_spec"` (analysis-driven refinement), or `"user_iterate"` (user-initiated CLI iteration).
 - `delta_summary`: JSON array of human-readable strings summarizing what changed (e.g., `"ADDED: Authentication > Password Reset"`).
 - The Orchestrator creates a SpecRevision after every `generate_spec!` call (change_source: `"spec_generation"`).
 - The AnalysisLoop creates a SpecRevision after every successful delta merge (change_source: `"iterate_spec"`).
+- The Orchestrator creates a SpecRevision after every `iterate_spec!` or `fork!` call (change_source: `"user_iterate"`).
 
 **SpecDelta** — Granular, per-requirement change records for `iterate_spec` decisions. [SPEC-DELTA-003]
 - `operation`: One of `"added"`, `"modified"`, or `"removed"`.
@@ -513,7 +514,7 @@ Verification results (all_passed, summary, and per-check details) are passed to 
 #### Scenario: Check Definition and Execution [SPEC-VCHECK-002]
 - GIVEN a verification check configured with:
   - `name: "Boot Check"`
-  - `command: "bundle exec rails runner 'puts Rails.version'"`
+  - `command: "bin/rails runner 'ActiveRecord::Migration.check_all_pending!; puts Rails.version'"`
   - `type: :boot`
   - `required: true`
 - AND a tier has completed merge.
@@ -751,15 +752,79 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 #### Command: log [SPEC-CLI-008]
 - GIVEN a pipeline run with ID exists.
 - WHEN `arnold_pipeline log ID` is executed.
-- THEN the event timeline is displayed chronologically.
-- AND each event shows timestamp, stage, event_type, and formatted summary.
+- THEN the event timeline is displayed as a block-structured, color-coded report (see SPEC-CLI-009).
 - WHEN the --stage flag is provided (e.g., `arnold_pipeline log ID --stage analysis`).
 - THEN only events matching the specified stage are shown.
 - WHEN the --json flag is provided.
-- THEN events are output as a JSON array.
+- THEN events are output as a JSON array (color is suppressed; --no_color and --verbose are ignored for JSON mode).
 - WHEN the --verbose flag is provided.
-- THEN full payload data is included in the output.
+- THEN full payload data is included inline beneath each event line.
+- WHEN the --no_color flag is provided, OR `$stdout` is not a TTY, OR the `NO_COLOR` environment variable is set.
+- THEN ANSI color codes are omitted from the output.
+- Options: --json (boolean), --stage (string), --verbose (boolean), --no_color (boolean, disables ANSI color).
 - Exit code 0 on success, 1 if not found.
+
+#### Scenario: Block-Structured Log Display [SPEC-CLI-009]
+- GIVEN `arnold_pipeline log ID` is executed without --json.
+- WHEN the LogFormatter renders events.
+- THEN events are grouped into structural blocks rather than a flat chronological list:
+  - **Preamble block** — Events before the first tier (e.g., library_selection, spec_generated, tasks_broken) rendered as plain indented lines.
+  - **Tier blocks** — One block per tier, introduced by a `▶ TIER N  (M tasks)` header followed by bullet-listed task titles; tier stage is conveyed by the block header rather than per-event stage labels.
+  - **Analysis blocks** — One block per analysis iteration, introduced by a `◆ ANALYSIS (iteration N)` header with optional duration.
+  - **Terminal banner** — A styled final line for pipeline_completed (`✓ PIPELINE COMPLETED`), pipeline_failed (`✗ PIPELINE FAILED`), or pipeline_paused (`⏸ PIPELINE PAUSED`) with aggregate summary data (total iterations, task counts, duration, final confidence).
+- AND tier and analysis blocks are visually separated from each other by a horizontal rule (`─` × 70).
+- AND when --no_color is in effect, block headers and status badges are rendered as plain text without ANSI escape codes.
+
+#### Command: iterate [SPEC-CLI-ITERATE-001]
+- GIVEN a pipeline run ID and a natural language change request.
+- WHEN `arnold_pipeline iterate ID "change request"` is executed.
+- THEN the SpecIterationAgent generates structured deltas from the change request against the existing specification.
+- AND the deltas are merged via the 3-tier merge chain (OpenSpec → structured append → legacy).
+- AND a SpecRevision is created with change_source: "user_iterate".
+- AND existing tasks (if any) are marked as `superseded`.
+- Options: --config (YAML path), --provider (anthropic|openai), --model (name), --dry-run (boolean), --json (boolean), --verbose (boolean), --yes/-y (boolean, skip confirmation).
+- Exit code 0 on success, 1 on error (including "not found", invalid state, empty change request).
+
+#### Scenario: Dry Run Preview [SPEC-CLI-ITERATE-002]
+- GIVEN a pipeline run with an existing specification.
+- WHEN `arnold_pipeline iterate ID "change request" --dry-run` is executed.
+- THEN proposed deltas are displayed without applying them.
+- AND the user is shown added/modified/removed requirements with rationale.
+- AND no changes are persisted to the database.
+- AND when --json is also passed, deltas are output as a JSON array.
+
+#### Scenario: Iteration on Completed Run (Fork) [SPEC-CLI-ITERATE-003]
+- GIVEN a pipeline run in `completed` state.
+- WHEN `arnold_pipeline iterate ID "change request"` is executed.
+- THEN a new pipeline run is created with `forked_from_run_id` in metadata.
+- AND the new run's specification is seeded from the completed run's spec with applied deltas.
+- AND the new run starts in `paused` state at the `spec` checkpoint.
+- AND the user is shown the new run ID and instructed to use `arnold resume` to continue.
+
+#### Scenario: Multiple Iterations Before Resume [SPEC-CLI-ITERATE-004]
+- GIVEN a paused pipeline run that has been iterated multiple times (e.g., spec at v3).
+- WHEN `arnold_pipeline resume ID` is executed.
+- THEN task breakdown uses the latest spec version (v3).
+- AND previously generated tasks with `superseded` status are ignored by the ResumeInferrer.
+- AND the ResumeInferrer infers `:break_tasks` when all tasks are superseded.
+
+#### Scenario: Stale Analysis After User Iteration [SPEC-CLI-ITERATE-005]
+- GIVEN tasks were generated from spec version N.
+- AND the user has iterated the spec to version N+1 (or higher) via the iterate command.
+- WHEN the analysis loop evaluates results from the version-N tasks.
+- THEN the analyzer is restricted to `done` or `iterate_tasks` decisions only.
+- AND `iterate_spec` decisions are suppressed because the spec has already advanced past the task generation version.
+- AND a pipeline event is recorded noting the version skew with `suppressed_from: "iterate_spec"` and `reason: "spec_version_skew"`.
+
+#### Scenario: Delta-Scoped Task Generation for Forked Runs [SPEC-CLI-ITERATE-006]
+- GIVEN a pipeline run was forked from a completed parent run via `iterate` on a completed run.
+- AND the fork stored raw spec deltas in `pipeline_run.metadata["fork_deltas"]`.
+- WHEN `break_tasks!` is called during resume of the forked run.
+- THEN the TaskBreaker agent receives the deltas and generates tasks scoped ONLY to the changed requirements.
+- AND the system prompt uses delta-scoped rules (no bootstrap task, no minimum task count).
+- AND the user prompt instructs the LLM that the application is already built.
+- AND the full spec is still provided as context so the LLM understands the broader application.
+- AND when `fork_deltas` is absent from metadata (non-forked runs), task generation uses the standard full-spec behavior.
 
 ### Requirement: Configuration
 The system SHALL be configurable via a Ruby block (`ArnoldPipeline.configure`) or YAML config file.

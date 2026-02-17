@@ -4,11 +4,13 @@ require "arnold_pipeline/agents/task_breaker"
 require "arnold_pipeline/agents/executor"
 require "arnold_pipeline/agents/analyzer"
 require "arnold_pipeline/agents/tier_gate_check"
+require "arnold_pipeline/agents/spec_iterator"
 require "arnold_pipeline/tier_calculator"
 require "arnold_pipeline/tier_execution_engine"
 require "arnold_pipeline/analysis_loop"
 require "arnold_pipeline/resume_inferrer"
 require "arnold_pipeline/pipeline_event_recorder"
+require "arnold_pipeline/delta_merger"
 require "open3"
 
 module ArnoldPipeline
@@ -17,7 +19,7 @@ module ArnoldPipeline
     STAGE_CHECKPOINTS = { generate_spec: :spec, break_tasks: :tasks, execute: :executed }.freeze
 
     attr_reader :library_manager, :spec_generator, :task_breaker, :executor, :analyzer, :tier_gate_check, :logger,
-                :tier_execution_engine
+                :tier_execution_engine, :spec_iterator, :delta_merger
 
     def initialize(
       library_manager: nil,
@@ -26,6 +28,7 @@ module ArnoldPipeline
       executor: nil,
       analyzer: nil,
       tier_gate_check: nil,
+      spec_iterator: nil,
       logger: nil
     )
       @logger = logger || Logger.new($stdout, level: Logger::INFO)
@@ -35,6 +38,8 @@ module ArnoldPipeline
       @executor = executor || Agents::Executor.new(logger: @logger)
       @analyzer = analyzer || Agents::Analyzer.new(logger: @logger)
       @tier_gate_check = tier_gate_check || Agents::TierGateCheck.new(logger: @logger)
+      @spec_iterator = spec_iterator || Agents::SpecIterator.new(logger: @logger)
+      @delta_merger = DeltaMerger.new(logger: @logger)
       @tier_execution_engine = TierExecutionEngine.new(executor: @executor, tier_gate_check: @tier_gate_check, logger: @logger)
     end
 
@@ -54,7 +59,116 @@ module ArnoldPipeline
       run_pipeline!(pipeline_run, from: stage, stop_after:)
     end
 
+    def iterate_spec!(pipeline_run:, change_request:)
+      validate_iterable!(pipeline_run)
+
+      spec = pipeline_run.specification
+      raise ArgumentError, "Pipeline run ##{pipeline_run.id} has no specification" unless spec
+
+      @event_recorder = PipelineEventRecorder.new(pipeline_run:)
+
+      result = @event_recorder.timed(
+        event_type: :spec_delta_merged, stage: "iteration",
+        summary: ->(r) { r || {} }
+      ) do
+        agent_result = spec_iterator.call(
+          spec_content: spec.content,
+          change_request:
+        )
+
+        raw_deltas = agent_result["deltas"]
+        raise ArgumentError, "No deltas generated from change request" if raw_deltas.blank?
+
+        # Mark existing tasks as superseded
+        pipeline_run.tasks.where.not(status: :superseded).update_all(status: :superseded) if pipeline_run.tasks.any?
+
+        delta_merger.apply!(
+          spec:, raw_deltas:, change_source: "user_iterate", pipeline_run:
+        )
+      end
+
+      pipeline_run.reload
+      { pipeline_run:, deltas: result, spec_version: pipeline_run.specification.version }
+    end
+
+    def iterate_spec_dry_run!(pipeline_run:, change_request:)
+      validate_iterable!(pipeline_run)
+
+      spec = pipeline_run.specification
+      raise ArgumentError, "Pipeline run ##{pipeline_run.id} has no specification" unless spec
+
+      agent_result = spec_iterator.call(
+        spec_content: spec.content,
+        change_request:
+      )
+
+      raw_deltas = agent_result["deltas"]
+      raise ArgumentError, "No deltas generated from change request" if raw_deltas.blank?
+
+      { deltas: raw_deltas, summary: agent_result["summary"], current_version: spec.version }
+    end
+
+    def fork!(pipeline_run:, change_request:)
+      unless pipeline_run.completed? || pipeline_run.max_iterations_reached?
+        raise ArgumentError, "Can only fork completed or max_iterations_reached runs"
+      end
+
+      spec = pipeline_run.specification
+      raise ArgumentError, "Pipeline run ##{pipeline_run.id} has no specification" unless spec
+
+      # Generate deltas against current spec
+      agent_result = spec_iterator.call(
+        spec_content: spec.content,
+        change_request:
+      )
+      raw_deltas = agent_result["deltas"]
+      raise ArgumentError, "No deltas generated from change request" if raw_deltas.blank?
+
+      # Create new pipeline run
+      new_run = PipelineRun.create!(
+        nl_input: pipeline_run.nl_input,
+        status: :pending,
+        metadata: {
+          "forked_from_run_id" => pipeline_run.id,
+          "fork_change_request" => change_request,
+          "fork_deltas" => raw_deltas
+        }
+      )
+
+      # Copy spec to new run and apply deltas
+      new_spec = new_run.create_specification!(
+        content: spec.content,
+        structured_data: spec.structured_data,
+        version: spec.version
+      )
+
+      # Transition through generating_spec (spec was "generated" via fork + iteration)
+      new_run.update!(status: :generating_spec)
+
+      @event_recorder = PipelineEventRecorder.new(pipeline_run: new_run)
+      delta_merger.apply!(
+        spec: new_spec, raw_deltas:, change_source: "user_iterate", pipeline_run: new_run
+      )
+
+      # Pause at spec checkpoint so resume picks it up
+      new_run.update!(
+        status: :paused,
+        metadata: new_run.metadata.merge("paused_at" => "spec")
+      )
+
+      { pipeline_run: new_run.reload, deltas: raw_deltas }
+    end
+
     private
+
+    ITERABLE_STATES = %w[paused failed completed].freeze
+
+    def validate_iterable!(pipeline_run)
+      unless ITERABLE_STATES.include?(pipeline_run.status)
+        raise ArgumentError, "Cannot iterate a #{pipeline_run.status} pipeline run. " \
+                             "Pause or wait for completion first."
+      end
+    end
 
     def run_pipeline!(pipeline_run, from:, stop_after: nil)
       @event_recorder = PipelineEventRecorder.new(pipeline_run:)
@@ -85,10 +199,7 @@ module ArnoldPipeline
 
         @event_recorder&.record(
           event_type: :pipeline_completed, stage: "lifecycle",
-          summary: {
-            total_iterations: pipeline_run.iterations.count,
-            total_tasks: pipeline_run.tasks.count
-          }
+          summary: build_completion_summary(pipeline_run)
         )
       rescue TierGateError => e
         @event_recorder&.record(
@@ -99,16 +210,26 @@ module ArnoldPipeline
         pipeline_run.reload
       rescue => e
         config = ArnoldPipeline.configuration
+        summary = {
+          error_class: e.class.name, error_message: e.message,
+          failed_stage: @current_stage&.to_s,
+          llm_provider: config.llm_provider.to_s,
+          llm_model: config.llm_model,
+          execution_provider: config.execution_provider.to_s,
+          backtrace: e.backtrace&.first(10),
+          total_tasks: pipeline_run.tasks.count,
+          tasks_succeeded: pipeline_run.tasks.where(status: :completed).count,
+          tasks_failed: pipeline_run.tasks.where(status: :failed).count,
+          total_duration_ms: ((Time.current - pipeline_run.created_at) * 1000).round(1)
+        }
+
+        if e.respond_to?(:raw_response) && e.raw_response
+          summary[:raw_response_excerpt] = e.raw_response.to_s[0, 2000]
+        end
+
         @event_recorder&.record(
           event_type: :pipeline_failed, stage: "lifecycle",
-          summary: {
-            error_class: e.class.name, error_message: e.message,
-            failed_stage: @current_stage&.to_s,
-            llm_provider: config.llm_provider.to_s,
-            llm_model: config.llm_model,
-            execution_provider: config.execution_provider.to_s,
-            backtrace: e.backtrace&.first(10)
-          }
+          summary: summary
         )
         pipeline_run.update!(status: :failed, metadata: (pipeline_run.metadata || {}).merge(
           "error" => e.message, "error_class" => e.class.name, "failed_stage" => @current_stage&.to_s
@@ -181,7 +302,13 @@ module ArnoldPipeline
 
     def break_tasks!(pipeline_run)
       pipeline_run.update!(status: :breaking_tasks)
-      logger.info { "[Arnold] Breaking specification into tasks..." }
+
+      fork_deltas = (pipeline_run.metadata || {})["fork_deltas"]
+      if fork_deltas.present?
+        logger.info { "[Arnold] Breaking specification into delta-scoped tasks (#{fork_deltas.size} deltas)..." }
+      else
+        logger.info { "[Arnold] Breaking specification into tasks..." }
+      end
 
       pipeline_run.tasks.destroy_all
 
@@ -192,13 +319,14 @@ module ArnoldPipeline
           {
             task_count: tasks.count,
             tier_count: (tasks.map(&:tier).compact.uniq.size),
-            dependency_edge_count: tasks.sum { |t| (t.depends_on || []).size }
+            dependency_edge_count: tasks.sum { |t| (t.depends_on || []).size },
+            delta_scoped: fork_deltas.present?
           }
         },
         payload: ->(_) { { spec_content: pipeline_run.specification&.content } }
       ) do
         recipe, supporting_recipes = resolve_recipes(pipeline_run)
-        task_data = task_breaker.call(spec_content: pipeline_run.specification.content, recipe:, supporting_recipes:)
+        task_data = task_breaker.call(spec_content: pipeline_run.specification.content, recipe:, supporting_recipes:, deltas: fork_deltas)
 
         task_data.each do |td|
           pipeline_run.tasks.create!(
@@ -213,6 +341,10 @@ module ArnoldPipeline
         end
 
         TierCalculator.call(pipeline_run.tasks.reload)
+
+        pipeline_run.update!(
+          metadata: (pipeline_run.metadata || {}).merge("tasks_generated_at_spec_version" => pipeline_run.specification.version)
+        )
       end
     end
 
@@ -254,6 +386,20 @@ module ArnoldPipeline
       pipeline_run.update!(metadata: metadata.merge("baseline_commit_sha" => sha.strip))
     rescue => e
       logger.warn { "[Arnold] Failed to capture baseline SHA: #{e.message}" }
+    end
+
+    def build_completion_summary(pipeline_run)
+      tasks = pipeline_run.tasks
+      {
+        total_iterations: pipeline_run.iterations.count,
+        total_tasks: tasks.count,
+        total_duration_ms: ((Time.current - pipeline_run.created_at) * 1000).round(1),
+        tasks_succeeded: tasks.where(status: :completed).count,
+        tasks_failed: tasks.where(status: :failed).count,
+        tasks_superseded: tasks.where(status: :superseded).count,
+        tier_count: (tasks.maximum(:tier) || -1) + 1,
+        final_confidence: pipeline_run.iterations.order(:number).last&.confidence
+      }
     end
 
     def resolve_recipes(pipeline_run)

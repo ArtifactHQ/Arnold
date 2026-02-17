@@ -7,6 +7,9 @@ module ArnoldPipeline
 
       return :break_tasks if tasks.empty?
 
+      # All tasks superseded → re-run task breakdown with updated spec
+      return :break_tasks if tasks.all?(&:superseded?)
+
       return :execute if tasks.any? { |t| t.tier.nil? }
 
       return :execute if tasks.any? { |t| t.external_id.blank? }

@@ -149,6 +149,89 @@ module ArnoldPipeline
         assert_includes prompt, "SQLite for the development database"
         assert_includes prompt, "Solid Queue, Solid Cache, Solid Cable"
       end
+
+      # --- Delta-scoped prompt tests ---
+
+      test "system_prompt includes Delta Scope section when deltas present" do
+        prompt = TaskBreakdown.system_prompt(deltas: sample_deltas)
+        assert_includes prompt, "# Delta Scope"
+        assert_includes prompt, "FORKED pipeline run"
+        assert_includes prompt, "Delta 1: ADDED"
+        assert_includes prompt, "Dark Mode"
+      end
+
+      test "system_prompt uses delta-scoped rules when deltas present" do
+        prompt = TaskBreakdown.system_prompt(deltas: sample_deltas)
+        assert_includes prompt, "Rules (Delta-Scoped)"
+        assert_includes prompt, "NO minimum task count"
+        assert_includes prompt, "Do NOT include a project bootstrap"
+        refute_includes prompt, "Aim for 5 to 20 tasks"
+        refute_includes prompt, "FIRST task (position 0) MUST be a project bootstrap"
+      end
+
+      test "system_prompt omits bootstrap requirement when deltas present" do
+        prompt = TaskBreakdown.system_prompt(deltas: sample_deltas)
+        refute_includes prompt, "project skeleton, dependencies, database configuration"
+      end
+
+      test "system_prompt uses full rules when deltas nil" do
+        prompt = TaskBreakdown.system_prompt(deltas: nil)
+        assert_includes prompt, "Aim for 5 to 20 tasks"
+        assert_includes prompt, "FIRST task (position 0) MUST be a project bootstrap"
+        refute_includes prompt, "Delta Scope"
+        refute_includes prompt, "Delta-Scoped"
+      end
+
+      test "system_prompt renders multiple deltas" do
+        deltas = [
+          { "operation" => "added", "section" => "Features", "requirement" => "Dark Mode", "content" => "Support dark mode" },
+          { "operation" => "modified", "section" => "Auth", "requirement" => "Login", "content" => "Add OAuth" }
+        ]
+        prompt = TaskBreakdown.system_prompt(deltas: deltas)
+        assert_includes prompt, "Delta 1: ADDED"
+        assert_includes prompt, "Delta 2: MODIFIED"
+        assert_includes prompt, "Dark Mode"
+        assert_includes prompt, "Add OAuth"
+      end
+
+      test "system_prompt includes delta rationale" do
+        deltas = [{ "operation" => "added", "rationale" => "User requested this" }]
+        prompt = TaskBreakdown.system_prompt(deltas: deltas)
+        assert_includes prompt, "Rationale: User requested this"
+      end
+
+      test "user_prompt uses delta-aware phrasing when deltas present" do
+        prompt = TaskBreakdown.user_prompt(spec_content: "# Spec", deltas: sample_deltas)
+        assert_includes prompt, "already built and working"
+        assert_includes prompt, "tasks ONLY for the deltas"
+        refute_includes prompt, "Break down the following specification"
+      end
+
+      test "user_prompt uses standard phrasing when deltas nil" do
+        prompt = TaskBreakdown.user_prompt(spec_content: "# Spec", deltas: nil)
+        assert_includes prompt, "Break down the following specification"
+        refute_includes prompt, "already built"
+      end
+
+      test "user_prompt includes spec content in both modes" do
+        spec = "# My App Spec\nSome content"
+        assert_includes TaskBreakdown.user_prompt(spec_content: spec, deltas: nil), spec
+        assert_includes TaskBreakdown.user_prompt(spec_content: spec, deltas: sample_deltas), spec
+      end
+
+      private
+
+      def sample_deltas
+        [
+          {
+            "operation" => "added",
+            "section" => "Features",
+            "requirement" => "Dark Mode",
+            "content" => "### Requirement: Dark Mode [REQ-UI-001]\nApp SHALL support dark mode.",
+            "rationale" => "User requested dark mode support"
+          }
+        ]
+      end
     end
   end
 end

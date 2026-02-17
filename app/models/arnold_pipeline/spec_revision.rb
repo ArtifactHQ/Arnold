@@ -1,6 +1,6 @@
 module ArnoldPipeline
   class SpecRevision < ApplicationRecord
-    CHANGE_SOURCES = %w[spec_generation iterate_spec].freeze
+    CHANGE_SOURCES = %w[spec_generation iterate_spec user_iterate].freeze
 
     belongs_to :specification
 

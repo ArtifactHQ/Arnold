@@ -405,6 +405,95 @@ module ArnoldPipeline
       assert_includes spec.content, "REMOVED: SMS Verify"
     end
 
+    # --- Version skew guard tests ---
+
+    test "suppresses iterate_spec when spec version > tasks_generated_at_spec_version" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+      # Simulate: tasks were generated at spec v1, but spec has been iterated to v3
+      pipeline_run.update!(metadata: { "tasks_generated_at_spec_version" => 1 })
+      pipeline_run.specification.update!(version: 3)
+
+      @analyzer.expects(:call).once.returns(analysis_result("iterate_spec", 60, { "spec_changes" => "Some change" }))
+
+      @analysis_loop.run!(pipeline_run)
+
+      # Should complete (suppressed to done), not iterate spec
+      assert_equal "completed", pipeline_run.reload.status
+      assert_equal 1, pipeline_run.iterations.count
+    end
+
+    test "does not suppress iterate_tasks even with version skew" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+      pipeline_run.update!(metadata: { "tasks_generated_at_spec_version" => 1 })
+      pipeline_run.specification.update!(version: 3)
+
+      corrective = {
+        "tasks" => [{ "title" => "Fix", "description" => "Fix it", "position" => 0 }]
+      }
+
+      call_count = sequence("analysis_calls")
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("iterate_tasks", 80, corrective))
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("done", 92))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal "completed", pipeline_run.reload.status
+      assert_equal 2, pipeline_run.iterations.count
+    end
+
+    test "no suppression when tasks_generated_at_spec_version metadata is missing" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+      # No metadata set — should behave normally
+
+      @task_breaker.stubs(:call).returns(sample_tasks)
+
+      call_count = sequence("analysis_calls")
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("iterate_spec", 60, { "spec_changes" => "Clarify something" }))
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("done", 90))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal "completed", pipeline_run.reload.status
+      assert_equal 2, pipeline_run.iterations.count
+      assert_includes pipeline_run.specification.content, "Clarify something"
+    end
+
+    test "no suppression when spec version matches tasks_generated_at_spec_version" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+      pipeline_run.update!(metadata: { "tasks_generated_at_spec_version" => 1 })
+      # spec version is 1 (matches) — no skew
+
+      @task_breaker.stubs(:call).returns(sample_tasks)
+
+      call_count = sequence("analysis_calls")
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("iterate_spec", 60, { "spec_changes" => "Normal iteration" }))
+      @analyzer.expects(:call).in_sequence(call_count)
+        .returns(analysis_result("done", 90))
+
+      @analysis_loop.run!(pipeline_run)
+
+      assert_equal "completed", pipeline_run.reload.status
+      assert_equal 2, pipeline_run.iterations.count
+      assert_includes pipeline_run.specification.content, "Normal iteration"
+    end
+
+    test "break_tasks! records tasks_generated_at_spec_version in metadata" do
+      pipeline_run = create_pipeline_run_with_spec_and_tasks!
+      pipeline_run.update!(status: :analyzing)
+
+      @task_breaker.stubs(:call).returns(sample_tasks)
+
+      @analysis_loop.send(:break_tasks!, pipeline_run)
+
+      metadata = pipeline_run.reload.metadata
+      assert_equal 1, metadata["tasks_generated_at_spec_version"]
+    end
+
     private
 
     def create_pipeline_run_with_spec_and_tasks!(structured_data: nil)

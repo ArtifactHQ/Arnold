@@ -16,6 +16,25 @@ module ArnoldPipeline
       assert_equal :break_tasks, ResumeInferrer.call(pipeline_run)
     end
 
+    test "returns break_tasks when all tasks are superseded" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :paused)
+      pipeline_run.create_specification!(content: "Spec", version: 1)
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0, status: :superseded)
+      pipeline_run.tasks.create!(title: "Build API", position: 1, tier: 1, status: :superseded)
+
+      assert_equal :break_tasks, ResumeInferrer.call(pipeline_run)
+    end
+
+    test "does not return break_tasks when only some tasks are superseded" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :paused)
+      pipeline_run.create_specification!(content: "Spec", version: 1)
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0, status: :superseded)
+      pipeline_run.tasks.create!(title: "Build API", position: 1, tier: 1, status: :pending)
+
+      result = ResumeInferrer.call(pipeline_run)
+      assert_not_equal :break_tasks, result
+    end
+
     test "returns execute when tasks have no tier assigned" do
       pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :paused)
       pipeline_run.create_specification!(content: "Spec", version: 1)
