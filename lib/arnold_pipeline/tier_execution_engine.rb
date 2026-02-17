@@ -74,7 +74,16 @@ module ArnoldPipeline
         failed = tier_tasks.count(&:failed?)
         event_recorder&.record(
           event_type: :tier_execution_completed, stage: "execution",
-          summary: { tier_number: tier_num, resolved_count: resolved, failed_count: failed },
+          summary: {
+            tier_number: tier_num,
+            resolved_count: resolved,
+            failed_count: failed,
+            task_outcomes: tier_tasks.map { |t|
+              outcome = { title: t.title, status: t.status }
+              outcome[:failure_reason] = task_failure_reason(t) if t.failed?
+              outcome
+            }
+          },
           tier_number: tier_num
         )
 
@@ -154,6 +163,15 @@ module ArnoldPipeline
     end
 
     private
+
+    def task_failure_reason(task)
+      return nil unless task.failed?
+      if task.result_diff.blank? || task.result_diff == "[]"
+        "empty_diff"
+      else
+        "execution_error"
+      end
+    end
 
     def merge_tier_results!(pipeline_run, tier_tasks)
       logger.info { "[Arnold] Merging tier results..." }

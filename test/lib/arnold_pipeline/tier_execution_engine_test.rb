@@ -1889,6 +1889,88 @@ module ArnoldPipeline
       FileUtils.rm_rf(tmpdir)
     end
 
+    # --- Per-task outcomes in tier_execution_completed ---
+
+    test "tier_execution_completed includes per-task outcomes with failure reasons" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :pending)
+      task1 = pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0, external_id: "1",
+        result_diff: '[{"filename":"schema.rb"}]', status: :completed)
+      task2 = pipeline_run.tasks.create!(title: "Add API", position: 1, tier: 0, external_id: "2",
+        result_diff: "[]", status: :failed)
+      task3 = pipeline_run.tasks.create!(title: "Bad Task", position: 2, tier: 0, external_id: "3",
+        result_diff: '[{"filename":"app.rb"}]', status: :failed)
+
+      event_recorder = build_recording_event_recorder
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      tier_tasks = [task1, task2, task3]
+      resolved = tier_tasks.count { |t| engine.tier_task_resolved?(t) }
+      failed = tier_tasks.count(&:failed?)
+
+      event_recorder.record(
+        event_type: :tier_execution_completed, stage: "execution",
+        summary: {
+          tier_number: 0,
+          resolved_count: resolved,
+          failed_count: failed,
+          task_outcomes: tier_tasks.map { |t|
+            outcome = { title: t.title, status: t.status }
+            outcome[:failure_reason] = engine.send(:task_failure_reason, t) if t.failed?
+            outcome
+          }
+        },
+        tier_number: 0
+      )
+
+      event = event_recorder.events.find { |e| e[:event_type] == :tier_execution_completed }
+      outcomes = event[:summary][:task_outcomes]
+      assert_equal 3, outcomes.size
+
+      setup_outcome = outcomes.find { |o| o[:title] == "Setup DB" }
+      assert_equal "completed", setup_outcome[:status]
+      assert_nil setup_outcome[:failure_reason]
+
+      api_outcome = outcomes.find { |o| o[:title] == "Add API" }
+      assert_equal "failed", api_outcome[:status]
+      assert_equal "empty_diff", api_outcome[:failure_reason]
+
+      bad_outcome = outcomes.find { |o| o[:title] == "Bad Task" }
+      assert_equal "failed", bad_outcome[:status]
+      assert_equal "execution_error", bad_outcome[:failure_reason]
+    end
+
+    test "task_failure_reason returns nil for non-failed tasks" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(title: "Setup", position: 0, status: :completed)
+
+      assert_nil @engine.send(:task_failure_reason, task)
+    end
+
+    test "task_failure_reason returns empty_diff for failed task with no diff" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(title: "Fail", position: 0, status: :failed, result_diff: nil)
+
+      assert_equal "empty_diff", @engine.send(:task_failure_reason, task)
+    end
+
+    test "task_failure_reason returns empty_diff for failed task with empty array diff" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(title: "Fail", position: 0, status: :failed, result_diff: "[]")
+
+      assert_equal "empty_diff", @engine.send(:task_failure_reason, task)
+    end
+
+    test "task_failure_reason returns execution_error for failed task with diffs" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(title: "Fail", position: 0, status: :failed,
+        result_diff: '[{"filename":"app.rb"}]')
+
+      assert_equal "execution_error", @engine.send(:task_failure_reason, task)
+    end
+
     # --- Error handling ---
 
     test "falls back to generic task when CorrectiveTaskGenerator fails" do
