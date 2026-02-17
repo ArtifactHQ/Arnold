@@ -264,5 +264,118 @@ module ArnoldPipeline
       output = formatter.render
       assert output.scan(/─{10,}/).size >= 2, "Expected at least 2 horizontal rules"
     end
+
+    # --- Analysis block ---
+
+    test "analysis_completed creates analysis header with iteration" do
+      @run.pipeline_events.create!(
+        event_type: :analysis_completed, stage: "analysis", iteration_number: 1,
+        summary: { "decision" => "iterate_tasks", "confidence" => 80, "reasoning_excerpt" => "needs fixes" },
+        duration_ms: 54600.0
+      )
+      formatter = LogFormatter.new(@run.pipeline_events.chronological, pipeline_run: @run, color: false)
+      output = formatter.render
+      assert_match(/ANALYSIS/, output)
+      assert_match(/iteration 1/, output)
+      assert_match(/54\.6s/, output)
+      assert_match(/iterate_tasks/, output)
+      assert_match(/confidence=80%/, output)
+    end
+
+    test "iteration_decision done shows green checkmark" do
+      @run.pipeline_events.create!(
+        event_type: :analysis_completed, stage: "analysis", iteration_number: 2,
+        summary: { "decision" => "done", "confidence" => 85 }
+      )
+      @run.pipeline_events.create!(
+        event_type: :iteration_decision, stage: "iteration", iteration_number: 2,
+        summary: { "decision" => "done" }
+      )
+      formatter = LogFormatter.new(@run.pipeline_events.chronological, pipeline_run: @run, color: false)
+      output = formatter.render
+      assert_match(/DONE/, output)
+    end
+
+    test "iteration_decision iterate_tasks shows corrective task count" do
+      @run.pipeline_events.create!(
+        event_type: :analysis_completed, stage: "analysis", iteration_number: 1,
+        summary: { "decision" => "iterate_tasks", "confidence" => 80 }
+      )
+      @run.pipeline_events.create!(
+        event_type: :iteration_decision, stage: "iteration", iteration_number: 1,
+        summary: { "decision" => "iterate_tasks", "corrective_task_count" => 8 }
+      )
+      formatter = LogFormatter.new(@run.pipeline_events.chronological, pipeline_run: @run, color: false)
+      output = formatter.render
+      assert_match(/iterate_tasks/, output)
+      assert_match(/8 corrective tasks/, output)
+    end
+
+    # --- Terminal banner ---
+
+    test "pipeline_completed renders green banner with summary" do
+      @run.pipeline_events.create!(
+        event_type: :pipeline_completed, stage: "lifecycle",
+        summary: {
+          "total_iterations" => 2, "total_tasks" => 8,
+          "tasks_succeeded" => 6, "tasks_failed" => 2,
+          "total_duration_ms" => 3600000.0, "final_confidence" => 85
+        }
+      )
+      formatter = LogFormatter.new(@run.pipeline_events.chronological, pipeline_run: @run, color: false)
+      output = formatter.render
+      assert_match(/PIPELINE COMPLETED/, output)
+      assert_match(/2 iterations, 8 tasks/, output)
+      assert_match(/6 succeeded, 2 failed/, output)
+      assert_match(/1\.0h/, output)
+      assert_match(/85% confidence/, output)
+    end
+
+    test "pipeline_failed renders red banner with error" do
+      @run.pipeline_events.create!(
+        event_type: :pipeline_failed, stage: "lifecycle",
+        summary: {
+          "error_class" => "JSON::ParserError",
+          "error_message" => "unexpected token",
+          "failed_stage" => "break_tasks",
+          "llm_provider" => "openai", "llm_model" => "gpt-5-mini",
+          "execution_provider" => "claude_code"
+        }
+      )
+      formatter = LogFormatter.new(@run.pipeline_events.chronological, pipeline_run: @run, color: false)
+      output = formatter.render
+      assert_match(/PIPELINE FAILED/, output)
+      assert_match(/break_tasks/, output)
+      assert_match(/JSON::ParserError: unexpected token/, output)
+      assert_match(/openai/, output)
+    end
+
+    test "pipeline_failed with task counts and duration" do
+      @run.pipeline_events.create!(
+        event_type: :pipeline_failed, stage: "lifecycle",
+        summary: {
+          "error_class" => "RuntimeError", "error_message" => "Something broke",
+          "total_tasks" => 5, "tasks_succeeded" => 3, "tasks_failed" => 2,
+          "total_duration_ms" => 125000.0
+        }
+      )
+      formatter = LogFormatter.new(@run.pipeline_events.chronological, pipeline_run: @run, color: false)
+      output = formatter.render
+      assert_match(/5 tasks.*3 succeeded.*2 failed/, output)
+      assert_match(/2\.1m/, output)
+    end
+
+    test "pipeline_failed with raw_response_excerpt truncates to 200 chars" do
+      @run.pipeline_events.create!(
+        event_type: :pipeline_failed, stage: "lifecycle",
+        summary: {
+          "error_class" => "RuntimeError", "error_message" => "parse error",
+          "raw_response_excerpt" => "x" * 300
+        }
+      )
+      formatter = LogFormatter.new(@run.pipeline_events.chronological, pipeline_run: @run, color: false)
+      output = formatter.render
+      assert_match(/x{200}\.\.\./, output)
+    end
   end
 end
