@@ -314,7 +314,8 @@ module ArnoldPipeline
             }
           },
           payload: ->(r) { { diffs: diffs, task_summaries: task_summaries, gate_response: r } },
-          tier_number: tier_num
+          tier_number: tier_num,
+          iteration_number: @current_iteration_number
         ) do
           tier_gate_check.call(tier_number: tier_num, task_summaries:, diffs:, comments:, repo_context:,
                                acceptance_criteria_summary:, verification_results:,
@@ -433,7 +434,8 @@ module ArnoldPipeline
           decision_source: decision_source
         },
         payload: { diffs: diffs, task_summaries: task_summaries, gate_response: result },
-        tier_number: tier_num
+        tier_number: tier_num,
+        iteration_number: @current_iteration_number
       )
     end
 
@@ -584,6 +586,7 @@ module ArnoldPipeline
         event_recorder.timed(
           event_type: :spec_test_execution, stage: "execution",
           tier_number: tier_number,
+          iteration_number: @current_iteration_number,
           summary: ->(r) {
             {
               phase: "generation",
@@ -647,6 +650,7 @@ module ArnoldPipeline
         event_recorder.timed(
           event_type: :spec_test_execution, stage: "tier_gate",
           tier_number: tier_number,
+          iteration_number: @current_iteration_number,
           summary: ->(r) {
             {
               phase: "progress_check",
@@ -893,6 +897,7 @@ module ArnoldPipeline
       event_recorder&.record(
         event_type: :repo_context_scanned, stage: "tier_gate",
         tier_number: tier_number,
+        iteration_number: @current_iteration_number,
         summary: { file_count: file_list.size, directories: file_list.map { |f| File.dirname(f) }.uniq },
         payload: { file_list: file_list }
       )

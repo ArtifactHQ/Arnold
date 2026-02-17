@@ -47,7 +47,7 @@ module ArnoldPipeline
             iteration_number: iteration_number
           )
           handle_iterate_tasks!(pipeline_run, analysis)
-          tier_execution_engine.execute_tiers!(pipeline_run)
+          tier_execution_engine.execute_tiers!(pipeline_run, iteration_number: iteration_number)
         when "iterate_spec"
           delta_count = (analysis.dig("corrective_data", "deltas") || []).size
           event_recorder&.record(
@@ -57,7 +57,7 @@ module ArnoldPipeline
           )
           handle_iterate_spec!(pipeline_run, analysis)
           break_tasks!(pipeline_run)
-          tier_execution_engine.execute_tiers!(pipeline_run)
+          tier_execution_engine.execute_tiers!(pipeline_run, iteration_number: iteration_number)
         end
 
         if iteration_number >= max_iterations
