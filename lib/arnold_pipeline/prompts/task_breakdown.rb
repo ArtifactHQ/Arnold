@@ -218,9 +218,22 @@ module ArnoldPipeline
 
         parts = ["## Verification"]
         parts << "After all tasks complete, the project should be verifiable with:"
-        parts << "- Setup: `#{recipe.verification['setup_command']}`" if recipe.verification["setup_command"]
-        parts << "- Run: `#{recipe.verification['run_command']}`" if recipe.verification["run_command"]
-        parts << "- Health check: `#{recipe.verification['health_check']}`" if recipe.verification["health_check"]
+
+        if recipe.verification["setup_commands"]&.any?
+          recipe.verification["setup_commands"].each { |cmd| parts << "- Setup: `#{cmd}`" }
+        end
+
+        parts << "- Boot: `#{recipe.verification['boot_command']}`" if recipe.verification["boot_command"]
+
+        if recipe.verification["health_checks"]&.any?
+          recipe.verification["health_checks"].each do |check|
+            parts << "- Health check: `#{check['url']}` (expected #{check['expected_status'] || 200})"
+          end
+        end
+
+        parts << "- Test: `#{recipe.verification['test_command']}`" if recipe.verification["test_command"]
+        parts << "- Cleanup: `#{recipe.verification['cleanup_command']}`" if recipe.verification["cleanup_command"]
+
         parts << ""
         parts << "Ensure the bootstrap task produces a project that passes these verification steps."
         parts.join("\n")
