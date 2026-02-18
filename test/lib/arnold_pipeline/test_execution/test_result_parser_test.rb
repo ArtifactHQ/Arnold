@@ -301,6 +301,71 @@ module ArnoldPipeline
 
       # --- Output in stderr ---
 
+      # --- Hollow pass detection (0 runs) ---
+
+      test "minitest 0 runs is hollow and not passed" do
+        stdout = "0 runs, 0 assertions, 0 failures, 0 errors, 0 skips"
+
+        result = TestResultParser.call(stdout: stdout, stderr: "", exit_code: 0)
+
+        refute result.passed
+        assert result.hollow
+        assert_equal "minitest", result.framework
+        assert_equal "0 runs, 0 assertions, 0 failures, 0 errors", result.summary
+      end
+
+      test "minitest with runs is not hollow" do
+        stdout = "14 runs, 28 assertions, 0 failures, 0 errors, 0 skips"
+
+        result = TestResultParser.call(stdout: stdout, stderr: "", exit_code: 0)
+
+        assert result.passed
+        refute result.hollow
+      end
+
+      test "rspec 0 examples is hollow and not passed" do
+        stdout = "0 examples, 0 failures"
+
+        result = TestResultParser.call(stdout: stdout, stderr: "", exit_code: 0)
+
+        refute result.passed
+        assert result.hollow
+        assert_equal "rspec", result.framework
+      end
+
+      test "jest 0 total is hollow and not passed" do
+        stdout = <<~OUTPUT
+          Test Suites: 0 total
+          Tests:       0 total
+          Snapshots:   0 total
+        OUTPUT
+
+        result = TestResultParser.call(stdout: stdout, stderr: "", exit_code: 0)
+
+        refute result.passed
+        assert result.hollow
+        assert_equal "jest", result.framework
+      end
+
+      test "pytest 0 passed 0 failed is hollow and not passed" do
+        stdout = "============================== 0 passed =============================="
+
+        result = TestResultParser.call(stdout: stdout, stderr: "", exit_code: 0)
+
+        refute result.passed
+        assert result.hollow
+        assert_equal "pytest", result.framework
+      end
+
+      test "generic result is not hollow" do
+        result = TestResultParser.call(stdout: "all good", stderr: "", exit_code: 0)
+
+        assert result.passed
+        refute result.hollow
+      end
+
+      # --- Existing ---
+
       test "detects framework from stderr when stdout is empty" do
         stderr = "14 runs, 28 assertions, 0 failures, 0 errors, 0 skips"
 

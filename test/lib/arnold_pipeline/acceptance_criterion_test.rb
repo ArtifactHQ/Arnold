@@ -115,5 +115,55 @@ module ArnoldPipeline
       criterion = AcceptanceCriterion.new(type: "file_exists", description: "test", params: {})
       assert criterion.frozen?
     end
+
+    # --- DB-format (nested "params" key) ---
+
+    test "from_hash unwraps nested params hash (DB format)" do
+      criterion = AcceptanceCriterion.from_hash(
+        "type" => "file_exists",
+        "description" => "Gemfile exists",
+        "params" => { "pattern" => "Gemfile" }
+      )
+
+      assert_equal "file_exists", criterion.type
+      assert_equal "Gemfile exists", criterion.description
+      assert_equal({ "pattern" => "Gemfile" }, criterion.params)
+    end
+
+    test "from_hash unwraps nested params with symbol keys (DB format)" do
+      criterion = AcceptanceCriterion.from_hash(
+        type: "model_has",
+        description: "User has email",
+        params: { model: "User", columns: %w[email name] }
+      )
+
+      assert_equal "model_has", criterion.type
+      assert_equal({ "model" => "User", "columns" => %w[email name] }, criterion.params)
+    end
+
+    test "from_hash ignores string params value (already decoded by task breaker)" do
+      criterion = AcceptanceCriterion.from_hash(
+        "type" => "file_exists",
+        "description" => "test",
+        "params" => "not a hash",
+        "pattern" => "Gemfile"
+      )
+
+      # When params is a string (not a hash), fall through to legacy behavior
+      assert_equal({ "pattern" => "Gemfile" }, criterion.params)
+    end
+
+    test "from_array with DB-format criteria" do
+      criteria = AcceptanceCriterion.from_array([
+        { "type" => "file_exists", "description" => "Has Gemfile",
+          "params" => { "pattern" => "Gemfile" } },
+        { "type" => "route_exists", "description" => "Has root route",
+          "params" => { "method" => "GET", "path" => "/" } }
+      ])
+
+      assert_equal 2, criteria.size
+      assert_equal({ "pattern" => "Gemfile" }, criteria[0].params)
+      assert_equal({ "method" => "GET", "path" => "/" }, criteria[1].params)
+    end
   end
 end

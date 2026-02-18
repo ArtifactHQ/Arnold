@@ -112,6 +112,56 @@ module ArnoldPipeline
         assert_includes summary, "Boot command timed out after 60s"
       end
 
+      test "hollow defaults to false" do
+        result = TestResult.new(
+          passed: true,
+          exit_code: 0,
+          summary: "14 tests, 0 failures"
+        )
+
+        refute result.hollow
+      end
+
+      test "hollow result" do
+        result = TestResult.new(
+          passed: false,
+          exit_code: 0,
+          summary: "0 runs, 0 assertions, 0 failures, 0 errors",
+          framework: "minitest",
+          hollow: true
+        )
+
+        refute result.passed
+        assert result.hollow
+      end
+
+      test "to_gate_summary includes hollow warning" do
+        result = TestResult.new(
+          passed: false,
+          exit_code: 0,
+          summary: "0 runs, 0 assertions, 0 failures, 0 errors",
+          framework: "minitest",
+          hollow: true
+        )
+
+        summary = result.to_gate_summary
+
+        assert_includes summary, "WARNING: Test suite exited with 0 runs"
+      end
+
+      test "to_gate_summary excludes hollow warning when not hollow" do
+        result = TestResult.new(
+          passed: true,
+          exit_code: 0,
+          summary: "14 tests, 0 failures",
+          framework: "minitest"
+        )
+
+        summary = result.to_gate_summary
+
+        refute_includes summary, "WARNING"
+      end
+
       test "to_gate_summary shows unknown framework when nil" do
         result = TestResult.new(
           passed: true,

@@ -315,6 +315,85 @@ module ArnoldPipeline
       assert_equal 1, result[:unverified].size
     end
 
+    # --- DB-format criteria (with nested "params" key) ---
+
+    test "file_exists works with DB-format criteria (nested params hash)" do
+      FileUtils.touch(File.join(@repo_path, "Gemfile"))
+
+      criteria = [AcceptanceCriterion.from_hash(
+        "type" => "file_exists",
+        "description" => "Gemfile exists",
+        "params" => { "pattern" => "Gemfile" }
+      )]
+      result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
+
+      assert_equal 1, result[:verified].size
+      assert_empty result[:failed]
+    end
+
+    test "file_exists works with DB-format criteria using from_array" do
+      FileUtils.mkdir_p(File.join(@repo_path, "app/models"))
+      FileUtils.touch(File.join(@repo_path, "app/models/user.rb"))
+
+      db_format = [
+        { "type" => "file_exists", "description" => "User model exists",
+          "params" => { "pattern" => "app/models/user.rb" } }
+      ]
+      criteria = AcceptanceCriterion.from_array(db_format)
+      result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
+
+      assert_equal 1, result[:verified].size
+    end
+
+    test "test_exists works with DB-format criteria" do
+      FileUtils.mkdir_p(File.join(@repo_path, "test"))
+      File.write(File.join(@repo_path, "test/user_test.rb"), "assert true\nassert ok")
+
+      db_format = [
+        { "type" => "test_exists", "description" => "User tests exist",
+          "params" => { "pattern" => "test/*user*", "min_assertions" => 1 } }
+      ]
+      criteria = AcceptanceCriterion.from_array(db_format)
+      result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
+
+      assert_equal 1, result[:verified].size
+    end
+
+    test "route_exists works with DB-format criteria" do
+      FileUtils.mkdir_p(File.join(@repo_path, "config"))
+      File.write(File.join(@repo_path, "config/routes.rb"), "resources :users")
+
+      db_format = [
+        { "type" => "route_exists", "description" => "Users route",
+          "params" => { "method" => "GET", "path" => "/users" } }
+      ]
+      criteria = AcceptanceCriterion.from_array(db_format)
+      result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
+
+      assert_equal 1, result[:verified].size
+    end
+
+    test "model_has works with DB-format criteria" do
+      FileUtils.mkdir_p(File.join(@repo_path, "db"))
+      File.write(File.join(@repo_path, "db/schema.rb"), <<~RUBY)
+        ActiveRecord::Schema.define(version: 2025_01_01) do
+          create_table "users" do |t|
+            t.string "email"
+            t.timestamps
+          end
+        end
+      RUBY
+
+      db_format = [
+        { "type" => "model_has", "description" => "User has email",
+          "params" => { "model" => "User", "columns" => ["email"] } }
+      ]
+      criteria = AcceptanceCriterion.from_array(db_format)
+      result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
+
+      assert_equal 1, result[:verified].size
+    end
+
     private
 
     def criterion(type, **params)

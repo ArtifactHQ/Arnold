@@ -51,8 +51,8 @@ module ArnoldPipeline
         type: check.type,
         success: status.success?,
         exit_code: status.exitstatus,
-        stdout: stdout[0, STDOUT_CAP],
-        stderr: stderr[0, STDERR_CAP],
+        stdout: tail_capture(stdout, STDOUT_CAP),
+        stderr: tail_capture(stderr, STDERR_CAP),
         duration_ms: duration_ms
       }
     rescue => e
@@ -69,6 +69,14 @@ module ArnoldPipeline
         stderr: e.message[0, STDERR_CAP],
         duration_ms: duration_ms
       }
+    end
+
+    # Capture the LAST n characters of output so that test summary lines
+    # and failure blocks (which appear at the end) are preserved instead
+    # of discarding them in favour of early loading/path output.
+    def tail_capture(output, cap)
+      return output if output.length <= cap
+      output[-cap, cap]
     end
 
     def build_summary(results)

@@ -247,11 +247,13 @@ module ArnoldPipeline
     # --- Criteria check integration ---
 
     test "run_criteria_check! formats results from CriteriaChecker" do
+      tmpdir = Dir.mktmpdir("arnold_criteria_test")
+
       ArnoldPipeline.configure do |c|
         c.llm_api_key = "test"
         c.github_token = "test"
         c.github_repo = "owner/repo"
-        c.claude_code_repo_path = "/tmp/test_repo"
+        c.claude_code_repo_path = tmpdir
       end
 
       pipeline_run = PipelineRun.create!(nl_input: "Build an app")
@@ -277,6 +279,8 @@ module ArnoldPipeline
       assert_not_nil result
       assert_includes result, "[PASS] Schema file exists"
       assert_includes result, "[EVALUATE] API responds"
+    ensure
+      FileUtils.rm_rf(tmpdir) if tmpdir
     end
 
     test "run_criteria_check! returns nil when no acceptance criteria" do
