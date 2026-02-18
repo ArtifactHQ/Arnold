@@ -6,9 +6,10 @@ module ArnoldPipeline
       :summary,
       :failures,
       :framework,
-      :error
+      :error,
+      :hollow
     ) do
-      def initialize(passed:, exit_code:, summary:, failures: [], framework: nil, error: nil)
+      def initialize(passed:, exit_code:, summary:, failures: [], framework: nil, error: nil, hollow: false)
         super
       end
 
@@ -20,6 +21,11 @@ module ArnoldPipeline
         lines << "- Exit code: #{exit_code}"
         lines << "- Framework: #{framework || 'unknown'}"
         lines << "- Summary: #{summary}"
+
+        if hollow
+          lines << ""
+          lines << "**WARNING: Test suite exited with 0 runs — tests may not be loading or discovered.**"
+        end
 
         if error
           lines << ""

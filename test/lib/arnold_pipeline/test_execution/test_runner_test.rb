@@ -106,7 +106,7 @@ module ArnoldPipeline
         File.stubs(:exist?).with(File.join(@repo_path, "bin/rails")).returns(true)
 
         mock_status = stub(success?: true, exitstatus: 0)
-        Open3.expects(:capture3).with("bin/rails test", chdir: @repo_path).returns(["0 runs, 0 assertions, 0 failures, 0 errors", "", mock_status])
+        Open3.expects(:capture3).with("bin/rails test", chdir: @repo_path).returns(["5 runs, 10 assertions, 0 failures, 0 errors", "", mock_status])
 
         result = TestRunner.call(repo_path: @repo_path)
 

@@ -54,6 +54,12 @@ module ArnoldPipeline
             raise ConfigurationError,
               "claude_code_max_concurrency must be an integer between 1 and 16"
           end
+
+          timeout = config.claude_code_task_timeout
+          if timeout && !(timeout.is_a?(Numeric) && timeout > 0)
+            raise ConfigurationError,
+              "claude_code_task_timeout must be nil or a positive number (minutes)"
+          end
         end
 
         def self.build_from_config(config, **options)
@@ -126,7 +132,17 @@ module ArnoldPipeline
             next unless stored
             next unless stored[:success]
 
-            merge_branch(stored[:branch], task: task)
+            begin
+              merge_branch(stored[:branch], task: task)
+            rescue MergeError => e
+              Rails.logger.warn { "[Arnold] Merge failed for task '#{task.title}' (#{task.external_id}): #{e.message}" } if defined?(Rails)
+              @results_mutex.synchronize { stored[:merge_failed] = true }
+              task.update!(
+                status: :failed,
+                result_diff: "[]",
+                result_comments: [{ "source" => "arnold", "author" => "system", "body" => "Merge failed: #{e.message}" }]
+              )
+            end
           end
 
           []
@@ -225,18 +241,111 @@ module ArnoldPipeline
           ArnoldPipeline.configuration.claude_code_max_concurrency || 4
         end
 
+        def task_timeout
+          ArnoldPipeline.configuration.claude_code_task_timeout
+        end
+
+        # Spawns a shell command in its own process group with an optional timeout.
+        # Returns [output_string, Process::Status] on normal completion, or
+        # [output_string, nil] when the process is killed due to timeout.
+        def spawn_with_timeout(cmd, worktree_path:, timeout_minutes:)
+          stdout_r, stdout_w = IO.pipe
+
+          pid = Process.spawn(
+            { "CLAUDECODE" => nil },
+            cmd,
+            chdir: worktree_path,
+            pgroup: true,
+            out: stdout_w,
+            err: [:child, :out]
+          )
+          stdout_w.close
+
+          deadline = timeout_minutes ? Process.clock_gettime(Process::CLOCK_MONOTONIC) + (timeout_minutes * 60) : nil
+          status = nil
+          timed_out = false
+
+          # Poll for process completion with 5-second intervals
+          loop do
+            result = Process.waitpid2(pid, Process::WNOHANG)
+            if result
+              _, status = result
+              break
+            end
+
+            if deadline && Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+              timed_out = true
+              kill_process_group(pid)
+              break
+            end
+
+            sleep 5
+          end
+
+          output = if timed_out
+            drain_pipe(stdout_r, timeout_seconds: 5)
+          else
+            stdout_r.read
+          end
+
+          timed_out ? [output, nil] : [output, status]
+        ensure
+          stdout_r&.close unless stdout_r&.closed?
+          stdout_w&.close unless stdout_w&.closed?
+        end
+
+        # Reads remaining data from a pipe with a bounded timeout.
+        # Returns immediately when all writers have closed; caps at timeout_seconds
+        # if a grandchild process still holds the write end open.
+        def drain_pipe(io, timeout_seconds:)
+          output = +""
+          deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout_seconds
+          loop do
+            remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+            break if remaining <= 0
+            break unless IO.select([io], nil, nil, [remaining, 1].min)
+            chunk = io.read_nonblock(65536, exception: false)
+            break if chunk.nil? || chunk == :wait_readable
+            output << chunk
+          end
+          output
+        end
+
+        def kill_process_group(pid)
+          pgid = Process.getpgid(pid)
+
+          # Graceful shutdown
+          Process.kill("-TERM", pgid)
+          # Wait up to 10 seconds for graceful exit
+          10.times do
+            break if Process.waitpid2(pid, Process::WNOHANG)
+            sleep 1
+          end
+
+          # Force kill if still alive
+          Process.kill("-KILL", pgid) if Process.waitpid2(pid, Process::WNOHANG).nil?
+          Process.waitpid2(pid, 0) # Reap the zombie
+        rescue Errno::ESRCH, Errno::ECHILD
+          # Process already exited — nothing to do
+        end
+
         def execute_claude_code(prompt:, branch:, external_id:)
           worktree_path = @worktree_mutex.synchronize { setup_worktree(branch) }
 
           cmd = build_cli_command(prompt)
+          timeout_minutes = task_timeout
 
           # Clear Bundler env so the child process uses its own Gemfile (not arnold_pipeline's).
           # Unset CLAUDECODE so child claude processes don't refuse to start nested sessions.
           output, status = Bundler.with_unbundled_env do
-            Open3.capture2({ "CLAUDECODE" => nil }, cmd, chdir: worktree_path)
+            spawn_with_timeout(cmd, worktree_path: worktree_path, timeout_minutes: timeout_minutes)
           end
 
-          if status.success?
+          if status.nil?
+            # Timed out — process was killed
+            cleanup_worktree(branch)
+            { success: false, output: output, error: "execution_timeout: task exceeded #{timeout_minutes} minute limit" }
+          elsif status.success?
             { success: true, output: output, error: nil }
           else
             { success: false, output: output, error: "claude CLI exited with code #{status.exitstatus}" }
@@ -280,6 +389,7 @@ module ArnoldPipeline
             # Auto-generated by Arnold Pipeline
             tmp/
             log/
+            storage/
             node_modules/
             .bundle/
             vendor/bundle/
@@ -294,6 +404,7 @@ module ArnoldPipeline
         end
 
         def merge_branch(branch, task: nil)
+          strip_binary_noise!(branch)
           output, status = Open3.capture2e("git", "-C", repo_path, "merge", "--no-ff", "--no-edit", branch)
           return if status.success?
 
@@ -441,6 +552,43 @@ module ArnoldPipeline
         def cleanup_worktree(branch)
           worktree_path = File.join(repo_path, ".worktrees", branch)
           system("git", "-C", repo_path, "worktree", "remove", worktree_path) if Dir.exist?(worktree_path)
+        end
+
+        # Remove binary noise files (storage/*.sqlite3, etc.) from the branch
+        # commit before merging. These files are created by `rails test` in
+        # worktrees and cause merge conflicts that silently drop entire branches.
+        BINARY_NOISE_PATTERNS = %w[storage/*.sqlite3 storage/*.sqlite3-*].freeze
+
+        def strip_binary_noise!(branch)
+          # Check if the branch has any noise files tracked under storage/
+          tracked, status = Open3.capture2(
+            "git", "-C", repo_path, "ls-tree", "-r", "--name-only", branch, "storage/"
+          )
+          return unless status.success? && tracked.strip.length > 0
+
+          noise_files = tracked.strip.split("\n").select { |f| f.match?(/\.sqlite3/) }
+          return if noise_files.empty?
+
+          # Remove noise files from the branch via a temporary worktree
+          cleanup_path = File.join(repo_path, ".worktrees", "cleanup-#{branch}")
+          begin
+            system("git", "-C", repo_path, "worktree", "add", cleanup_path, branch, exception: true)
+
+            noise_files.each do |file|
+              system("git", "-C", cleanup_path, "rm", "--cached", "-f", "--ignore-unmatch", file)
+            end
+
+            # Commit only if something was actually removed
+            _output, diff_status = Open3.capture2("git", "-C", cleanup_path, "diff", "--cached", "--quiet")
+            unless diff_status.success?
+              system("git", "-C", cleanup_path, "commit", "-m",
+                "Remove binary noise files (storage/*.sqlite3)", exception: true)
+            end
+          ensure
+            system("git", "-C", repo_path, "worktree", "remove", "--force", cleanup_path) if Dir.exist?(cleanup_path)
+          end
+        rescue => e
+          Rails.logger.warn { "[Arnold] strip_binary_noise! failed (non-fatal): #{e.message}" } if defined?(Rails)
         end
 
         def parse_diff_to_array(diff_string)

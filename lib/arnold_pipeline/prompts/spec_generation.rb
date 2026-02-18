@@ -69,6 +69,18 @@ module ArnoldPipeline
           choices in Section 8 (External Connections) under "No external dependencies
           required for development."
 
+          **CRITICAL: Multi-database configuration for Solid Queue/Cache/Cable.**
+          When using Solid Queue, Solid Cache, or Solid Cable, the `config/database.yml`
+          MUST define separate queue/cache/cable databases for ALL environments
+          (development, test, AND production), not just production. Each environment
+          config (`config/environments/*.rb`) MUST include:
+          ```ruby
+          config.active_job.queue_adapter = :solid_queue
+          config.solid_queue.connects_to = { database: { writing: :queue } }
+          ```
+          Without this, Solid Queue will try to use the primary database in
+          development/test and crash because its tables don't exist there.
+
           If the user does request a specific database, honor that choice and note
           any required setup steps in the specification.
 

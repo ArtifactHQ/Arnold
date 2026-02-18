@@ -180,6 +180,7 @@ module ArnoldPipeline
       logger.info { "[Arnold] Iterating tasks based on analysis feedback..." }
 
       corrective_tasks = analysis.dig("corrective_data", "tasks") || []
+      sanitize_dependencies!(corrective_tasks)
       pipeline_run.tasks.destroy_all
 
       corrective_tasks.each_with_index do |td, i|
@@ -289,6 +290,43 @@ module ArnoldPipeline
       supporting = supporting_types.filter_map { |t| all_recipes.find { |r| r.type == t } }
 
       [recipe, supporting]
+    end
+
+    # Sanitize corrective task dependencies before persisting.
+    # Strips self-referential deps, references to non-existent positions,
+    # and uses Kahn's algorithm to detect and strip circular dependencies.
+    def sanitize_dependencies!(tasks)
+      positions = Set.new(tasks.each_index.to_a)
+
+      tasks.each_with_index do |task, i|
+        deps = task["depends_on"] || []
+        task["depends_on"] = deps.select { |dep| positions.include?(dep) && dep != i }
+      end
+
+      # Kahn's algorithm to detect cycles
+      in_degree = Array.new(tasks.size, 0)
+      tasks.each_with_index do |task, i|
+        task["depends_on"].each { |_| in_degree[i] += 1 }
+      end
+
+      queue = (0...tasks.size).select { |i| in_degree[i].zero? }
+      sorted_count = 0
+
+      until queue.empty?
+        pos = queue.shift
+        sorted_count += 1
+
+        tasks.each_with_index do |other, j|
+          next unless other["depends_on"].include?(pos)
+          in_degree[j] -= 1
+          queue << j if in_degree[j].zero?
+        end
+      end
+
+      if sorted_count < tasks.size
+        logger.warn { "[Arnold] Dependency cycle detected in corrective tasks, stripping circular dependencies" }
+        tasks.each { |task| task["depends_on"] = [] }
+      end
     end
   end
 end

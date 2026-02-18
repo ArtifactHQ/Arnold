@@ -428,11 +428,12 @@ module ArnoldPipeline
           FileUtils.mkdir_p(worktree_path)
 
           captured_env = nil
-          Open3.stubs(:capture2).with { |*args|
-            # capture2 called with (env_hash, cmd, chdir: path) — first arg is env
+          Process.stubs(:spawn).with { |*args|
             captured_env = args.first if args.first.is_a?(Hash)
             true
-          }.returns(["", stub(success?: true)])
+          }.returns(999)
+          Process.stubs(:waitpid2).returns([999, stub(success?: true)])
+          IO.stubs(:pipe).returns([StringIO.new(""), StringIO.new])
 
           ENV["CLAUDECODE"] = "1"
           @provider.send(:execute_claude_code, prompt: "test", branch: branch, external_id: "cc-1")
@@ -1151,6 +1152,363 @@ module ArnoldPipeline
           assert_match(/Failed to merge branch/, error.message)
         ensure
           ArnoldPipeline.reset_configuration!
+        end
+
+        # --- Task timeout tests ---
+
+        test "claude_code_task_timeout defaults to 30" do
+          config = ArnoldPipeline::Configuration.new
+          assert_equal 30, config.claude_code_task_timeout
+        end
+
+        test "claude_code_task_timeout is configurable" do
+          ArnoldPipeline.configure { |c| c.claude_code_task_timeout = 60 }
+          assert_equal 60, ArnoldPipeline.configuration.claude_code_task_timeout
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "claude_code_task_timeout nil disables timeout" do
+          ArnoldPipeline.configure { |c| c.claude_code_task_timeout = nil }
+          assert_nil ArnoldPipeline.configuration.claude_code_task_timeout
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "validate_configuration! rejects invalid task timeout values" do
+          config = ArnoldPipeline::Configuration.new
+          config.execution_provider = :claude_code
+          config.claude_code_repo_path = @repo_path
+          ClaudeCode.stubs(:claude_cli_available?).returns(true)
+
+          [0, -5, "30"].each do |bad_value|
+            config.claude_code_task_timeout = bad_value
+            error = assert_raises(ArnoldPipeline::ConfigurationError) do
+              ClaudeCode.validate_configuration!(config)
+            end
+            assert_match(/claude_code_task_timeout/, error.message)
+          end
+        end
+
+        test "validate_configuration! accepts valid task timeout values" do
+          config = ArnoldPipeline::Configuration.new
+          config.execution_provider = :claude_code
+          config.claude_code_repo_path = @repo_path
+          ClaudeCode.stubs(:claude_cli_available?).returns(true)
+
+          [1, 30, 60, 0.5, nil].each do |good_value|
+            config.claude_code_task_timeout = good_value
+            assert_nothing_raised { ClaudeCode.validate_configuration!(config) }
+          end
+        end
+
+        test "spawn_with_timeout returns output and status on normal completion" do
+          worktree_path = @repo_path
+
+          output, status = @provider.send(
+            :spawn_with_timeout, "echo hello",
+            worktree_path: worktree_path, timeout_minutes: 1
+          )
+
+          assert_equal "hello\n", output
+          assert status.success?
+        end
+
+        test "spawn_with_timeout returns nil status on timeout" do
+          worktree_path = @repo_path
+
+          # Use a very short timeout with a long-running command
+          output, status = @provider.send(
+            :spawn_with_timeout, "sleep 60",
+            worktree_path: worktree_path, timeout_minutes: 0.01 # 0.6 seconds
+          )
+
+          assert_nil status, "Status should be nil when timed out"
+        end
+
+        test "spawn_with_timeout with nil timeout_minutes runs without deadline" do
+          worktree_path = @repo_path
+
+          output, status = @provider.send(
+            :spawn_with_timeout, "echo no-timeout",
+            worktree_path: worktree_path, timeout_minutes: nil
+          )
+
+          assert_equal "no-timeout\n", output
+          assert status.success?
+        end
+
+        test "spawn_with_timeout closes pipes when Process.spawn raises" do
+          Process.stubs(:spawn).raises(Errno::ENOENT, "No such file or directory")
+
+          assert_raises(Errno::ENOENT) do
+            @provider.send(
+              :spawn_with_timeout, "nonexistent_command",
+              worktree_path: "/nonexistent/path", timeout_minutes: 1
+            )
+          end
+        end
+
+        test "drain_pipe returns immediately when pipe has no writers" do
+          r, w = IO.pipe
+          w.write("buffered data")
+          w.close
+
+          start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          output = @provider.send(:drain_pipe, r, timeout_seconds: 5)
+          elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start
+
+          assert_equal "buffered data", output
+          assert elapsed < 1, "drain_pipe should return immediately when pipe is closed, took #{elapsed}s"
+        ensure
+          r&.close unless r&.closed?
+        end
+
+        test "execute_claude_code marks task as failed with execution_timeout on timeout" do
+          ArnoldPipeline.configure { |c| c.claude_code_task_timeout = 0.01 }
+
+          branch = "test-timeout-branch"
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+          @provider.stubs(:spawn_with_timeout).returns(["partial output", nil])
+          @provider.stubs(:cleanup_worktree)
+
+          result = @provider.send(:execute_claude_code, prompt: "test", branch: branch, external_id: "cc-timeout")
+
+          assert_equal false, result[:success]
+          assert_match(/execution_timeout/, result[:error])
+          assert_match(/0\.01 minute limit/, result[:error])
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "execute_claude_code cleans up worktree on timeout" do
+          ArnoldPipeline.configure { |c| c.claude_code_task_timeout = 0.01 }
+
+          branch = "test-timeout-cleanup"
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+          @provider.stubs(:spawn_with_timeout).returns(["", nil])
+          @provider.expects(:cleanup_worktree).with(branch)
+
+          @provider.send(:execute_claude_code, prompt: "test", branch: branch, external_id: "cc-cleanup")
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "create_tasks stores timeout failure in results" do
+          ArnoldPipeline.configure { |c| c.claude_code_task_timeout = 0.01 }
+
+          tasks = [{ "title" => "Slow task", "description" => "Will timeout" }]
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+          @provider.stubs(:spawn_with_timeout).returns(["", nil])
+          @provider.stubs(:cleanup_worktree)
+          @provider.stubs(:capture_diff).returns("")
+
+          @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+
+          results = @provider.instance_variable_get(:@results)
+          stored = results.values.first
+          assert_equal false, stored[:success]
+          assert_match(/execution_timeout/, stored[:error])
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "fetch_results returns :failed for timed-out task" do
+          tasks = [{ "title" => "Timeout task", "description" => "Timed out" }]
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+          @provider.stubs(:spawn_with_timeout).returns(["", nil])
+          @provider.stubs(:cleanup_worktree)
+          @provider.stubs(:capture_diff).returns("")
+
+          created = @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
+          ext_id = created.first[:external_id]
+          task = @pipeline_run.tasks.create!(title: "Timeout task", position: 0, external_id: ext_id)
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run, tasks: [task])
+          assert_equal :failed, results.first[:status]
+        end
+
+        test "execute_claude_code succeeds normally within timeout" do
+          ArnoldPipeline.configure { |c| c.claude_code_task_timeout = 30 }
+
+          branch = "test-normal-timeout"
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+          @provider.stubs(:spawn_with_timeout).returns(["Done", stub(success?: true)])
+
+          result = @provider.send(:execute_claude_code, prompt: "test", branch: branch, external_id: "cc-ok")
+
+          assert_equal true, result[:success]
+          assert_equal "Done", result[:output]
+          assert_nil result[:error]
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        # --- Bug A: strip_binary_noise! tests ---
+
+        test "strip_binary_noise! removes sqlite3 files from branch before merge" do
+          branch = "test-sqlite-noise"
+          worktree_path = File.join(@repo_path, ".worktrees", branch)
+          system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
+
+          # Simulate rails test creating storage/test.sqlite3 in the worktree
+          FileUtils.mkdir_p(File.join(worktree_path, "storage"))
+          File.write(File.join(worktree_path, "storage", "test.sqlite3"), "binary data")
+          File.write(File.join(worktree_path, "app.rb"), "class App; end")
+          system("git", "-C", worktree_path, "add", "-A", exception: true)
+          system("git", "-C", worktree_path, "commit", "-m", "Add files with sqlite noise", exception: true)
+
+          # Remove the worktree (production flow: worktrees are temporary during execution)
+          system("git", "-C", @repo_path, "worktree", "remove", "--force", worktree_path, exception: true)
+
+          @provider.send(:strip_binary_noise!, branch)
+
+          # Verify sqlite3 file is no longer tracked on the branch
+          tracked, = Open3.capture2("git", "-C", @repo_path, "ls-tree", "-r", "--name-only", branch, "storage/")
+          refute_match(/\.sqlite3/, tracked)
+
+          # Verify app.rb is still tracked
+          all_tracked, = Open3.capture2("git", "-C", @repo_path, "ls-tree", "-r", "--name-only", branch)
+          assert_includes all_tracked, "app.rb"
+        ensure
+          cleanup = File.join(@repo_path, ".worktrees", "cleanup-#{branch}")
+          system("git", "-C", @repo_path, "worktree", "remove", "--force", cleanup) if Dir.exist?(cleanup)
+        end
+
+        test "strip_binary_noise! is no-op when branch has no storage/ files" do
+          branch = "test-no-storage"
+          worktree_path = File.join(@repo_path, ".worktrees", branch)
+          system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
+
+          File.write(File.join(worktree_path, "app.rb"), "class App; end")
+          system("git", "-C", worktree_path, "add", "-A", exception: true)
+          system("git", "-C", worktree_path, "commit", "-m", "Add app.rb", exception: true)
+
+          # Remove worktree so strip_binary_noise! can operate
+          system("git", "-C", @repo_path, "worktree", "remove", "--force", worktree_path, exception: true)
+
+          commit_before, = Open3.capture2("git", "-C", @repo_path, "rev-parse", branch)
+
+          @provider.send(:strip_binary_noise!, branch)
+
+          commit_after, = Open3.capture2("git", "-C", @repo_path, "rev-parse", branch)
+          assert_equal commit_before.strip, commit_after.strip, "No commit should be created when no noise files exist"
+        end
+
+        test "strip_binary_noise! is called before merge in merge_branch" do
+          branch = "test-strip-order"
+          call_order = sequence("merge_flow")
+
+          @provider.expects(:strip_binary_noise!).with(branch).in_sequence(call_order)
+          Open3.expects(:capture2e).with("git", "-C", @repo_path, "merge", "--no-ff", "--no-edit", branch)
+            .returns(["", stub(success?: true)]).in_sequence(call_order)
+
+          @provider.send(:merge_branch, branch)
+        end
+
+        test "merge_branch succeeds after strip_binary_noise! removes conflicting sqlite files" do
+          branch = "test-sqlite-merge"
+          worktree_path = File.join(@repo_path, ".worktrees", branch)
+          system("git", "-C", @repo_path, "worktree", "add", "-b", branch, worktree_path, exception: true)
+
+          FileUtils.mkdir_p(File.join(worktree_path, "storage"))
+          File.write(File.join(worktree_path, "storage", "test.sqlite3"), "branch binary data")
+          File.write(File.join(worktree_path, "new_feature.rb"), "class Feature; end")
+          system("git", "-C", worktree_path, "add", "-A", exception: true)
+          system("git", "-C", worktree_path, "commit", "-m", "Add feature with sqlite noise", exception: true)
+
+          # Remove the worktree (production flow: worktrees are temporary during execution)
+          system("git", "-C", @repo_path, "worktree", "remove", "--force", worktree_path, exception: true)
+
+          # Create conflicting sqlite on main
+          FileUtils.mkdir_p(File.join(@repo_path, "storage"))
+          File.write(File.join(@repo_path, "storage", "test.sqlite3"), "main binary data (different)")
+          system("git", "-C", @repo_path, "add", "storage/test.sqlite3", exception: true)
+          system("git", "-C", @repo_path, "commit", "-m", "Add conflicting sqlite on main", exception: true)
+
+          # Without strip_binary_noise!, this would conflict
+          assert_nothing_raised { @provider.send(:merge_branch, branch) }
+          assert File.exist?(File.join(@repo_path, "new_feature.rb"))
+        ensure
+          cleanup = File.join(@repo_path, ".worktrees", "cleanup-#{branch}")
+          system("git", "-C", @repo_path, "worktree", "remove", "--force", cleanup) if Dir.exist?(cleanup)
+        end
+
+        test "ensure_gitignore! includes storage/ in auto-generated gitignore" do
+          branch = "test-gitignore-storage"
+          worktree_path = @provider.send(:setup_worktree, branch)
+
+          content = File.read(File.join(worktree_path, ".gitignore"))
+          assert_includes content, "storage/"
+        ensure
+          system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
+        end
+
+        # --- Bug B: merge failure handling in merge_results ---
+
+        test "merge_results catches MergeError per task and continues to next task" do
+          task1 = @pipeline_run.tasks.create!(title: "Task 1", description: "Desc 1", position: 0, external_id: "cc-1-a")
+          task2 = @pipeline_run.tasks.create!(title: "Task 2", description: "Desc 2", position: 1, external_id: "cc-1-b")
+
+          @provider.instance_variable_set(:@results, {
+            "cc-1-a" => { success: true, branch: "branch-a" },
+            "cc-1-b" => { success: true, branch: "branch-b" }
+          })
+
+          # First call raises MergeError, second succeeds
+          call_seq = sequence("merge_calls")
+          @provider.expects(:merge_branch).with("branch-a", task: task1).in_sequence(call_seq)
+            .raises(ClaudeCode::MergeError, "conflict")
+          @provider.expects(:merge_branch).with("branch-b", task: task2).in_sequence(call_seq)
+
+          @provider.merge_results(pipeline_run: @pipeline_run, tasks: [task1, task2])
+
+          # Task 1 should be failed, Task 2 should be untouched
+          task1.reload
+          assert_equal "failed", task1.status
+        end
+
+        test "merge_results clears result_diff on merge failure" do
+          task = @pipeline_run.tasks.create!(
+            title: "Task 1", description: "Desc", position: 0,
+            external_id: "cc-1-a",
+            result_diff: '[{"filename":"feature.rb","patch":"+code","status":"added"}]'
+          )
+
+          @provider.instance_variable_set(:@results, {
+            "cc-1-a" => { success: true, branch: "branch-a" }
+          })
+          @provider.stubs(:merge_branch).raises(ClaudeCode::MergeError, "sqlite conflict")
+
+          @provider.merge_results(pipeline_run: @pipeline_run, tasks: [task])
+
+          task.reload
+          assert_equal "[]", task.result_diff
+          assert_equal "failed", task.status
+          assert task.result_comments.any? { |c| c["body"]&.include?("Merge failed") }
+        end
+
+        test "merge_results marks merge_failed in internal results" do
+          task = @pipeline_run.tasks.create!(title: "Task 1", description: "Desc", position: 0, external_id: "cc-1-a")
+          stored = { success: true, branch: "branch-a" }
+          @provider.instance_variable_set(:@results, { "cc-1-a" => stored })
+          @provider.stubs(:merge_branch).raises(ClaudeCode::MergeError, "conflict")
+
+          @provider.merge_results(pipeline_run: @pipeline_run, tasks: [task])
+
+          assert stored[:merge_failed]
+        end
+
+        test "merge_results does not swallow non-MergeError exceptions" do
+          task = @pipeline_run.tasks.create!(title: "Task 1", description: "Desc", position: 0, external_id: "cc-1-a")
+          @provider.instance_variable_set(:@results, {
+            "cc-1-a" => { success: true, branch: "branch-a" }
+          })
+          @provider.stubs(:merge_branch).raises(RuntimeError, "unexpected error")
+
+          assert_raises(RuntimeError) do
+            @provider.merge_results(pipeline_run: @pipeline_run, tasks: [task])
+          end
         end
       end
     end

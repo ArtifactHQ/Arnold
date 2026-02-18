@@ -1602,6 +1602,41 @@ module ArnoldPipeline
       assert_equal "verification_tests_failed", gate_event[:summary][:decision_source]
     end
 
+    test "hollow test suite (0 runs) fails gate with verification_tests_hollow" do
+      event_recorder = build_recording_event_recorder
+
+      engine = TierExecutionEngine.new(
+        executor: @executor, tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL), event_recorder: event_recorder
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Setup DB", position: 0, tier: 0, description: "Create database",
+        external_id: "42", result_diff: '[{"filename":"schema.rb"}]'
+      )
+
+      verification_results = {
+        checks: [
+          { name: "tests", type: :test_suite, success: true,
+            stdout: "0 runs, 0 assertions, 0 failures, 0 errors, 0 skips", stderr: "", exit_code: 0 }
+        ],
+        all_passed: true,
+        summary: "1 passed"
+      }
+
+      result = engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+                  verification_results: verification_results)
+
+      refute result["pass"], "Hollow test suite should fail the gate"
+      assert result["issues"].any? { |i| i.include?("0 runs") }
+      assert result["corrective_tasks"].any? { |t| t["title"].include?("0 tests loaded") }
+
+      gate_event = event_recorder.events.find { |e| e[:event_type] == :tier_gate_evaluated }
+      assert_not_nil gate_event
+      assert_equal "verification_tests_hollow", gate_event[:summary][:decision_source]
+    end
+
     test "records decision_source verification_required_failed in event" do
       event_recorder = build_recording_event_recorder
 
@@ -2086,10 +2121,12 @@ module ArnoldPipeline
     end
 
     test "criteria_check event includes duration_ms" do
+      tmpdir = Dir.mktmpdir("arnold_criteria_event_test")
+
       pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :pending)
       task = pipeline_run.tasks.create!(
         title: "Setup", position: 0, tier: 1,
-        acceptance_criteria: [{ "type" => "file_exists", "description" => "Gemfile exists", "params" => { "path" => "Gemfile" } }]
+        acceptance_criteria: [{ "type" => "file_exists", "description" => "Gemfile exists", "params" => { "pattern" => "Gemfile" } }]
       )
 
       event_recorder = PipelineEventRecorder.new(pipeline_run:)
@@ -2099,7 +2136,7 @@ module ArnoldPipeline
       )
 
       ArnoldPipeline.configure do |c|
-        c.claude_code_repo_path = "/tmp/test-repo"
+        c.claude_code_repo_path = tmpdir
         c.tier_gate_enabled = true
         c.criteria_check_mode = :advisory
       end
@@ -2112,13 +2149,17 @@ module ArnoldPipeline
       assert_not_nil event, "Expected a criteria_check event"
       assert_not_nil event.duration_ms, "Expected duration_ms to be recorded"
       assert event.duration_ms >= 0
+    ensure
+      FileUtils.rm_rf(tmpdir) if tmpdir
     end
 
     test "criteria_check event includes mode field" do
+      tmpdir = Dir.mktmpdir("arnold_criteria_event_test")
+
       pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :pending)
       task = pipeline_run.tasks.create!(
         title: "Setup", position: 0, tier: 1,
-        acceptance_criteria: [{ "type" => "file_exists", "description" => "Gemfile exists", "params" => { "path" => "Gemfile" } }]
+        acceptance_criteria: [{ "type" => "file_exists", "description" => "Gemfile exists", "params" => { "pattern" => "Gemfile" } }]
       )
 
       event_recorder = PipelineEventRecorder.new(pipeline_run:)
@@ -2128,7 +2169,7 @@ module ArnoldPipeline
       )
 
       ArnoldPipeline.configure do |c|
-        c.claude_code_repo_path = "/tmp/test-repo"
+        c.claude_code_repo_path = tmpdir
         c.tier_gate_enabled = true
         c.criteria_check_mode = :advisory
       end
@@ -2139,6 +2180,8 @@ module ArnoldPipeline
 
       event = pipeline_run.pipeline_events.find_by(event_type: :criteria_check)
       assert_equal "advisory", event.summary["mode"]
+    ensure
+      FileUtils.rm_rf(tmpdir) if tmpdir
     end
 
     # --- extract_failure_summary ---

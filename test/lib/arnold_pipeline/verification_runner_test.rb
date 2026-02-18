@@ -136,6 +136,45 @@ module ArnoldPipeline
       assert result[:checks][0][:stdout].length <= 5000
     end
 
+    test "captures tail of stdout when output exceeds cap" do
+      # Create a script where the important content is at the END
+      tail_script = File.join(@tmpdir, "tail_test.sh")
+      # Emit 5500 chars of padding then the important summary line
+      File.write(tail_script, <<~BASH)
+        #!/bin/bash
+        printf 'x%.0s' {1..5500}
+        echo ""
+        echo "14 runs, 28 assertions, 1 failures, 0 errors, 0 skips"
+        exit 1
+      BASH
+      FileUtils.chmod(0o755, tail_script)
+
+      checks = [
+        VerificationCheck.new(name: "tail_check", command: tail_script)
+      ]
+
+      result = VerificationRunner.call(repo_path: @tmpdir, checks: checks)
+
+      stdout = result[:checks][0][:stdout]
+      assert stdout.length <= 5000
+      # The minitest summary line at the end MUST be preserved
+      assert_includes stdout, "14 runs, 28 assertions, 1 failures, 0 errors, 0 skips"
+    end
+
+    test "short output is not truncated by tail capture" do
+      short_script = File.join(@tmpdir, "short.sh")
+      File.write(short_script, "#!/bin/bash\necho 'hello world'\nexit 0\n")
+      FileUtils.chmod(0o755, short_script)
+
+      checks = [
+        VerificationCheck.new(name: "short", command: short_script)
+      ]
+
+      result = VerificationRunner.call(repo_path: @tmpdir, checks: checks)
+
+      assert_includes result[:checks][0][:stdout], "hello world"
+    end
+
     test "returns empty results when checks array is empty" do
       result = VerificationRunner.call(repo_path: @tmpdir, checks: [])
 

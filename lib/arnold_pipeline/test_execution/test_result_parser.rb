@@ -31,13 +31,15 @@ module ArnoldPipeline
 
         summary = "#{runs} runs, #{assertions} assertions, #{failures_count} failures, #{errors_count} errors"
         failures = extract_minitest_failures
+        hollow = runs == 0
 
         TestResult.new(
-          passed: failures_count == 0 && errors_count == 0,
+          passed: failures_count == 0 && errors_count == 0 && !hollow,
           exit_code: @exit_code,
           summary: summary,
           failures: failures,
-          framework: "minitest"
+          framework: "minitest",
+          hollow: hollow
         )
       end
 
@@ -69,13 +71,15 @@ module ArnoldPipeline
 
         summary = "#{examples} examples, #{failures_count} failures"
         failures = extract_rspec_failures
+        hollow = examples == 0
 
         TestResult.new(
-          passed: failures_count == 0,
+          passed: failures_count == 0 && !hollow,
           exit_code: @exit_code,
           summary: summary,
           failures: failures,
-          framework: "rspec"
+          framework: "rspec",
+          hollow: hollow
         )
       end
 
@@ -119,13 +123,15 @@ module ArnoldPipeline
 
         summary = "#{total} tests, #{passed} passed, #{failed} failed"
         failures = extract_jest_failures
+        hollow = total == 0
 
         TestResult.new(
-          passed: failed == 0,
+          passed: failed == 0 && !hollow,
           exit_code: @exit_code,
           summary: summary,
           failures: failures,
-          framework: "jest"
+          framework: "jest",
+          hollow: hollow
         )
       end
 
@@ -176,16 +182,19 @@ module ArnoldPipeline
         failed_count = failed_m ? failed_m[1].to_i : 0
         error_count = error_m ? error_m[1].to_i : 0
 
+        total = passed_count + failed_count + error_count
         summary = "#{passed_count} passed, #{failed_count} failed"
         summary += ", #{error_count} errors" if error_count > 0
         failures = extract_pytest_failures
+        hollow = total == 0
 
         TestResult.new(
-          passed: failed_count == 0 && error_count == 0,
+          passed: failed_count == 0 && error_count == 0 && !hollow,
           exit_code: @exit_code,
           summary: summary,
           failures: failures,
-          framework: "pytest"
+          framework: "pytest",
+          hollow: hollow
         )
       end
 

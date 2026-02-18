@@ -514,7 +514,7 @@ Verification results (all_passed, summary, and per-check details) are passed to 
 #### Scenario: Check Definition and Execution [SPEC-VCHECK-002]
 - GIVEN a verification check configured with:
   - `name: "Boot Check"`
-  - `command: "bin/rails runner 'ActiveRecord::Migration.check_all_pending!; puts Rails.version'"`
+  - `command: "bin/rails runner 'ActiveRecord::Migration.check_all_pending!; SolidQueue::Job rescue nil; puts Rails.version'"`
   - `type: :boot`
   - `required: true`
 - AND a tier has completed merge.

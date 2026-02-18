@@ -16,6 +16,7 @@ module ArnoldPipeline
                   :claude_code_repo_path, :claude_code_model,
                   :claude_code_max_turns, :claude_code_permission_mode,
                   :claude_code_max_concurrency,
+                  :claude_code_task_timeout,
                   :max_iterations, :analysis_done_threshold, :library_path,
                   :polling_interval, :polling_timeout, :polling_max_interval,
                   :tier_gate_enabled, :context_propagation_enabled, :max_tier_retries,
@@ -45,6 +46,7 @@ module ArnoldPipeline
       @claude_code_max_turns      = nil
       @claude_code_permission_mode = "bypassPermissions"
       @claude_code_max_concurrency = 4
+      @claude_code_task_timeout    = 30
       @max_iterations     = 3
       @analysis_done_threshold = nil
       @library_path       = nil
@@ -88,6 +90,14 @@ module ArnoldPipeline
       @llm_model || PROVIDER_DEFAULTS.dig(llm_provider, :model)
     end
 
+    def target_repo_path
+      @target_repo_path || @claude_code_repo_path
+    end
+
+    def target_repo_path=(path)
+      @target_repo_path = path
+    end
+
     def validate!(stop_after: nil)
       validate_llm_provider!
       validate_llm_api_key!
@@ -100,6 +110,7 @@ module ArnoldPipeline
       validate_workflow_branch_pattern!
       validate_test_timeout!
       validate_criteria_check_mode!
+      validate_claude_code_task_timeout!
       true
     end
 
@@ -175,6 +186,13 @@ module ArnoldPipeline
       return if VALID_CRITERIA_CHECK_MODES.include?(@criteria_check_mode)
 
       raise ConfigurationError, "criteria_check_mode must be one of: #{VALID_CRITERIA_CHECK_MODES.join(', ')}"
+    end
+
+    def validate_claude_code_task_timeout!
+      return if @claude_code_task_timeout.nil?
+      return if @claude_code_task_timeout.is_a?(Numeric) && @claude_code_task_timeout > 0
+
+      raise ConfigurationError, "claude_code_task_timeout must be nil or a positive number (minutes)."
     end
 
     def validate_polling_config!

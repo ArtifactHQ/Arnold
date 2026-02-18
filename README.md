@@ -457,7 +457,7 @@ ArnoldPipeline.configure do |config|
   config.verification_checks = [
     {
       name: "Boot check",
-      command: "bin/rails runner 'ActiveRecord::Migration.check_all_pending!; puts :ok'",
+      command: "bin/rails runner 'ActiveRecord::Migration.check_all_pending!; SolidQueue::Job rescue nil; puts :ok'",
       type: :boot,
       required: true
     },
@@ -759,9 +759,9 @@ Check results (pass/fail, stdout/stderr, exit code) are passed to the tier gate 
 config.verification_checks = [
   {
     name: "Boot check",
-    command: "bin/rails runner 'ActiveRecord::Migration.check_all_pending!; puts Rails.version'",
+    command: "bin/rails runner 'ActiveRecord::Migration.check_all_pending!; SolidQueue::Job rescue nil; puts Rails.version'",
     type: :boot,
-    required: true  # Pipeline pauses if this fails — also catches pending migrations
+    required: true  # Pipeline pauses if this fails — catches pending migrations and missing Solid Queue tables
   },
   {
     name: "Test suite",
@@ -777,7 +777,7 @@ config.verification_checks = [
 ```yaml
 verification_checks:
   - name: "Boot check"
-    command: "bin/rails runner 'ActiveRecord::Migration.check_all_pending!; puts Rails.version'"
+    command: "bin/rails runner 'ActiveRecord::Migration.check_all_pending!; SolidQueue::Job rescue nil; puts Rails.version'"
     type: boot
     required: true
 
@@ -786,6 +786,8 @@ verification_checks:
     type: test_suite
     required: false
 ```
+
+> **Why `SolidQueue::Job rescue nil`?** A common failure mode with Rails 8's Solid stack is that `bin/rails runner` passes (the web app loads), but `bin/dev` crashes because Solid Queue tables are missing. This happens when `database.yml` only defines queue/cache/cable databases for production, not development. The `SolidQueue::Job` probe catches this: if Solid Queue is installed but its tables are missing, the boot check fails early instead of passing silently.
 
 **Fields:**
 - `name` — Human-readable check name

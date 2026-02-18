@@ -468,12 +468,14 @@ module ArnoldPipeline
         c.max_tier_retries = yaml_config[:max_tier_retries] if yaml_config[:max_tier_retries]
         c.workflow_status_enabled = yaml_config[:workflow_status_enabled] unless yaml_config[:workflow_status_enabled].nil?
         c.claude_code_repo_path = yaml_config[:claude_code_repo_path] if yaml_config[:claude_code_repo_path]
+        c.target_repo_path = yaml_config[:target_repo_path] if yaml_config[:target_repo_path]
         c.claude_code_model = yaml_config[:claude_code_model] if yaml_config[:claude_code_model]
         c.claude_code_max_turns = yaml_config[:claude_code_max_turns] if yaml_config[:claude_code_max_turns]
         c.claude_code_permission_mode = yaml_config[:claude_code_permission_mode] if yaml_config[:claude_code_permission_mode]
         c.openspec_enabled = yaml_config[:openspec_enabled] unless yaml_config[:openspec_enabled].nil?
         c.openspec_cli_path = yaml_config[:openspec_cli_path] if yaml_config[:openspec_cli_path]
         c.claude_code_max_concurrency = yaml_config[:claude_code_max_concurrency] if yaml_config[:claude_code_max_concurrency]
+        c.claude_code_task_timeout = yaml_config[:claude_code_task_timeout] if yaml_config[:claude_code_task_timeout]
         c.post_merge_hooks = yaml_config[:post_merge_hooks]&.map { |h| h.transform_keys(&:to_s) } || [] if yaml_config.key?(:post_merge_hooks)
         c.verification_checks = yaml_config[:verification_checks]&.map { |h| h.transform_keys(&:to_s) } || [] if yaml_config.key?(:verification_checks)
         c.spec_test_generation_enabled = yaml_config[:spec_test_generation_enabled] unless yaml_config[:spec_test_generation_enabled].nil?

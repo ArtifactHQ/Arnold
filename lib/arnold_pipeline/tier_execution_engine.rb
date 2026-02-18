@@ -271,7 +271,28 @@ module ArnoldPipeline
         exit_code: test_check[:exit_code]
       )
 
-      if test_suite_passed?(verification_results)
+      if test_result.hollow
+        # Zero test runs — tests not loading. Treat as gate failure with warning.
+        logger.warn { "[Arnold] Test suite exited with 0 runs — hollow pass detected" }
+        issues = ["Test suite passed with 0 runs, 0 assertions — tests may not be loading or discovered"]
+        context_summary = build_fail_context_summary(verification_results, acceptance_criteria_summary)
+        result = build_failed_gate_result(
+          tier_num: tier_num, issues: issues,
+          corrective_tasks: [{
+            "title" => "Fix test suite: 0 tests loaded",
+            "description" => "The test suite exited successfully but ran 0 tests with 0 assertions. " \
+              "This means tests are not being loaded or discovered. Check that:\n" \
+              "- Test files exist and follow naming conventions\n" \
+              "- Test helper/config loads the correct paths\n" \
+              "- There are no silent load errors hiding test classes",
+            "labels" => ["test-fix", "critical"]
+          }],
+          context_summary: context_summary
+        )
+        log_gate_result(tier_num, result)
+        record_gate_event(tier_num, result, diffs, task_summaries, "verification_tests_hollow")
+        result
+      elsif test_suite_passed?(verification_results)
         # Tests passed — gate PASSES, criteria are advisory
         context_summary = build_pass_context_summary(verification_results, acceptance_criteria_summary)
         result = build_passed_gate_result(tier_num: tier_num, context_summary: context_summary)
@@ -819,10 +840,10 @@ module ArnoldPipeline
 
       return nil if all_criteria.empty?
 
-      repo_path = ArnoldPipeline.configuration.claude_code_repo_path
-      return nil unless repo_path
+      repo_path = ArnoldPipeline.configuration.target_repo_path
+      return nil unless repo_path && !repo_path.to_s.strip.empty? && Dir.exist?(repo_path)
 
-      logger.info { "[Arnold] Running criteria check (#{all_criteria.size} criteria)..." }
+      logger.info { "[Arnold] Running criteria check (#{all_criteria.size} criteria, repo: #{repo_path})..." }
       all_criteria.each { |c| logger.debug { "[Arnold]   [#{c.type}] #{c.description}" } }
 
       check_result = if event_recorder
