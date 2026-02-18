@@ -6,6 +6,8 @@ require "fileutils"
 
 module ArnoldPipeline
   class CriteriaCheckerTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::CriteriaChecker*"
+
     setup do
       @repo_path = Dir.mktmpdir("arnold_criteria_test")
     end

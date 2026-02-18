@@ -1,0 +1,33 @@
+---
+usage: opensource
+
+environment_variables:
+  RAILS_ENV: test
+
+includes:
+  - lib
+  - test
+
+requires:
+  - ./test/dummy/config/environment
+  - ./config/mutant_bootstrap
+  - mutant/minitest/coverage
+
+integration:
+  name: minitest
+
+mutation:
+  timeout: 10.0
+
+matcher:
+  subjects:
+    - ArnoldPipeline*
+  ignore:
+    - ArnoldPipeline::Prompts*
+    - ArnoldPipeline::AnsiColor
+    - ArnoldPipeline::LogFormatter
+    - ArnoldPipeline::Engine
+    - ArnoldPipeline::Providers::Execution::GitHub
+    - ArnoldPipeline::Providers::Execution::ClaudeCode
+
+jobs: 4

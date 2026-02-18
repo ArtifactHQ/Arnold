@@ -3,6 +3,8 @@ require "arnold_pipeline/delta_merger"
 
 module ArnoldPipeline
   class DeltaMergerTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::DeltaMerger*"
+
     setup do
       @merger = DeltaMerger.new(logger: Logger.new(File::NULL))
 

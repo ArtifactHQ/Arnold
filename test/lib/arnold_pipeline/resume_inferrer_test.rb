@@ -3,6 +3,8 @@ require "arnold_pipeline/resume_inferrer"
 
 module ArnoldPipeline
   class ResumeInferrerTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::ResumeInferrer*"
+
     test "returns generate_spec when no specification exists" do
       pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :paused)
 

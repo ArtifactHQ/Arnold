@@ -3,6 +3,8 @@ require "arnold_pipeline/verification_check"
 
 module ArnoldPipeline
   class VerificationCheckTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::VerificationCheck*"
+
     test "defaults type to :custom" do
       check = VerificationCheck.new(name: "lint", command: "rubocop")
       assert_equal :custom, check.type

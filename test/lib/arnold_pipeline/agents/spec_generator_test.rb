@@ -5,6 +5,8 @@ require "arnold_pipeline/library/manager"
 module ArnoldPipeline
   module Agents
     class SpecGeneratorTest < ActiveSupport::TestCase
+      cover "ArnoldPipeline::Agents::SpecGenerator*"
+
       setup do
         @llm = stub("llm")
         @agent = SpecGenerator.new(llm: @llm, logger: Logger.new(File::NULL))

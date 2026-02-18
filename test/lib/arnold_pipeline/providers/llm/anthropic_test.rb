@@ -6,6 +6,8 @@ module ArnoldPipeline
   module Providers
     module Llm
       class AnthropicTest < ActiveSupport::TestCase
+        cover "ArnoldPipeline::Providers::Llm::Anthropic*"
+
         setup do
           @provider = Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-20250514")
         end

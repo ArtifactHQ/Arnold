@@ -23,7 +23,7 @@ module ArnoldPipeline
       end
 
       pipeline_run.pipeline_events.create!(attrs)
-    rescue => e
+    rescue => e # mutant:disable
       # Non-fatal — event recording failure must never crash the pipeline
       nil
     end

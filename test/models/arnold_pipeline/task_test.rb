@@ -2,6 +2,8 @@ require "test_helper"
 
 module ArnoldPipeline
   class TaskTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::Task*"
+
     setup do
       @run = PipelineRun.create!(nl_input: "Build a todo app")
     end

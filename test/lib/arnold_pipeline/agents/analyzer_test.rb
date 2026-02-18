@@ -6,6 +6,8 @@ require "json_schemer"
 module ArnoldPipeline
   module Agents
     class AnalyzerTest < ActiveSupport::TestCase
+      cover "ArnoldPipeline::Agents::Analyzer*"
+
       setup do
         @llm = stub("llm")
         @agent = Analyzer.new(llm: @llm, logger: Logger.new(File::NULL))

@@ -8,6 +8,8 @@ module ArnoldPipeline
     end
 
     class BaseAgentTest < ActiveSupport::TestCase
+      cover "ArnoldPipeline::Agents::BaseAgent*"
+
       setup do
         @llm = stub("llm")
         @agent = TestableAgent.new(llm: @llm, logger: Logger.new(File::NULL))

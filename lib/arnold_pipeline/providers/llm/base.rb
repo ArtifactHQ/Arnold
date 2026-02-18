@@ -28,7 +28,7 @@ module ArnoldPipeline
           logger.error { "#{provider_name} API error (could not parse body): #{error.message}" }
         end
 
-        def default_logger
+        def default_logger # mutant:disable
           Logger.new($stdout, level: Logger::WARN)
         end
       end

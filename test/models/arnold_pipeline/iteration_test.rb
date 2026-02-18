@@ -2,6 +2,8 @@ require "test_helper"
 
 module ArnoldPipeline
   class IterationTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::Iteration*"
+
     setup do
       @run = PipelineRun.create!(nl_input: "Build a todo app")
     end

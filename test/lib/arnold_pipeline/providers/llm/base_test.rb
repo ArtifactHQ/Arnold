@@ -5,6 +5,8 @@ module ArnoldPipeline
   module Providers
     module Llm
       class BaseTest < ActiveSupport::TestCase
+        cover "ArnoldPipeline::Providers::Llm::Base*"
+
         test "build creates Anthropic provider" do
           ArnoldPipeline.configure do |c|
             c.llm_provider = :anthropic

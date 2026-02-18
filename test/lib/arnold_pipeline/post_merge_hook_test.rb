@@ -3,6 +3,8 @@ require "arnold_pipeline/post_merge_hook"
 
 module ArnoldPipeline
   class PostMergeHookTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::PostMergeHook*"
+
     test "triggered_by? matches glob patterns against changed files" do
       hook = PostMergeHook.new(
         name: "bundler",

@@ -4,6 +4,8 @@ require "arnold_pipeline/agents/executor"
 module ArnoldPipeline
   module Agents
     class ExecutorTest < ActiveSupport::TestCase
+      cover "ArnoldPipeline::Agents::Executor*"
+
       setup do
         @provider = stub("execution_provider")
         @executor = Executor.new(provider: @provider, logger: Logger.new(File::NULL))

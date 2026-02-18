@@ -5,6 +5,8 @@ require "json_schemer"
 module ArnoldPipeline
   module Agents
     class SpecTestGeneratorTest < ActiveSupport::TestCase
+      cover "ArnoldPipeline::Agents::SpecTestGenerator*"
+
       setup do
         @llm = stub("llm")
         @agent = SpecTestGenerator.new(llm: @llm, logger: Logger.new(File::NULL))

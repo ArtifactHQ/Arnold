@@ -6,6 +6,8 @@ require "json_schemer"
 module ArnoldPipeline
   module Agents
     class TaskBreakerTest < ActiveSupport::TestCase
+      cover "ArnoldPipeline::Agents::TaskBreaker*"
+
       setup do
         @llm = stub("llm")
         @agent = TaskBreaker.new(llm: @llm, logger: Logger.new(File::NULL))
