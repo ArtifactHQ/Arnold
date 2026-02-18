@@ -1238,6 +1238,32 @@ module ArnoldPipeline
           assert status.success?
         end
 
+        test "spawn_with_timeout closes pipes when Process.spawn raises" do
+          Process.stubs(:spawn).raises(Errno::ENOENT, "No such file or directory")
+
+          assert_raises(Errno::ENOENT) do
+            @provider.send(
+              :spawn_with_timeout, "nonexistent_command",
+              worktree_path: "/nonexistent/path", timeout_minutes: 1
+            )
+          end
+        end
+
+        test "drain_pipe returns immediately when pipe has no writers" do
+          r, w = IO.pipe
+          w.write("buffered data")
+          w.close
+
+          start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          output = @provider.send(:drain_pipe, r, timeout_seconds: 5)
+          elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start
+
+          assert_equal "buffered data", output
+          assert elapsed < 1, "drain_pipe should return immediately when pipe is closed, took #{elapsed}s"
+        ensure
+          r&.close unless r&.closed?
+        end
+
         test "execute_claude_code marks task as failed with execution_timeout on timeout" do
           ArnoldPipeline.configure { |c| c.claude_code_task_timeout = 0.01 }
 

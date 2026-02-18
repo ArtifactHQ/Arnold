@@ -282,10 +282,33 @@ module ArnoldPipeline
             sleep 5
           end
 
-          output = stdout_r.read
-          stdout_r.close
+          output = if timed_out
+            drain_pipe(stdout_r, timeout_seconds: 5)
+          else
+            stdout_r.read
+          end
 
           timed_out ? [output, nil] : [output, status]
+        ensure
+          stdout_r&.close unless stdout_r&.closed?
+          stdout_w&.close unless stdout_w&.closed?
+        end
+
+        # Reads remaining data from a pipe with a bounded timeout.
+        # Returns immediately when all writers have closed; caps at timeout_seconds
+        # if a grandchild process still holds the write end open.
+        def drain_pipe(io, timeout_seconds:)
+          output = +""
+          deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout_seconds
+          loop do
+            remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+            break if remaining <= 0
+            break unless IO.select([io], nil, nil, [remaining, 1].min)
+            chunk = io.read_nonblock(65536, exception: false)
+            break if chunk.nil? || chunk == :wait_readable
+            output << chunk
+          end
+          output
         end
 
         def kill_process_group(pid)
