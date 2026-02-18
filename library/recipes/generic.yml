@@ -22,12 +22,87 @@ framework:
   deployment: Kamal 2
 
 verification:
-  setup_command: "bin/setup"
-  run_command: "bin/dev"
-  health_check: "http://localhost:3000/up"
+  setup_commands:
+    - bin/setup
+  boot_command: bin/rails server -p 3000 -d
+  health_checks:
+    - url: "http://localhost:3000/up"
+      expected_status: 200
+  test_command: bin/rails test:all
+  cleanup_command: kill $(cat tmp/pids/server.pid)
 
 sections:
+  - name: Local Development
+    phase: pipeline
+    description: >
+      Development environment setup that ensures the project boots and
+      runs locally with zero external dependencies. This is the
+      foundation for pipeline iteration — every tier gate check depends
+      on the project being bootable. When the project type is unclear,
+      default to a Rails app that starts with bin/dev.
+    rails_tools:
+      - bin/setup (Rails default setup script)
+      - bin/dev (Procfile.dev via foreman)
+      - SQLite (Rails 8 default, zero-dependency database)
+      - Solid Queue, Solid Cache, Solid Cable (zero-dependency defaults)
+    guidance:
+      - The bootstrap task (task 0) MUST produce a project that starts with bin/dev or an equivalent single command
+      - bin/setup MUST run successfully (bundle install + db:prepare) with no manual steps
+      - Use SQLite for development and test databases (Rails 8 default)
+      - Create db/seeds.rb with meaningful demo data for all core models
+      - Create .env.example listing optional integration variables (none required to boot)
+      - The app MUST have a root route or primary entry point that responds immediately after bootstrap
+      - All external service integrations MUST work without ENV vars in development (use stubs or graceful nil handling)
+      - For non-Rails Ruby projects, bundle exec bin/TOOLNAME --help MUST work after bundle install
+      - Do NOT generate tasks for production hosting, domain config, or SSL during pipeline execution
+    solid_stack_setup: >
+      Rails 8 Solid Queue, Solid Cache, and Solid Cable each require their
+      own SQLite database in development. Only install the Solid gems the
+      app actually needs. The bootstrap task MUST configure any installed
+      Solid component correctly or the app will crash at runtime.
+
+      Required bootstrap steps for each Solid component used:
+
+      1. Run the install generators for ONLY the components needed:
+           bin/rails solid_queue:install     (if background jobs are used)
+           bin/rails solid_cache:install     (if caching is used)
+           bin/rails solid_cable:install     (if Action Cable is used)
+
+      2. Verify database.yml has entries for ALL environments, not just
+         production. After running the generators, database.yml should
+         include the relevant databases under development. Example for
+         Solid Queue:
+
+           development:
+             primary:
+               <<: *default
+               database: storage/development.sqlite3
+             queue:
+               <<: *default
+               database: storage/development_queue.sqlite3
+               migrations_paths: db/queue_migrate
+
+      3. Verify config/application.rb (not just production.rb) contains
+         the connects_to directives so they apply in all environments:
+           config.solid_queue.connects_to = { database: { writing: :queue } }
+
+      4. Run bin/rails db:prepare to create and load schemas for all
+         databases.
+
+      Common failure mode: The generators sometimes only add database
+      entries under the production section of database.yml, and place
+      connects_to config in config/environments/production.rb only. The
+      bootstrap task MUST verify these exist in the development section
+      and in application.rb (or development.rb) before considering setup
+      complete.
+
+      If the app does not need a particular Solid component, skip it
+      entirely rather than installing it and leaving it misconfigured.
+      For simple apps, config.active_job.queue_adapter = :async avoids
+      Solid Queue setup entirely (runs jobs in-process).
+
   - name: Core Features
+    phase: pipeline
     description: >
       Primary functionality and user-facing features. Define the
       happy-path workflows and key interactions.
@@ -38,6 +113,7 @@ sections:
       - Identify which Rails conventions (resources, scaffold) apply
 
   - name: Data Model
+    phase: pipeline
     description: >
       Data structures, storage, relationships, and integrity rules.
     rails_tools:
@@ -49,8 +125,11 @@ sections:
       - Use database-level constraints alongside ActiveRecord validations
       - Plan for soft deletes if data has audit or recovery value
       - Identify which models need versioning or history tracking
+      - Use SQLite-compatible column types and queries in development
+      - Include seed data for every model in db/seeds.rb
 
   - name: User Interface
+    phase: pipeline
     description: >
       Screens, navigation, layouts, and interaction patterns.
     rails_tools:
@@ -64,6 +143,7 @@ sections:
       - Keep JavaScript minimal and Stimulus-driven
 
   - name: Integration
+    phase: pipeline
     description: >
       External services, APIs, and third-party dependencies.
     guidance:
@@ -71,41 +151,41 @@ sections:
       - Plan for service outages with fallbacks and circuit breakers
       - Use ActiveJob for async external calls that can be retried
       - Store API keys in Rails encrypted credentials
-
-  - name: Local Development
-    description: >
-      Bootstrapping scripts, development database, and single-command
-      startup for immediate local execution.
-    rails_tools:
-      - bin/setup (first-time dependency install and database preparation)
-      - bin/dev with Procfile.dev (multi-process startup)
-      - db/seeds.rb (demo data)
-    guidance:
-      - Use SQLite for development database — zero external dependencies
-      - Use Solid Queue, Solid Cache, Solid Cable — no Redis needed
-      - bin/setup must handle bundle install, db:prepare, and asset compilation
-      - Procfile.dev must list all processes (web, job worker)
-      - Create .env.example documenting any optional environment variables
-      - Include meaningful seed data with documented demo credentials
-      - Development MUST work with zero environment variables configured
+      - All integrations MUST degrade gracefully when credentials are absent in development
 
   - name: Testing
+    phase: pipeline
+    tier_placement: final
     description: >
-      Test strategy, coverage targets, and test data.
+      Test strategy, coverage targets, and test data. Tests are
+      generated as a final-tier task and must be runnable locally
+      with zero external dependencies. The spec's GIVEN/WHEN/THEN
+      scenarios are the primary source for integration and system
+      test cases.
     rails_tools:
       - Minitest (default) or RSpec
-      - Capybara (system tests)
+      - Capybara with headless Chrome (system tests)
       - Fixtures or FactoryBot
     guidance:
+      - The LAST task in the pipeline SHOULD generate integration and system tests derived from the spec's GIVEN/WHEN/THEN scenarios
+      - All tests MUST pass with bin/rails test:all (or bundle exec rake test) using only local resources
+      - System tests MUST use headless Chrome (driven_by :selenium, using: :headless_chrome)
+      - No test may depend on network access, deployed services, or production credentials
       - Test critical business logic in model tests
       - Test core user flows with system tests
       - Aim for confidence in deploy safety, not arbitrary coverage numbers
       - Keep test suite fast enough to run on every commit
-    tier_placement: final
+      - Mock external APIs with WebMock — never call real services in tests
+      - Use fixtures or factories that mirror db/seeds.rb structure
 
   - name: Configuration & Deployment
+    phase: post_pipeline
     description: >
-      Settings, environment management, and production infrastructure.
+      Production settings, environment management, and infrastructure.
+      This section is NOT executed during pipeline iterations. Tasks
+      derived from this section should only be generated after the
+      implementation has passed analysis and the pipeline has converged
+      on a working local build.
     rails_tools:
       - Rails credentials (encrypted secrets)
       - Kamal 2 (deployment)
@@ -115,4 +195,5 @@ sections:
       - Store all secrets in encrypted credentials
       - Plan deployment strategy early, even for MVP
       - Set up basic error tracking and logging from the start
-    phase: post_pipeline
+      - DO NOT generate deployment tasks during pipeline iterations
+      - Deployment configuration is deferred until the project passes all tier gates and analysis

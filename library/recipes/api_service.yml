@@ -26,12 +26,84 @@ framework:
   deployment: Kamal 2
 
 verification:
-  setup_command: "bin/setup"
-  run_command: "bin/dev"
-  health_check: "http://localhost:3000/up"
+  setup_commands:
+    - bin/setup
+  boot_command: bin/rails server -p 3000 -d
+  health_checks:
+    - url: "http://localhost:3000/up"
+      expected_status: 200
+    - url: "http://localhost:3000/api/v1/health"
+      expected_status: 200
+  test_command: bin/rails test
+  cleanup_command: kill $(cat tmp/pids/server.pid)
 
 sections:
+  - name: Local Development
+    phase: pipeline
+    description: >
+      Development environment setup that ensures the API boots and
+      responds locally with zero external dependencies. This is the
+      foundation for pipeline iteration — every tier gate check depends
+      on the API being bootable and returning valid JSON.
+    rails_tools:
+      - bin/setup (Rails default setup script)
+      - SQLite (Rails 8 default, zero-dependency database)
+      - Solid Queue (zero-dependency job backend)
+    guidance:
+      - The bootstrap task (task 0) MUST produce a project that starts with bin/rails server
+      - bin/setup MUST run successfully (bundle install + db:prepare) with no manual steps
+      - Use SQLite for development and test databases (Rails 8 default)
+      - Create db/seeds.rb with demo data for all core API resources
+      - Create .env.example listing optional integration variables (none required to boot)
+      - The /up health check endpoint MUST respond 200 immediately after bootstrap
+      - Create an API-specific health endpoint (e.g., /api/v1/health) that returns JSON
+      - All external service integrations MUST work without ENV vars in development (use stubs or graceful nil handling)
+      - Do NOT generate tasks for production hosting, domain config, or SSL during pipeline execution
+    solid_stack_setup: >
+      Rails 8 Solid Queue (and Solid Cache if used) each require their own
+      SQLite database in development. The bootstrap task MUST configure
+      these correctly or the app will crash when any background job or
+      cache write is triggered. API-mode apps typically need Solid Queue
+      but may skip Solid Cache and Solid Cable unless specifically required.
+
+      Required bootstrap steps for the Solid stack:
+
+      1. Run the install generators for needed components only:
+           bin/rails solid_queue:install
+           bin/rails solid_cache:install    (only if caching is needed)
+
+      2. Verify database.yml has entries for ALL environments, not just
+         production. After running the generators, database.yml should
+         include the queue database under development:
+
+           development:
+             primary:
+               <<: *default
+               database: storage/development.sqlite3
+             queue:
+               <<: *default
+               database: storage/development_queue.sqlite3
+               migrations_paths: db/queue_migrate
+
+      3. Verify config/application.rb (not just production.rb) contains
+         the connects_to directives so they apply in all environments:
+           config.solid_queue.connects_to = { database: { writing: :queue } }
+
+      4. Run bin/rails db:prepare to create and load schemas for all
+         databases including queue.
+
+      Common failure mode: The generators sometimes only add database
+      entries under the production section of database.yml, and place
+      connects_to config in config/environments/production.rb only. The
+      bootstrap task MUST verify these exist in the development section
+      and in application.rb (or development.rb) before considering setup
+      complete.
+
+      If the app does not need background jobs, skip Solid Queue entirely
+      rather than installing it and leaving it misconfigured.
+
   - name: Endpoints & Routing
+    phase: pipeline
     description: >
       RESTful resource routes, versioned API namespaces, request/response
       schemas, and pagination.
@@ -47,6 +119,7 @@ sections:
       - Define clear request/response schemas before implementation
 
   - name: Authentication & Authorization
+    phase: pipeline
     description: >
       API key management, token-based auth (JWT or session tokens),
       OAuth flows for third-party access, and scoped permissions.
@@ -60,8 +133,10 @@ sections:
       - Scope permissions per token or per API key
       - Return 401 for missing auth, 403 for insufficient permissions
       - Log all authentication events for audit
+      - Seed at least one API key or test user token in db/seeds.rb for local testing
 
   - name: Models & Data Layer
+    phase: pipeline
     description: >
       ActiveRecord models, database schema, query optimization,
       and data integrity rules.
@@ -73,8 +148,11 @@ sections:
       - Design models for API consumption (avoid leaking internal structure)
       - Use serializers to control exactly what fields are exposed
       - Plan for soft deletes on user-facing resources
+      - Use SQLite-compatible column types and queries in development
+      - Include seed data for every model in db/seeds.rb
 
   - name: Middleware & Cross-Cutting Concerns
+    phase: pipeline
     description: >
       Rate limiting, CORS configuration, request logging, error
       handling, and request validation.
@@ -89,8 +167,10 @@ sections:
       - Return structured error JSON with error codes, not just messages
       - Log request/response metadata for debugging (not sensitive data)
       - Use rescue_from in base controller for consistent error responses
+      - In development, CORS should allow localhost origins for local testing
 
   - name: Background Jobs & Webhooks
+    phase: pipeline
     description: >
       Async processing for heavy operations and outbound webhook
       delivery to consumers.
@@ -103,8 +183,10 @@ sections:
       - Implement webhook delivery with retries and exponential backoff
       - Make all jobs idempotent; use unique job keys to prevent duplicates
       - Provide webhook signature verification for consumers
+      - Solid Queue runs in-process via Puma plugin in development — no separate process needed
 
   - name: Documentation & Developer Experience
+    phase: pipeline
     description: >
       API documentation, interactive exploration, and onboarding
       for consumers.
@@ -117,41 +199,37 @@ sections:
       - Document error codes and their meanings
       - Provide a Postman collection or equivalent for quick testing
 
-  - name: Local Development
-    description: >
-      Bootstrapping scripts, development database, and single-command
-      startup for immediate local execution.
-    rails_tools:
-      - bin/setup (first-time dependency install and database preparation)
-      - bin/dev with Procfile.dev (multi-process startup)
-      - db/seeds.rb (demo data)
-    guidance:
-      - Use SQLite for development database — zero external dependencies
-      - Use Solid Queue, Solid Cache, Solid Cable — no Redis needed
-      - bin/setup must handle bundle install, db:prepare, and asset compilation
-      - Procfile.dev must list all processes (web, job worker)
-      - Create .env.example documenting any optional environment variables
-      - Include meaningful seed data with documented demo credentials
-      - Development MUST work with zero environment variables configured
-
   - name: Testing
+    phase: pipeline
+    tier_placement: final
     description: >
       Request specs, contract testing, and integration tests for
-      all API endpoints.
+      all API endpoints. Tests are generated as a final-tier task
+      and must be runnable locally with zero external dependencies.
+      The spec's GIVEN/WHEN/THEN scenarios are the primary source for
+      integration test cases.
     rails_tools:
-      - Minitest or RSpec (request specs)
+      - Minitest (default) with request specs
       - Fixtures or FactoryBot
-      - Rswag (spec-driven API testing)
     guidance:
+      - The LAST task in the pipeline SHOULD generate integration tests derived from the spec's GIVEN/WHEN/THEN scenarios
+      - All tests MUST pass with bin/rails test using only local resources
+      - No test may depend on network access, deployed services, or production credentials
       - Write request specs for every endpoint and status code path
       - Test authentication and authorization edge cases explicitly
       - Validate JSON response structure, not just status codes
-      - Test rate limiting behavior under load
-    tier_placement: final
+      - Test rate limiting behavior
+      - Mock external APIs with WebMock or VCR — never call real services in tests
+      - Use fixtures or factories that mirror db/seeds.rb structure
 
   - name: Deployment & Infrastructure
+    phase: post_pipeline
     description: >
       Production deployment, scaling, monitoring, and health checks.
+      This section is NOT executed during pipeline iterations. Tasks
+      derived from this section should only be generated after the
+      implementation has passed analysis and the pipeline has converged
+      on a working local build.
     rails_tools:
       - Kamal 2 (deployment)
       - Thruster (HTTP/2 proxy)
@@ -161,4 +239,5 @@ sections:
       - Use Kamal for rolling deploys with health check gates
       - Plan horizontal scaling strategy (stateless controllers)
       - Monitor API response times and error rates from day one
-    phase: post_pipeline
+      - DO NOT generate deployment tasks during pipeline iterations
+      - Deployment configuration is deferred until the project passes all tier gates and analysis

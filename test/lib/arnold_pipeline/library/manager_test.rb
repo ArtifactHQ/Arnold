@@ -61,9 +61,11 @@ module ArnoldPipeline
       test "recipe verification loaded as Hash with expected keys" do
         recipe = @manager.find_recipe("Build a responsive web dashboard")
         assert_kind_of Hash, recipe.verification
-        assert_equal "bin/setup", recipe.verification["setup_command"]
-        assert_equal "bin/dev", recipe.verification["run_command"]
-        assert_equal "http://localhost:3000/up", recipe.verification["health_check"]
+        assert_kind_of Array, recipe.verification["setup_commands"]
+        assert_includes recipe.verification["setup_commands"], "bundle install"
+        assert_equal "bin/rails server -p 3000 -d", recipe.verification["boot_command"]
+        assert_kind_of Array, recipe.verification["health_checks"]
+        assert_equal "http://localhost:3000/up", recipe.verification["health_checks"].first["url"]
       end
 
       test "find_persona matches software architect keywords" do

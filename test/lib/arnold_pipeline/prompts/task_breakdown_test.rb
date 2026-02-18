@@ -138,9 +138,10 @@ module ArnoldPipeline
       test "system_prompt includes verification context" do
         prompt = TaskBreakdown.system_prompt(recipe: @recipe)
         assert_includes prompt, "## Verification"
-        assert_includes prompt, "Setup: `bin/setup`"
-        assert_includes prompt, "Run: `bin/dev`"
-        assert_includes prompt, "Health check: `http://localhost:3000/up`"
+        assert_includes prompt, "bundle install"
+        assert_includes prompt, "bin/rails server -p 3000 -d"
+        assert_includes prompt, "http://localhost:3000/up"
+        assert_includes prompt, "bin/rails test:all"
       end
 
       test "system_prompt includes local execution requirements" do
