@@ -1131,6 +1131,64 @@ module ArnoldPipeline
       File.delete(user_config_file) if user_config_file && File.exist?(user_config_file)
     end
 
+    # --- Doctor command tests ---
+
+    test "doctor command outputs health check results" do
+      original_anthropic = ENV["ANTHROPIC_API_KEY"]
+      ENV["ANTHROPIC_API_KEY"] = "sk-ant-test"
+
+      output = capture_output { Cli.start(["doctor"]) }
+
+      assert_match(/Arnold Doctor/, output)
+      assert_match(/Ruby/, output)
+      assert_match(/Git/, output)
+      assert_match(/API key/, output)
+      assert_match(/SQLite/, output)
+    ensure
+      ENV["ANTHROPIC_API_KEY"] = original_anthropic
+      ArnoldPipeline.reset_configuration!
+    end
+
+    test "doctor shows pass count summary" do
+      original_anthropic = ENV["ANTHROPIC_API_KEY"]
+      ENV["ANTHROPIC_API_KEY"] = "sk-ant-test"
+
+      output = capture_output { Cli.start(["doctor"]) }
+
+      assert_match(/\d+ passed/, output)
+    ensure
+      ENV["ANTHROPIC_API_KEY"] = original_anthropic
+      ArnoldPipeline.reset_configuration!
+    end
+
+    test "doctor exits with 0 when all required checks pass" do
+      original_anthropic = ENV["ANTHROPIC_API_KEY"]
+      ENV["ANTHROPIC_API_KEY"] = "sk-ant-test"
+
+      # Should not raise SystemExit
+      output = capture_output { Cli.start(["doctor"]) }
+      assert_match(/passed/, output)
+    ensure
+      ENV["ANTHROPIC_API_KEY"] = original_anthropic
+      ArnoldPipeline.reset_configuration!
+    end
+
+    test "doctor exits with 1 when required check fails" do
+      original_anthropic = ENV["ANTHROPIC_API_KEY"]
+      original_openai = ENV["OPENAI_API_KEY"]
+      ENV.delete("ANTHROPIC_API_KEY")
+      ENV.delete("OPENAI_API_KEY")
+      ArnoldPipeline.reset_configuration!
+
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start(["doctor"]) }
+      end
+    ensure
+      ENV["ANTHROPIC_API_KEY"] = original_anthropic if original_anthropic
+      ENV["OPENAI_API_KEY"] = original_openai if original_openai
+      ArnoldPipeline.reset_configuration!
+    end
+
     private
 
     def with_user_config_path(path)

@@ -398,6 +398,52 @@ module ArnoldPipeline
       say "arnold_pipeline #{ArnoldPipeline::VERSION}"
     end
 
+    desc "doctor", "Check environment health and dependencies"
+    def doctor
+      require "arnold_pipeline/cli/doctor"
+
+      # Load user config so API keys from config file are detected
+      if File.exist?(USER_CONFIG_PATH)
+        user_config = YAML.safe_load_file(USER_CONFIG_PATH, symbolize_names: true)
+        apply_config!(user_config)
+      end
+
+      results = CliModule::Doctor.run_all
+
+      say "Arnold Doctor", :green
+      say "-" * 40
+
+      results.each do |check|
+        indicator = case check.status
+        when :pass then set_color("\u2713", :green)
+        when :warn then set_color("!", :yellow)
+        when :fail then set_color("\u2717", :red)
+        when :skip then set_color("\u2014", :cyan)
+        end
+
+        say "#{indicator} #{check.name}: #{check.message}"
+        say "  \u2192 #{check.fix}" if check.fix && check.status != :pass
+      end
+
+      say ""
+      pass_count = results.count { |r| r.status == :pass }
+      warn_count = results.count { |r| r.status == :warn }
+      fail_count = results.count { |r| r.status == :fail }
+      skip_count = results.count { |r| r.status == :skip }
+
+      parts = []
+      parts << "#{pass_count} passed" if pass_count > 0
+      parts << "#{warn_count} warnings" if warn_count > 0
+      parts << "#{fail_count} failed" if fail_count > 0
+      parts << "#{skip_count} optional skipped" if skip_count > 0
+      say parts.join(", ")
+
+      unless CliModule::Doctor.all_required_passed?(results)
+        say "\nFix required issues above to use Arnold.", :red
+        raise SystemExit.new(1)
+      end
+    end
+
     private
 
     def setup_standalone!
