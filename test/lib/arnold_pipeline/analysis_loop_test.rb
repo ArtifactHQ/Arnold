@@ -3,6 +3,8 @@ require "arnold_pipeline/orchestrator"
 
 module ArnoldPipeline
   class AnalysisLoopTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::AnalysisLoop*"
+
     setup do
       @library_manager = Library::Manager.new
       @analyzer = stub("analyzer")

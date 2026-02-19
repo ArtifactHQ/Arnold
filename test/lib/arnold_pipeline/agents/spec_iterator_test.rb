@@ -4,6 +4,8 @@ require "arnold_pipeline/agents/spec_iterator"
 module ArnoldPipeline
   module Agents
     class SpecIteratorTest < ActiveSupport::TestCase
+      cover "ArnoldPipeline::Agents::SpecIterator*"
+
       setup do
         @llm = stub("llm")
         @agent = SpecIterator.new(llm: @llm, logger: Logger.new(File::NULL))

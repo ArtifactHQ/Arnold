@@ -127,7 +127,7 @@ module ArnoldPipeline
         obj.inspect
       end
 
-      def default_logger
+      def default_logger # mutant:disable
         Logger.new($stdout, level: Logger::WARN)
       end
     end

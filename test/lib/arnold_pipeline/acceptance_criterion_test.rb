@@ -3,6 +3,8 @@ require "arnold_pipeline/acceptance_criterion"
 
 module ArnoldPipeline
   class AcceptanceCriterionTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::AcceptanceCriterion*"
+
     test "from_hash creates criterion with type and description" do
       criterion = AcceptanceCriterion.from_hash(
         "type" => "file_exists",

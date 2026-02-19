@@ -3,6 +3,8 @@ require "arnold_pipeline/pipeline_event_recorder"
 
 module ArnoldPipeline
   class PipelineEventRecorderTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::PipelineEventRecorder*"
+
     setup do
       @run = PipelineRun.create!(nl_input: "Build a todo app")
       @recorder = PipelineEventRecorder.new(pipeline_run: @run)

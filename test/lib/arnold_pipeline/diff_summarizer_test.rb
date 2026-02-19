@@ -3,6 +3,8 @@ require "arnold_pipeline/diff_summarizer"
 
 module ArnoldPipeline
   class DiffSummarizerTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::DiffSummarizer*"
+
     setup do
       ArnoldPipeline.reset_configuration!
     end

@@ -2,6 +2,8 @@ require "test_helper"
 
 module ArnoldPipeline
   class SpecDeltaTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::SpecDelta*"
+
     setup do
       @run = PipelineRun.create!(nl_input: "Build a todo app")
       @spec = @run.create_specification!(content: "# Spec", version: 1)

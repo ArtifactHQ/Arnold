@@ -2,6 +2,8 @@ require "test_helper"
 
 module ArnoldPipeline
   class ConfigurationTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::Configuration*"
+
     setup do
       @config = Configuration.new
     end

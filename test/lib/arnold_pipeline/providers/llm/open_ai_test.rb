@@ -6,6 +6,8 @@ module ArnoldPipeline
   module Providers
     module Llm
       class OpenAiTest < ActiveSupport::TestCase
+        cover "ArnoldPipeline::Providers::Llm::OpenAi*"
+
         setup do
           @provider = OpenAi.new(api_key: "sk-test-key", model: "gpt-4")
         end

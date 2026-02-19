@@ -2,6 +2,8 @@ require "test_helper"
 
 module ArnoldPipeline
   class PipelineRunTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::PipelineRun*"
+
     test "requires nl_input" do
       run_record = PipelineRun.new(nl_input: nil)
       assert_not run_record.valid?

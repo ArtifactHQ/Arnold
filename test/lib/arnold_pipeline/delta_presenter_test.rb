@@ -3,6 +3,8 @@ require "arnold_pipeline/delta_presenter"
 
 module ArnoldPipeline
   class DeltaPresenterTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::DeltaPresenter*"
+
     test "to_s includes version numbers in header" do
       presenter = DeltaPresenter.new([], from_version: 1, to_version: 2)
 

@@ -2,6 +2,8 @@ require "test_helper"
 
 module ArnoldPipeline
   class TaskSubstantiveCommentsTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::Task*"
+
     setup do
       @run = PipelineRun.create!(nl_input: "Build an app")
     end

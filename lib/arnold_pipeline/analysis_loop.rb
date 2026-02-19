@@ -275,7 +275,7 @@ module ArnoldPipeline
 
       rate = (passing.to_f / total * 100).round(1)
       "Spec test coverage: #{passing}/#{total} passing (#{rate}%)"
-    rescue => e
+    rescue => e # mutant:disable
       logger.warn { "[Arnold] Failed to build spec test progress summary: #{e.message}" }
       nil
     end

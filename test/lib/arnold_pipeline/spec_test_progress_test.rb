@@ -3,6 +3,8 @@ require "arnold_pipeline/spec_test_progress"
 
 module ArnoldPipeline
   class SpecTestProgressTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::SpecTestProgress*"
+
     test "initializes with defaults" do
       progress = SpecTestProgress.new(total_tests: 10, total_passing: 3)
 

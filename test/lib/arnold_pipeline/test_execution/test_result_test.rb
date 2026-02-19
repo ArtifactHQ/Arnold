@@ -4,6 +4,8 @@ require "arnold_pipeline/test_execution/test_result"
 module ArnoldPipeline
   module TestExecution
     class TestResultTest < ActiveSupport::TestCase
+      cover "ArnoldPipeline::TestExecution::TestResult*"
+
       test "passed result with defaults" do
         result = TestResult.new(
           passed: true,

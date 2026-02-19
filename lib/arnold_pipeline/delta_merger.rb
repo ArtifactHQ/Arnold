@@ -66,7 +66,7 @@ module ArnoldPipeline
         change_source:,
         delta_summary: summary
       )
-    rescue => e
+    rescue => e # mutant:disable
       logger.warn { "[Arnold] Failed to snapshot revision: #{e.message}" }
     end
 

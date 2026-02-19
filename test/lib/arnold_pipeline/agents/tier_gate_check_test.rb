@@ -5,6 +5,8 @@ require "json_schemer"
 module ArnoldPipeline
   module Agents
     class TierGateCheckTest < ActiveSupport::TestCase
+      cover "ArnoldPipeline::Agents::TierGateCheck*"
+
       setup do
         @llm = stub("llm")
         @agent = TierGateCheck.new(llm: @llm, logger: Logger.new(File::NULL))

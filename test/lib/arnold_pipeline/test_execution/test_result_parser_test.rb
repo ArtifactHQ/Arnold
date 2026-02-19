@@ -5,6 +5,8 @@ require "arnold_pipeline/test_execution/test_result_parser"
 module ArnoldPipeline
   module TestExecution
     class TestResultParserTest < ActiveSupport::TestCase
+      cover "ArnoldPipeline::TestExecution::TestResultParser*"
+
       # --- Minitest ---
 
       test "parses minitest passing output" do

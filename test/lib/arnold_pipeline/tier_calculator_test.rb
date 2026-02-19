@@ -3,6 +3,8 @@ require "arnold_pipeline/tier_calculator"
 
 module ArnoldPipeline
   class TierCalculatorTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::TierCalculator*"
+
     setup do
       @pipeline_run = PipelineRun.create!(nl_input: "Build an app")
     end

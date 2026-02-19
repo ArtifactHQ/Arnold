@@ -5,6 +5,8 @@ require "tmpdir"
 
 module ArnoldPipeline
   class PostMergeHookRunnerTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::PostMergeHookRunner*"
+
     setup do
       @tmpdir = Dir.mktmpdir("post_merge_hook_runner_test")
       system("git", "init", @tmpdir, out: File::NULL, err: File::NULL)

@@ -6,6 +6,8 @@ module ArnoldPipeline
   module Providers
     module Execution
       class NullProviderTest < ActiveSupport::TestCase
+        cover "ArnoldPipeline::Providers::Execution::Null*"
+
         include SharedProviderTests
 
         def provider_instance

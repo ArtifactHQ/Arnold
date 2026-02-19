@@ -4,6 +4,8 @@ require "arnold_pipeline/test_execution/test_result"
 
 module ArnoldPipeline
   class CorrectiveTaskGeneratorTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::CorrectiveTaskGenerator*"
+
     setup do
       @llm = stub("llm")
       @diffs = "diff --git a/app/models/user.rb\n+class User\n+end"

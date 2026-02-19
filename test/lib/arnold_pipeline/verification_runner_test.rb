@@ -6,6 +6,8 @@ require "fileutils"
 
 module ArnoldPipeline
   class VerificationRunnerTest < ActiveSupport::TestCase
+    cover "ArnoldPipeline::VerificationRunner*"
+
     setup do
       @tmpdir = Dir.mktmpdir("verification_runner_test")
 
