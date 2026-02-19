@@ -13,6 +13,7 @@ module ArnoldPipeline
 
     STANDALONE_DB_DIR = File.expand_path("~/.arnold_pipeline")
     STANDALONE_DB_PATH = File.join(STANDALONE_DB_DIR, "pipeline.sqlite3")
+    USER_CONFIG_PATH = File.join(STANDALONE_DB_DIR, "config.yml")
 
     desc "run DESCRIPTION", "Run the full pipeline from a natural language description"
     option :config, type: :string, desc: "Path to YAML config file"
@@ -429,11 +430,19 @@ module ArnoldPipeline
     end
 
     def load_config!(options)
+      # Auto-load user config (lowest priority)
+      if File.exist?(USER_CONFIG_PATH)
+        user_config = YAML.safe_load_file(USER_CONFIG_PATH, symbolize_names: true)
+        apply_config!(user_config)
+      end
+
+      # Explicit --config overrides user config
       if options[:config]
         yaml_config = YAML.safe_load_file(options[:config], symbolize_names: true)
         apply_config!(yaml_config)
       end
 
+      # CLI flags override everything
       ArnoldPipeline.configure do |c|
         c.llm_provider = options[:provider].to_sym if options[:provider]
         c.llm_model = options[:model] if options[:model]

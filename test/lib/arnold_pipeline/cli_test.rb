@@ -1039,7 +1039,109 @@ module ArnoldPipeline
       assert_match(/5\.0m/, output)
     end
 
+    # --- User config auto-load tests ---
+
+    test "load_config! auto-loads user config when present" do
+      user_config_file = File.join(Dir.tmpdir, "arnold_user_config_#{SecureRandom.hex(4)}.yml")
+      File.write(user_config_file, YAML.dump("llm_provider" => "openai", "llm_model" => "gpt-4o"))
+
+      mock_run = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:call).returns(mock_run)
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+
+      with_user_config_path(user_config_file) do
+        capture_output { Cli.start(["run", "Build a todo app"]) }
+      end
+
+      assert_equal :openai, ArnoldPipeline.configuration.llm_provider
+      assert_equal "gpt-4o", ArnoldPipeline.configuration.llm_model
+    ensure
+      ArnoldPipeline.reset_configuration!
+      File.delete(user_config_file) if user_config_file && File.exist?(user_config_file)
+    end
+
+    test "load_config! explicit --config overrides user config" do
+      user_config_file = File.join(Dir.tmpdir, "arnold_user_config_#{SecureRandom.hex(4)}.yml")
+      File.write(user_config_file, YAML.dump("llm_model" => "gpt-4o", "llm_provider" => "openai"))
+
+      explicit_config_file = File.join(Dir.tmpdir, "arnold_explicit_config_#{SecureRandom.hex(4)}.yml")
+      File.write(explicit_config_file, YAML.dump("llm_model" => "claude-sonnet-4-20250514"))
+
+      mock_run = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:call).returns(mock_run)
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+
+      with_user_config_path(user_config_file) do
+        capture_output { Cli.start(["run", "Build an app", "--config", explicit_config_file]) }
+      end
+
+      # Explicit config should override the user config value for llm_model
+      assert_equal "claude-sonnet-4-20250514", ArnoldPipeline.configuration.llm_model
+      # User config value for llm_provider should still be applied (explicit config didn't set it)
+      assert_equal :openai, ArnoldPipeline.configuration.llm_provider
+    ensure
+      ArnoldPipeline.reset_configuration!
+      File.delete(user_config_file) if user_config_file && File.exist?(user_config_file)
+      File.delete(explicit_config_file) if explicit_config_file && File.exist?(explicit_config_file)
+    end
+
+    test "load_config! skips user config when file does not exist" do
+      nonexistent_path = File.join(Dir.tmpdir, "arnold_nonexistent_#{SecureRandom.hex(8)}.yml")
+
+      mock_run = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:call).returns(mock_run)
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+
+      default_provider = ArnoldPipeline.configuration.llm_provider
+      default_model = ArnoldPipeline.configuration.llm_model
+
+      with_user_config_path(nonexistent_path) do
+        capture_output { Cli.start(["run", "Build an app"]) }
+      end
+
+      # Defaults should remain unchanged
+      assert_equal default_provider, ArnoldPipeline.configuration.llm_provider
+      assert_equal default_model, ArnoldPipeline.configuration.llm_model
+    ensure
+      ArnoldPipeline.reset_configuration!
+    end
+
+    test "load_config! CLI flags override user config" do
+      user_config_file = File.join(Dir.tmpdir, "arnold_user_config_#{SecureRandom.hex(4)}.yml")
+      File.write(user_config_file, YAML.dump("llm_model" => "gpt-4o", "llm_provider" => "openai"))
+
+      mock_run = PipelineRun.create!(nl_input: "Build an app", status: :completed)
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:call).returns(mock_run)
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+
+      with_user_config_path(user_config_file) do
+        capture_output { Cli.start(["run", "Build an app", "--model", "custom-model"]) }
+      end
+
+      # CLI flag should override user config
+      assert_equal "custom-model", ArnoldPipeline.configuration.llm_model
+      # User config value not overridden by CLI flag should still apply
+      assert_equal :openai, ArnoldPipeline.configuration.llm_provider
+    ensure
+      ArnoldPipeline.reset_configuration!
+      File.delete(user_config_file) if user_config_file && File.exist?(user_config_file)
+    end
+
     private
+
+    def with_user_config_path(path)
+      original = ArnoldPipeline::Cli::USER_CONFIG_PATH
+      ArnoldPipeline::Cli.send(:remove_const, :USER_CONFIG_PATH)
+      ArnoldPipeline::Cli.const_set(:USER_CONFIG_PATH, path)
+      yield
+    ensure
+      ArnoldPipeline::Cli.send(:remove_const, :USER_CONFIG_PATH)
+      ArnoldPipeline::Cli.const_set(:USER_CONFIG_PATH, original)
+    end
 
     def capture_output
       original_stdout = $stdout
