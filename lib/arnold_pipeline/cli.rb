@@ -420,6 +420,7 @@ module ArnoldPipeline
 
     desc "doctor", "Check environment health and dependencies"
     def doctor
+      require "arnold_pipeline"
       require "arnold_pipeline/cli/doctor"
 
       # Load user config so API keys from config file are detected
