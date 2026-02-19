@@ -293,6 +293,7 @@ module ArnoldPipeline
 
     test "run --dry-run shows summary without executing" do
       mock_run = PipelineRun.create!(nl_input: "Build a recipe app", status: :paused)
+      mock_run.create_specification!(content: "# Recipe App Spec", version: 1)
       mock_run.tasks.create!(title: "Setup project", tier: 0, position: 0, status: :pending)
       mock_run.tasks.create!(title: "Add models", tier: 1, position: 1, status: :pending)
       mock_run.tasks.create!(title: "Add views", tier: 1, position: 2, status: :pending)
@@ -301,29 +302,35 @@ module ArnoldPipeline
       mock_orchestrator.expects(:call).with(nl_input: "Build a recipe app", stop_after: :tasks).returns(mock_run)
 
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+      require "arnold_pipeline/cli/setup_wizard"
+      ArnoldPipeline::CliModule::SetupWizard.stubs(:api_key_available?).returns(true)
 
       output = capture_output { Cli.start(["run", "--dry-run", "Build a recipe app"]) }
 
-      assert_match(/DRY RUN/, output)
-      assert_match(/Execution provider: github/, output)
-      assert_match(/Repository:.*not configured/, output)
-      assert_match(/Tasks to create: 3/, output)
-      assert_match(/Tier 0: 1 task/, output)
-      assert_match(/Tier 1: 2 tasks/, output)
+      assert_match(/Arnold Preview/, output)
+      assert_match(/# Recipe App Spec/, output)
+      assert_match(/3 tasks, 2 tiers/, output)
+      assert_match(/Tier 0/, output)
+      assert_match(/Tier 1/, output)
       assert_match(/Run without --preview to execute/, output)
+    ensure
+      ArnoldPipeline.reset_configuration!
     end
 
-    test "run --preview shows configured execution provider name" do
+    test "run --preview always uses null execution provider regardless of CLI flags" do
       mock_run = PipelineRun.create!(nl_input: "Build an app", status: :paused)
+      mock_run.create_specification!(content: "# Spec", version: 1)
       mock_run.tasks.create!(title: "Setup", tier: 0, position: 0, status: :pending)
 
       mock_orchestrator = mock("orchestrator")
-      mock_orchestrator.expects(:call).returns(mock_run)
+      mock_orchestrator.expects(:call).with(nl_input: "Build an app", stop_after: :tasks).returns(mock_run)
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+      require "arnold_pipeline/cli/setup_wizard"
+      ArnoldPipeline::CliModule::SetupWizard.stubs(:api_key_available?).returns(true)
 
       output = capture_output { Cli.start(["run", "--preview", "--execution-provider", "claude_code", "Build an app"]) }
-      assert_match(/Execution provider: claude_code/, output)
-      assert_match(/Repo path:.*not configured/, output)
+      assert_equal :null, ArnoldPipeline.configuration.execution_provider
+      assert_match(/Arnold Preview/, output)
     ensure
       ArnoldPipeline.reset_configuration!
     end
@@ -1037,6 +1044,79 @@ module ArnoldPipeline
       output = capture_output { Cli.start(["log", run_record.id.to_s]) }
 
       assert_match(/5\.0m/, output)
+    end
+
+    test "run --preview auto-sets null provider and stop_after tasks" do
+      mock_run = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
+      mock_run.create_specification!(content: "# Todo App Spec", version: 1)
+      mock_run.tasks.create!(title: "Setup", tier: 0, position: 0, status: :pending)
+
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:call).with(nl_input: "Build a todo app", stop_after: :tasks).returns(mock_run)
+
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+      require "arnold_pipeline/cli/setup_wizard"
+      ArnoldPipeline::CliModule::SetupWizard.stubs(:api_key_available?).returns(true)
+
+      output = capture_output { Cli.start(["run", "--preview", "Build a todo app"]) }
+
+      assert_equal :null, ArnoldPipeline.configuration.execution_provider
+      assert_match(/Arnold Preview/, output)
+      assert_match(/# Todo App Spec/, output)
+    ensure
+      ArnoldPipeline.reset_configuration!
+    end
+
+    test "run --preview prints formatted spec and task breakdown" do
+      mock_run = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
+      mock_run.create_specification!(content: "# Todo App\n\n## Purpose\nA simple todo list.", version: 1)
+      mock_run.tasks.create!(title: "Setup DB", description: "Create tables", tier: 0, position: 0, status: :pending)
+      mock_run.tasks.create!(title: "Add API", description: "REST endpoints", tier: 1, position: 1, status: :pending, depends_on: [0])
+
+      mock_orchestrator = mock("orchestrator")
+      mock_orchestrator.expects(:call).returns(mock_run)
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
+      require "arnold_pipeline/cli/setup_wizard"
+      ArnoldPipeline::CliModule::SetupWizard.stubs(:api_key_available?).returns(true)
+
+      output = capture_output { Cli.start(["run", "--preview", "Build a todo app"]) }
+
+      assert_match(/# Todo App/, output)
+      assert_match(/2 tasks, 2 tiers/, output)
+      assert_match(/Tier 0/, output)
+      assert_match(/Setup DB/, output)
+      assert_match(/Tier 1/, output)
+      assert_match(/Add API/, output)
+      assert_match(/depends on: 0/, output)
+      assert_match(/Run without --preview to execute/, output)
+    ensure
+      ArnoldPipeline.reset_configuration!
+    end
+
+    test "run --preview exits with error when no API key and non-interactive" do
+      original_anthropic = ENV["ANTHROPIC_API_KEY"]
+      original_openai = ENV["OPENAI_API_KEY"]
+      ENV.delete("ANTHROPIC_API_KEY")
+      ENV.delete("OPENAI_API_KEY")
+      ArnoldPipeline.reset_configuration!
+
+      require "arnold_pipeline/cli/setup_wizard"
+      ArnoldPipeline::CliModule::SetupWizard.stubs(:api_key_available?).returns(false)
+
+      stderr_output = capture_stderr_through_exit { Cli.start(["run", "--preview", "test"]) }
+      assert_match(/No API key found/, stderr_output)
+    ensure
+      ENV["ANTHROPIC_API_KEY"] = original_anthropic if original_anthropic
+      ENV["OPENAI_API_KEY"] = original_openai if original_openai
+      ArnoldPipeline.reset_configuration!
+    end
+
+    test "run shows doctor hint on ConfigurationError" do
+      ArnoldPipeline::Orchestrator.stubs(:new).raises(ArnoldPipeline::ConfigurationError, "LLM API key is required")
+
+      stderr_output = capture_stderr_through_exit { Cli.start(["run", "Build an app"]) }
+      assert_match(/Configuration error:.*LLM API key is required/, stderr_output)
+      assert_match(/arnold doctor/, stderr_output)
     end
 
     # --- User config auto-load tests ---

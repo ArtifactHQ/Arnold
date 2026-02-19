@@ -1,5 +1,6 @@
 require "test_helper"
 require "arnold_pipeline/cli"
+require "arnold_pipeline/orchestrator"
 
 module ArnoldPipeline
   class CliConfigTest < ActiveSupport::TestCase
@@ -50,20 +51,24 @@ module ArnoldPipeline
       refute ArnoldPipeline.configuration.tier_gate_enabled
     end
 
-    test "run --dry-run shows accurate message about execution provider" do
+    test "run --dry-run shows preview output with spec and tasks" do
       mock_run = PipelineRun.create!(nl_input: "Build an app", status: :paused)
+      mock_run.create_specification!(content: "# App Spec", version: 1)
       mock_run.tasks.create!(title: "Setup", tier: 0, position: 0, status: :pending)
 
       mock_orchestrator = mock("orchestrator")
-      mock_orchestrator.expects(:call).returns(mock_run)
+      mock_orchestrator.expects(:call).with(nl_input: "Build an app", stop_after: :tasks).returns(mock_run)
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
-      ArnoldPipeline.configure { |c| c.github_repo = "test/repo" }
+      require "arnold_pipeline/cli/setup_wizard"
+      ArnoldPipeline::CliModule::SetupWizard.stubs(:api_key_available?).returns(true)
 
       output = capture_output { Cli.start(["run", "--dry-run", "Build an app"]) }
-      assert_match(/DRY RUN/, output)
-      assert_match(/not published to execution provider/, output)
-      assert_match(/Repository: test\/repo/, output)
-      refute_match(/no changes will be made/, output)
+      assert_match(/Arnold Preview/, output)
+      assert_match(/# App Spec/, output)
+      assert_match(/1 tasks, 1 tiers/, output)
+      assert_match(/Run without --preview to execute/, output)
+    ensure
+      ArnoldPipeline.reset_configuration!
     end
 
     test "load_config! sets execution_provider from CLI flag" do
