@@ -29,4 +29,5 @@ Gem::Specification.new do |spec|
   spec.add_dependency "ruby-openai", "~> 7.0"
   spec.add_dependency "octokit", "~> 9.0"
   spec.add_dependency "faraday-retry", "~> 2.0"
+  spec.add_dependency "tty-prompt", "~> 0.23"
 end
