@@ -1217,13 +1217,16 @@ module ArnoldPipeline
       original_anthropic = ENV["ANTHROPIC_API_KEY"]
       ENV["ANTHROPIC_API_KEY"] = "sk-ant-test"
 
-      output = capture_output { Cli.start(["doctor"]) }
+      nonexistent_config = File.join(Dir.tmpdir, "arnold_nonexistent_#{SecureRandom.hex(8)}.yml")
+      with_user_config_path(nonexistent_config) do
+        output = capture_output { Cli.start(["doctor"]) }
 
-      assert_match(/Arnold Doctor/, output)
-      assert_match(/Ruby/, output)
-      assert_match(/Git/, output)
-      assert_match(/API key/, output)
-      assert_match(/SQLite/, output)
+        assert_match(/Arnold Doctor/, output)
+        assert_match(/Ruby/, output)
+        assert_match(/Git/, output)
+        assert_match(/API key/, output)
+        assert_match(/SQLite/, output)
+      end
     ensure
       ENV["ANTHROPIC_API_KEY"] = original_anthropic
       ArnoldPipeline.reset_configuration!
@@ -1233,9 +1236,12 @@ module ArnoldPipeline
       original_anthropic = ENV["ANTHROPIC_API_KEY"]
       ENV["ANTHROPIC_API_KEY"] = "sk-ant-test"
 
-      output = capture_output { Cli.start(["doctor"]) }
+      nonexistent_config = File.join(Dir.tmpdir, "arnold_nonexistent_#{SecureRandom.hex(8)}.yml")
+      with_user_config_path(nonexistent_config) do
+        output = capture_output { Cli.start(["doctor"]) }
 
-      assert_match(/\d+ passed/, output)
+        assert_match(/\d+ passed/, output)
+      end
     ensure
       ENV["ANTHROPIC_API_KEY"] = original_anthropic
       ArnoldPipeline.reset_configuration!
@@ -1245,9 +1251,12 @@ module ArnoldPipeline
       original_anthropic = ENV["ANTHROPIC_API_KEY"]
       ENV["ANTHROPIC_API_KEY"] = "sk-ant-test"
 
-      # Should not raise SystemExit
-      output = capture_output { Cli.start(["doctor"]) }
-      assert_match(/passed/, output)
+      nonexistent_config = File.join(Dir.tmpdir, "arnold_nonexistent_#{SecureRandom.hex(8)}.yml")
+      with_user_config_path(nonexistent_config) do
+        # Should not raise SystemExit
+        output = capture_output { Cli.start(["doctor"]) }
+        assert_match(/passed/, output)
+      end
     ensure
       ENV["ANTHROPIC_API_KEY"] = original_anthropic
       ArnoldPipeline.reset_configuration!
@@ -1260,8 +1269,11 @@ module ArnoldPipeline
       ENV.delete("OPENAI_API_KEY")
       ArnoldPipeline.reset_configuration!
 
-      assert_raises(SystemExit) do
-        capture_output_and_errors { Cli.start(["doctor"]) }
+      nonexistent_config = File.join(Dir.tmpdir, "arnold_nonexistent_#{SecureRandom.hex(8)}.yml")
+      with_user_config_path(nonexistent_config) do
+        assert_raises(SystemExit) do
+          capture_output_and_errors { Cli.start(["doctor"]) }
+        end
       end
     ensure
       ENV["ANTHROPIC_API_KEY"] = original_anthropic if original_anthropic
