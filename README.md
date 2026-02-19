@@ -42,12 +42,20 @@ Max 3 iterations, then stop. <70% confidence flags for human review.
 
 ## Quick Start (Standalone CLI)
 
-**With GitHub (default):**
+**Try it in 60 seconds (preview mode):**
 
 ```bash
 gem install arnold_pipeline
-
 export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY=sk-...
+
+arnold run "Build a todo list app with user auth and real-time updates" --preview
+```
+
+Preview mode generates a spec and task breakdown without any execution provider. No GitHub token, no Claude Code CLI, no repo — just the gem and an API key. If no API key is found, Arnold prompts you to enter one interactively.
+
+**With GitHub (default):**
+
+```bash
 export GITHUB_TOKEN=ghp_...
 
 arnold run "Build a todo list app with user auth and real-time updates" --repo owner/repo
@@ -60,10 +68,7 @@ arnold run "Build a todo list app" --provider openai --repo owner/repo
 **With Claude Code (local execution):**
 
 ```bash
-gem install arnold_pipeline
 npm install -g @anthropic-ai/claude-code
-
-export ANTHROPIC_API_KEY=sk-ant-...
 
 mkdir my-app && cd my-app && git init
 arnold run "Build a todo list app with user auth and real-time updates" \
@@ -88,6 +93,8 @@ npm install -g @fission-ai/openspec   # Requires Node.js
 When installed, Arnold uses OpenSpec's merge engine during `iterate_spec` decisions for surgical spec updates (adding, modifying, or removing individual requirements). Without it, Arnold falls back to appending structured sections — functional but less precise. See [OpenSpec Integration](#openspec-integration) for details.
 
 The CLI stores pipeline runs in a standalone SQLite database at `~/.arnold_pipeline/pipeline.sqlite3`. This is created automatically on first use and migrations are applied each time the CLI starts.
+
+**User config file:** Arnold auto-loads `~/.arnold_pipeline/config.yml` on every CLI invocation. This is the lowest-priority config source — `--config FILE` overrides it, and CLI flags override everything. Use `arnold run --preview` to interactively set up your API key and save it to this file.
 
 ## Execution Providers
 
@@ -134,6 +141,7 @@ arnold list [options]                # List all runs
 arnold spec ID [options]             # Export a run's specification
 arnold tasks ID [options]            # Export a run's tasks
 arnold log ID [options]              # Show event audit trail
+arnold doctor                        # Check environment health
 arnold version                       # Show version
 arnold tree                          # Print command tree
 
