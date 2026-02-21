@@ -261,6 +261,15 @@ module ArnoldPipeline
         }
       )
 
+      pipeline_run.update!(metadata: (pipeline_run.metadata || {}).merge(
+        "library_selections" => {
+          "persona" => persona&.name,
+          "recipe" => recipe&.name,
+          "supporting_recipes" => supporting_recipes&.map(&:name),
+          "domain_type" => domain_type&.code
+        }
+      ))
+
       @event_recorder&.timed(
         event_type: :spec_generated, stage: "spec_generation",
         summary: ->(r) { { spec_version: r ? 1 : nil, content_length: r&.dig(:content)&.length, has_structured_data: r&.dig(:structured_data).present? } },

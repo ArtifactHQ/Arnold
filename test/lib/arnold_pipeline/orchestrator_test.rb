@@ -329,6 +329,22 @@ module ArnoldPipeline
       assert_equal :execute, stage, "Should infer execute stage when tasks have active workflows"
     end
 
+    test "generate_spec! stores library_selections in pipeline_run metadata" do
+      stub_spec_generation!
+
+      result = @orchestrator.call(nl_input: "Build a todo app", stop_after: :spec)
+
+      result.reload
+      selections = result.metadata["library_selections"]
+      assert_not_nil selections, "Expected library_selections to be stored in metadata"
+      assert_includes selections.keys, "persona"
+      assert_includes selections.keys, "recipe"
+      assert_includes selections.keys, "supporting_recipes"
+      assert_includes selections.keys, "domain_type"
+      assert selections["persona"].is_a?(String), "persona should be a string"
+      assert selections["domain_type"].is_a?(String), "domain_type should be a string"
+    end
+
     test "break_tasks passes recipe context from structured_data" do
       stub_spec_generation!(recipe_type: "web_app", supporting_recipe_types: ["api_service"])
 

@@ -1,0 +1,105 @@
+module ArnoldPipeline
+  module Services
+    class ClaudeMdGenerator
+      def self.call(persona:, recipe:, domain_type:)
+        new(persona:, recipe:, domain_type:).generate
+      end
+
+      def initialize(persona:, recipe:, domain_type:)
+        @persona = persona
+        @recipe = recipe
+        @domain_type = domain_type
+      end
+
+      def generate
+        sections = []
+        sections << "# Project Instructions"
+        sections << tech_stack_section
+        sections << conventions_section
+        sections << testing_section
+        sections << domain_context_section
+        sections << terminology_section
+        sections << watch_for_section
+
+        sections.compact.join("\n\n")
+      end
+
+      private
+
+      def tech_stack_section
+        framework = @recipe&.framework
+        return nil if framework.nil? || framework.empty?
+
+        lines = framework.map { |key, value| "- **#{key.capitalize}:** #{value}" }
+        "## Tech Stack\n\n#{lines.join("\n")}"
+      end
+
+      def conventions_section
+        return nil unless @recipe&.sections&.any?
+
+        guidance_items = @recipe.sections
+          .select { |s| s["phase"] == "pipeline" }
+          .flat_map { |s| s["guidance"] || [] }
+          .compact
+
+        return nil if guidance_items.empty?
+
+        lines = guidance_items.map { |g| "- #{g}" }
+        "## Conventions\n\n#{lines.join("\n")}"
+      end
+
+      def testing_section
+        verification = @recipe&.verification
+        return nil if verification.nil? || verification.empty?
+
+        lines = []
+        lines << "- **Test command:** #{verification["test_command"]}" if verification["test_command"]
+
+        if (setup = verification["setup_commands"])&.any?
+          lines << "- **Setup:** #{setup.join(", ")}"
+        end
+
+        lines << "- **Boot command:** #{verification["boot_command"]}" if verification["boot_command"]
+
+        if (checks = verification["health_checks"])&.any?
+          checks.each do |check|
+            lines << "- **Health check:** GET #{check["url"]} → #{check["expected_status"]}"
+          end
+        end
+
+        return nil if lines.empty?
+
+        "## Testing\n\n#{lines.join("\n")}"
+      end
+
+      def domain_context_section
+        return nil unless @domain_type
+
+        lines = []
+        lines << "- **Domain:** #{@domain_type.name}"
+        lines << "- **Primary value:** #{@domain_type.primary_value}" if @domain_type.primary_value&.present?
+
+        if @domain_type.emphasis.any?
+          lines << "- **Priorities:**"
+          @domain_type.emphasis.each { |e| lines << "  - #{e}" }
+        end
+
+        "## Domain Context\n\n#{lines.join("\n")}"
+      end
+
+      def terminology_section
+        return nil unless @domain_type&.terminology&.any?
+
+        lines = @domain_type.terminology.map { |from, to| "- #{from} → #{to}" }
+        "## Terminology\n\n#{lines.join("\n")}"
+      end
+
+      def watch_for_section
+        return nil unless @domain_type&.watch_for&.any?
+
+        lines = @domain_type.watch_for.map { |w| "- #{w}" }
+        "## Watch For\n\n#{lines.join("\n")}"
+      end
+    end
+  end
+end
