@@ -128,6 +128,13 @@ Arnold dispatches tasks directly to the Claude Code CLI on your local machine. E
 - `ANTHROPIC_API_KEY` set in environment (used by both Arnold's LLM calls and Claude Code's own execution)
 - A local git repository to operate on
 
+**Claude Code provider features:**
+
+- **JSON output parsing** — The provider runs Claude Code with `--output-format json` and parses the structured response to extract cost, duration, turns, model, and session_id as `execution_metadata` on task records. This metadata is available for analysis and auditing after each task completes.
+- **Library-driven CLAUDE.md generation** — Each worktree gets a generated `CLAUDE.md` assembled from the Library's persona, recipe, and domain type YAML files. When the target repo already has a `CLAUDE.md`, the generated file is written to `.claude/CLAUDE.md` instead. New Library additions flow through automatically.
+- **System prompt separation** — Behavioral instructions (test running, commit rules, working directory constraints) are sent via `--append-system-prompt`, while task content is the main prompt. This preserves Claude Code's built-in instructions.
+- **Failure diagnostics** — When a task fails, Claude's final message is captured as a comment for the analysis agent, providing visibility into what went wrong.
+
 **Note:** The `llm_provider` / `llm_api_key` configuration is still required regardless of execution provider — it's used for spec generation, task breakdown, analysis, and tier gate checks. The execution provider only controls how tasks are dispatched and results collected.
 
 ## CLI Commands
@@ -296,9 +303,13 @@ Each task includes position, title, tier, priority, status, labels, dependencies
 |--------|---------|-------------|
 | `claude_code_repo_path` | `nil` | Local repo path for Claude Code provider |
 | `claude_code_model` | `"sonnet"` | Model for Claude Code CLI |
-| `claude_code_max_turns` | `nil` | Max turns per task (nil = Claude Code default) |
+| `claude_code_max_turns` | `25` | Max turns per task (nil = unlimited) |
 | `claude_code_permission_mode` | `"bypassPermissions"` | Permission mode for Claude Code CLI |
 | `claude_code_max_concurrency` | `4` | Parallel task execution slots (1-16) |
+| `claude_code_max_budget_usd` | `nil` | Per-task dollar budget limit via `--max-budget-usd` |
+| `claude_code_tools` | `nil` | Tool whitelist via `--tools` (nil = all tools) |
+| `claude_code_allowed_tools` | `nil` | Auto-approve tool patterns via `--allowedTools` |
+| `claude_code_disallowed_tools` | `nil` | Block tool patterns via `--disallowedTools` |
 | `merge_conflict_resolution_enabled` | `true` | Auto-resolve merge conflicts via LLM |
 | `merge_conflict_max_files` | `10` | Max conflicted files to attempt resolution on |
 
@@ -445,11 +456,15 @@ ArnoldPipeline.configure do |config|
   config.llm_api_key    = ENV["ANTHROPIC_API_KEY"]
 
   # Execution via Claude Code
-  config.execution_provider        = :claude_code
-  config.claude_code_repo_path     = "/path/to/your/project"
-  config.claude_code_model         = "sonnet"  # default
-  config.claude_code_max_turns     = nil       # use Claude Code default
-  config.claude_code_permission_mode = "auto"  # non-interactive pipeline use
+  config.execution_provider          = :claude_code
+  config.claude_code_repo_path       = "/path/to/your/project"
+  config.claude_code_model           = "sonnet"  # default
+  config.claude_code_max_turns       = 25        # default; set nil for unlimited
+  config.claude_code_permission_mode = "auto"    # non-interactive pipeline use
+  config.claude_code_max_budget_usd  = nil       # per-task dollar limit
+  config.claude_code_tools           = nil       # tool whitelist (nil = all)
+  config.claude_code_allowed_tools   = nil       # auto-approve patterns
+  config.claude_code_disallowed_tools = nil      # blocked tool patterns
 
   # Optional: Post-merge hooks and verification checks
   config.post_merge_hooks = [
@@ -578,8 +593,12 @@ Each task includes position, title, tier, priority, status, labels, dependencies
 | `github_issue_mention` | `nil` | — | Mention added to issue body (e.g. `@claude`) |
 | `claude_code_repo_path` | `nil` | — | Local repo path for Claude Code provider |
 | `claude_code_model` | `"sonnet"` | — | Model for Claude Code CLI |
-| `claude_code_max_turns` | `nil` | — | Max turns per task (nil = Claude Code default) |
+| `claude_code_max_turns` | `25` | — | Max turns per task (nil = unlimited) |
 | `claude_code_permission_mode` | `"auto"` | — | Permission mode for Claude Code CLI |
+| `claude_code_max_budget_usd` | `nil` | — | Per-task dollar budget limit via `--max-budget-usd` |
+| `claude_code_tools` | `nil` | — | Tool whitelist via `--tools` (nil = all tools) |
+| `claude_code_allowed_tools` | `nil` | — | Auto-approve tool patterns via `--allowedTools` |
+| `claude_code_disallowed_tools` | `nil` | — | Block tool patterns via `--disallowedTools` |
 | `max_iterations` | `3` | — | Feedback loop cap (1-10) |
 | `polling_interval` | `30` | — | Seconds between polling checks (async providers) |
 | `polling_timeout` | `1800` | — | Max seconds to wait for results (30 min, async providers) |
@@ -996,6 +1015,8 @@ lib/arnold_pipeline/
     persona.rb             # Data.define value object for personas
     recipe.rb              # Data.define value object for recipes
   prompts/                 # ERB prompt templates for each agent
+  services/
+    claude_md_generator.rb # Library-driven CLAUDE.md generation for worktrees
   providers/
     execution/
       base.rb              # Execution provider interface and registry
