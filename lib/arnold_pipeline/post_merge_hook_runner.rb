@@ -1,3 +1,4 @@
+require "bundler"
 require "open3"
 
 module ArnoldPipeline

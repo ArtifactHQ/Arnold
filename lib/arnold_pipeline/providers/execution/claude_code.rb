@@ -1,3 +1,4 @@
+require "bundler"
 require "fileutils"
 require "open3"
 require "shellwords"
@@ -256,6 +257,7 @@ module ArnoldPipeline
             cmd,
             chdir: worktree_path,
             pgroup: true,
+            in: "/dev/null",
             out: stdout_w,
             err: [:child, :out]
           )
@@ -452,7 +454,7 @@ module ArnoldPipeline
 
           cmd = build_cli_command(prompt)
           _output, status = Bundler.with_unbundled_env do
-            Open3.capture2({ "CLAUDECODE" => nil }, cmd, chdir: repo_path)
+            Open3.capture2({ "CLAUDECODE" => nil }, cmd, chdir: repo_path, stdin_data: "")
           end
 
           unless status.success?
