@@ -270,6 +270,28 @@ module ArnoldPipeline
             - Aim for 5 to 20 tasks
             - Each task must be independently executable by a coding agent
             - Tasks MUST be ordered by dependencies (e.g., database setup before API endpoints)
+
+            # Parallel Execution & Resource Conflicts
+
+            Tasks at the same dependency tier execute IN PARALLEL in isolated git worktrees.
+            Each parallel task branches from master independently — they CANNOT see each other's
+            migrations, model changes, or schema modifications.
+
+            This means: if two tasks both create or modify the same database table, they WILL
+            produce conflicting migrations when merged. You MUST add a `depends_on` relationship
+            between them to force sequential execution.
+
+            Serialization rules:
+            - If two tasks both CREATE migrations for the same table → add depends_on
+            - If two tasks both ADD COLUMNS to the same model → add depends_on
+            - If two tasks both define ASSOCIATIONS on the same model → add depends_on
+            - If a task creates a table that another task references (foreign key) → add depends_on
+            - When unsure whether tasks conflict, add depends_on — unnecessary serialization
+              only slows execution, but conflicting parallel tasks break the pipeline
+
+            Example: "Session Notes" needs a `recommendations` association, and "Recommendations"
+            creates the `recommendations` table. These MUST be serialized via depends_on, even
+            though they are separate features.
             - Each task should have clear acceptance criteria in its description
             - Use per-feature acceptance criteria from the spec directly in task descriptions
             - Assign appropriate labels (e.g., "backend", "frontend", "database", "testing")

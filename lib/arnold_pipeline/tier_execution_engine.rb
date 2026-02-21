@@ -539,6 +539,7 @@ module ArnoldPipeline
           end
 
           merge_tier_results!(pipeline_run, [task])
+          run_post_merge_hooks([task], tier_num)
         end
 
         # Re-run empirical checks and gate check

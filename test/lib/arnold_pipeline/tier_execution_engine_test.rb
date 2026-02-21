@@ -313,6 +313,50 @@ module ArnoldPipeline
       assert_equal 2, corrective.count
     end
 
+    test "handle_tier_gate_failure! runs post-merge hooks after each corrective task merge" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 1
+        c.tier_gate_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = "/tmp/test-repo"
+        c.post_merge_hooks = [
+          { name: "schema", trigger_paths: ["db/migrate/**"], command: "bin/rails db:prepare" }
+        ]
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      gate_fail = {
+        "pass" => false,
+        "issues" => ["migration conflict"],
+        "corrective_tasks" => [
+          { "title" => "Fix migration", "description" => "remove duplicate migration" }
+        ],
+        "context_summary" => "context"
+      }
+      gate_pass = { "pass" => true, "issues" => [], "context_summary" => "Fixed.", "corrective_tasks" => [] }
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @tier_gate_check.stubs(:call).returns(gate_pass)
+
+      # Expect post-merge hooks to be called after corrective task merge
+      hook_call_count = 0
+      ArnoldPipeline::PostMergeHookRunner.stubs(:call).with { |**kwargs|
+        hook_call_count += 1
+        true
+      }.returns([])
+
+      @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [], gate_fail, [])
+
+      assert_equal 1, hook_call_count, "Post-merge hooks should run once per corrective task merge"
+    end
+
     test "handle_tier_gate_failure! sequential execution works with sync provider" do
       ArnoldPipeline.configure do |c|
         c.max_iterations = 3
