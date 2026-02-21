@@ -1,8 +1,11 @@
 require "bundler"
 require "fileutils"
+require "json"
 require "open3"
 require "shellwords"
 require_relative "base"
+require "arnold_pipeline/library/manager"
+require "arnold_pipeline/services/claude_md_generator"
 
 module ArnoldPipeline
   module Providers
@@ -12,13 +15,14 @@ module ArnoldPipeline
 
         VALID_PERMISSION_MODES = %w[acceptEdits bypassPermissions default delegate dontAsk plan].freeze
 
-        attr_reader :repo_path, :model, :max_turns, :permission_mode
+        attr_reader :repo_path, :model, :max_turns, :permission_mode, :max_budget_usd
 
-        def initialize(repo_path:, model: "sonnet", max_turns: nil, permission_mode: "bypassPermissions")
+        def initialize(repo_path:, model: "sonnet", max_turns: 25, permission_mode: "bypassPermissions", max_budget_usd: nil)
           @repo_path = repo_path
           @model = model
           @max_turns = max_turns
           @permission_mode = permission_mode
+          @max_budget_usd = max_budget_usd
           @results = {}
           @results_mutex = Mutex.new
           @worktree_mutex = Mutex.new
@@ -67,12 +71,15 @@ module ArnoldPipeline
           new(
             repo_path: options[:repo_path] || config.claude_code_repo_path,
             model: options[:model] || config.claude_code_model || "sonnet",
-            max_turns: options[:max_turns] || config.claude_code_max_turns,
-            permission_mode: options[:permission_mode] || config.claude_code_permission_mode || "bypassPermissions"
+            max_turns: options.key?(:max_turns) ? options[:max_turns] : config.claude_code_max_turns,
+            permission_mode: options[:permission_mode] || config.claude_code_permission_mode || "bypassPermissions",
+            max_budget_usd: options.key?(:max_budget_usd) ? options[:max_budget_usd] : config.claude_code_max_budget_usd
           )
         end
 
         def create_tasks(tasks:, pipeline_run:, prior_context: nil)
+          @library_selections = resolve_library_selections(pipeline_run)
+
           work_items = tasks.each_with_index.map do |task, index|
             title = task.respond_to?(:title) ? task.title : task["title"]
             description = task.respond_to?(:description) ? task.description : task["description"]
@@ -112,14 +119,32 @@ module ArnoldPipeline
             stored = @results[task.external_id]
             next unless stored
 
+            parsed = stored[:parsed] || {}
+
+            comments = if !stored[:success] && parsed[:result]
+              [{ "source" => "claude_code", "author" => "claude",
+                 "body" => "Task failed: #{parsed[:result]}" }]
+            else
+              []
+            end
+
+            metadata = {
+              cost_usd: parsed[:cost_usd],
+              duration_ms: parsed[:duration_ms],
+              num_turns: parsed[:num_turns],
+              model: model,
+              session_id: parsed[:session_id]
+            }.compact
+
             {
               task_id: task.id,
               external_id: task.external_id,
               diffs: parse_diff_to_array(stored[:diff] || ""),
-              comments: [],
+              comments: comments,
               status: stored[:success] ? :completed : :failed,
               workflow_active: false,
-              workflow_details: "claude code execution"
+              workflow_details: "claude code execution",
+              execution_metadata: metadata
             }
           end
         end
@@ -155,32 +180,44 @@ module ArnoldPipeline
           system("which claude > /dev/null 2>&1")
         end
 
+        def parse_claude_output(raw_output)
+          parsed = JSON.parse(raw_output)
+          {
+            result: parsed["result"],
+            cost_usd: parsed["total_cost_usd"],
+            duration_ms: parsed["duration_ms"],
+            num_turns: parsed["num_turns"],
+            session_id: parsed["session_id"],
+            is_error: parsed["is_error"],
+            subtype: parsed["subtype"]
+          }
+        rescue JSON::ParserError
+          { result: raw_output, cost_usd: nil, duration_ms: nil, num_turns: nil,
+            session_id: nil, is_error: nil, subtype: nil }
+        end
+
         def build_prompt(title:, description:, labels:, prior_context:)
           context_section = if prior_context
-            prior_context
+            <<~CTX
+              ## Prior Implementation Context
+              Previous tiers have already implemented and merged code into this repository.
+              You can see their work in the existing files. Here is a summary:
+
+              #{prior_context}
+
+              Build on top of existing code. Do not rewrite or duplicate what already exists.
+            CTX
           else
-            "This is the first tier — no prior context."
+            "This is the first implementation tier. Start from the project's current state."
           end
 
           <<~PROMPT
-            You are implementing a task as part of a larger application build.
-
             ## Task
-            Title: #{title}
-            Description: #{description}
-            Labels: #{Array(labels).join(', ')}
+            **#{title}**
+            #{description}
+            #{"Labels: #{Array(labels).join(', ')}" if Array(labels).any?}
 
-            ## Prior Context
             #{context_section}
-
-            ## Working Directory Rules
-            - You are already inside a git repository worktree. Work in the CURRENT directory — do NOT create a project subdirectory.
-            - Do NOT run `git init` — this directory is already tracked by git.
-            - If you need to scaffold a Rails app, use `rails new . --force` (dot = current dir) instead of `rails new app_name`.
-            - Commit all changes when you are finished.
-
-            Implement this task fully. Create or modify all necessary files.
-            Do not ask questions — make reasonable decisions and document assumptions in code comments.
           PROMPT
         end
 
@@ -205,13 +242,16 @@ module ArnoldPipeline
             )
           end
 
+          parsed = parse_claude_output(result[:output] || "")
+
           @results_mutex.synchronize do
             @results[item[:external_id]] = {
               success: result[:success],
               output: result[:output],
               diff: diff,
               branch: item[:branch_name],
-              error: result[:error]
+              error: result[:error],
+              parsed: parsed
             }
           end
 
@@ -356,17 +396,45 @@ module ArnoldPipeline
           { success: false, output: "", error: e.message }
         end
 
+        def system_prompt
+          <<~SYSTEM.strip
+            You are an implementation agent in an automated pipeline.
+            Complete the task fully without asking questions.
+            Make reasonable decisions and document assumptions in code comments.
+            Run the project's test suite after implementing changes. If tests fail, fix them.
+            Only commit once tests pass.
+            Do not create project subdirectories — work in the current directory.
+            Do not run `git init` — this directory is already tracked by git.
+            If scaffolding a Rails app, use `rails new . --force` (dot = current dir).
+            Commit all changes when finished.
+          SYSTEM
+        end
+
+        def tool_restriction_flags
+          flags = []
+          if (tools = ArnoldPipeline.configuration.claude_code_tools)
+            flags += ["--tools", Array(tools).join(",")]
+          end
+          if (allowed = ArnoldPipeline.configuration.claude_code_allowed_tools)
+            Array(allowed).each { |t| flags += ["--allowedTools", t] }
+          end
+          if (disallowed = ArnoldPipeline.configuration.claude_code_disallowed_tools)
+            Array(disallowed).each { |t| flags += ["--disallowedTools", t] }
+          end
+          flags
+        end
+
         def build_cli_command(prompt)
           cmd_parts = [
             "claude", "--print", "--output-format", "json",
             "--model", model,
-            "--permission-mode", permission_mode
+            "--permission-mode", permission_mode,
+            "--append-system-prompt", system_prompt
           ]
-
           cmd_parts += ["--max-turns", max_turns.to_s] if max_turns
-
+          cmd_parts += ["--max-budget-usd", max_budget_usd.to_s] if max_budget_usd
+          cmd_parts += tool_restriction_flags
           cmd_parts << prompt
-
           cmd_parts.shelljoin
         end
 
@@ -379,8 +447,38 @@ module ArnoldPipeline
             exception: true)
 
           ensure_gitignore!(worktree_path)
+          write_claude_md!(worktree_path)
 
           worktree_path
+        end
+
+        def resolve_library_selections(pipeline_run)
+          selections = pipeline_run.metadata&.dig("library_selections")
+          return nil unless selections
+
+          manager = Library::Manager.new
+          {
+            persona: manager.all_personas.find { |p| p.name == selections["persona"] },
+            recipe: manager.all_recipes.find { |r| r.name == selections["recipe"] },
+            domain_type: manager.all_domain_types.find { |d| d.code == selections["domain_type"] }
+          }
+        end
+
+        def write_claude_md!(worktree_path)
+          return unless @library_selections
+
+          content = Services::ClaudeMdGenerator.call(
+            persona: @library_selections[:persona],
+            recipe: @library_selections[:recipe],
+            domain_type: @library_selections[:domain_type]
+          )
+
+          if File.exist?(File.join(worktree_path, "CLAUDE.md"))
+            FileUtils.mkdir_p(File.join(worktree_path, ".claude"))
+            File.write(File.join(worktree_path, ".claude", "CLAUDE.md"), content)
+          else
+            File.write(File.join(worktree_path, "CLAUDE.md"), content)
+          end
         end
 
         def ensure_gitignore!(worktree_path)
