@@ -368,6 +368,44 @@ module ArnoldPipeline
         assert task.workflow_active?, "Should persist workflow_active from provider result"
       end
 
+      test "fetch_results stores execution_metadata on task when present" do
+        task = @pipeline_run.tasks.create!(title: "Task", position: 0, external_id: "ext-1")
+        metadata = { "cost_usd" => 0.034, "duration_ms" => 28470, "num_turns" => 12 }
+
+        @provider.stubs(:fetch_results).returns([{
+          task_id: task.id,
+          external_id: "ext-1",
+          diffs: [],
+          comments: [],
+          status: :completed,
+          workflow_active: false,
+          execution_metadata: metadata
+        }])
+
+        @executor.fetch_results(pipeline_run: @pipeline_run)
+
+        task.reload
+        assert_equal metadata, task.execution_metadata
+      end
+
+      test "fetch_results handles missing execution_metadata gracefully" do
+        task = @pipeline_run.tasks.create!(title: "Task", position: 0, external_id: "ext-1")
+
+        @provider.stubs(:fetch_results).returns([{
+          task_id: task.id,
+          external_id: "ext-1",
+          diffs: [],
+          comments: [],
+          status: :completed,
+          workflow_active: false
+        }])
+
+        @executor.fetch_results(pipeline_run: @pipeline_run)
+
+        task.reload
+        assert_equal({}, task.execution_metadata)
+      end
+
       test "await_results does not resolve tasks with workflow_active even with diffs" do
         sleep_calls = []
         executor = Executor.new(

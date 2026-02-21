@@ -45,6 +45,7 @@ module ArnoldPipeline
           updates[:result_comments] = result[:comments] if result[:comments]
           updates[:status] = :failed if result[:status] == :failed
           updates[:workflow_active] = result[:workflow_active] if result.key?(:workflow_active)
+          updates[:execution_metadata] = result[:execution_metadata] if result[:execution_metadata].present?
           task.update!(updates)
 
           logger.debug {

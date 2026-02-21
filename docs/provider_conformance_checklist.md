@@ -72,6 +72,15 @@ Every item is pass/fail. All items must pass.
 - [ ] Comment `body` values are strings (not nil) — `body.to_s.match?` is called on them
 - [ ] If no comment system exists, return `comments: []`
 
+### Execution metadata (optional)
+
+- [ ] Each element may include `:execution_metadata` (Hash or nil)
+      **Source:** `executor.rb` — stored on task record when present
+- [ ] `:execution_metadata` values are JSON-serializable
+      **Verify:** `assert_nothing_raised { result[:execution_metadata]&.to_json }`
+- [ ] Provider functions correctly when `:execution_metadata` is omitted or nil
+      **Why:** This field is optional — the Executor must not crash when it's absent
+
 ## 3. merge_results
 
 - [ ] Returns without raising (for successfully merged work)
