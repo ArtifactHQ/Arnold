@@ -47,12 +47,18 @@ module ArnoldPipeline
     end
 
     test "validate! raises on missing llm_api_key" do
+      original_key = ENV[Configuration::PROVIDER_DEFAULTS.dig(@config.llm_provider, :env_key).to_s]
+      ENV.delete(Configuration::PROVIDER_DEFAULTS.dig(@config.llm_provider, :env_key).to_s)
+
       @config.llm_api_key = nil
       @config.github_token = "ghp_test"
       @config.github_repo = "owner/repo"
 
       error = assert_raises(ConfigurationError) { @config.validate! }
       assert_match(/LLM API key is required/, error.message)
+    ensure
+      env_key = Configuration::PROVIDER_DEFAULTS.dig(@config.llm_provider, :env_key).to_s
+      original_key ? ENV[env_key] = original_key : ENV.delete(env_key)
     end
 
     test "validate! raises on empty llm_api_key" do
@@ -421,6 +427,7 @@ module ArnoldPipeline
     # --- provider delegation tests ---
 
     test "validate! delegates execution validation to provider class" do
+      require "arnold_pipeline/providers/execution/null"
       @config.llm_api_key = "sk-test"
       @config.execution_provider = :null
 

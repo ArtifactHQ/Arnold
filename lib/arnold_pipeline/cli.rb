@@ -13,6 +13,7 @@ module ArnoldPipeline
 
     STANDALONE_DB_DIR = File.expand_path("~/.arnold_pipeline")
     STANDALONE_DB_PATH = File.join(STANDALONE_DB_DIR, "pipeline.sqlite3")
+    USER_CONFIG_PATH = File.join(STANDALONE_DB_DIR, "config.yml")
 
     desc "run DESCRIPTION", "Run the full pipeline from a natural language description"
     option :config, type: :string, desc: "Path to YAML config file"
@@ -45,27 +46,47 @@ module ArnoldPipeline
         require "arnold_pipeline/orchestrator"
 
         if options[:preview]
+          ArnoldPipeline.configure { |c| c.execution_provider = :null }
+
+          require "arnold_pipeline/cli/setup_wizard"
+          unless CliModule::SetupWizard.api_key_available?
+            if $stdout.tty? && $stdin.tty?
+              CliModule::SetupWizard.prompt_and_configure!
+            else
+              say_error "No API key found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable.", :red
+              raise SystemExit.new(1)
+            end
+          end
+
           logger = build_logger(options[:verbose])
           orchestrator = Orchestrator.new(logger:)
-
           result = orchestrator.call(nl_input: description, stop_after: :tasks)
 
-          say "DRY RUN — spec and tasks generated locally (not published to execution provider)", :yellow
-          say "  Execution provider: #{ArnoldPipeline.configuration.execution_provider}"
-          case ArnoldPipeline.configuration.execution_provider
-          when :github
-            say "  Repository: #{ArnoldPipeline.configuration.github_repo || '(not configured)'}"
-          when :claude_code
-            say "  Repo path: #{ArnoldPipeline.configuration.claude_code_repo_path || '(not configured)'}"
-          end
-          say "  Description: \"#{description}\""
-          say "  Tasks to create: #{result.tasks.count}"
+          say ""
+          say "--- Arnold Preview ---", :green
+          say ""
 
-          result.tasks.group_by(&:tier).sort.each do |tier, tasks|
-            say "    Tier #{tier}: #{tasks.count} #{tasks.count == 1 ? 'task' : 'tasks'}"
+          if result.specification
+            say "-- Specification --", :green
+            say result.specification.content
+            say ""
           end
 
-          say "\nRun without --preview to execute."
+          tasks_by_tier = result.tasks.order(:tier, :position).group_by(&:tier)
+          total_tasks = result.tasks.count
+          total_tiers = tasks_by_tier.keys.size
+
+          say "-- Tasks (#{total_tasks} tasks, #{total_tiers} tiers) --", :green
+          tasks_by_tier.sort.each do |tier, tasks|
+            say "Tier #{tier}:"
+            tasks.each do |task|
+              deps = task.depends_on.any? ? " (depends on: #{task.depends_on.join(', ')})" : ""
+              say "  #{task.position}. [#{task.title}] — #{task.description.to_s.truncate(80)}#{deps}"
+            end
+          end
+
+          say ""
+          say "--- Preview complete. Run without --preview to execute. ---", :green
           return
         end
 
@@ -397,6 +418,53 @@ module ArnoldPipeline
       say "arnold_pipeline #{ArnoldPipeline::VERSION}"
     end
 
+    desc "doctor", "Check environment health and dependencies"
+    def doctor
+      require "arnold_pipeline"
+      require "arnold_pipeline/cli/doctor"
+
+      # Load user config so API keys from config file are detected
+      if File.exist?(USER_CONFIG_PATH)
+        user_config = YAML.safe_load_file(USER_CONFIG_PATH, symbolize_names: true)
+        apply_config!(user_config)
+      end
+
+      results = CliModule::Doctor.run_all
+
+      say "Arnold Doctor", :green
+      say "-" * 40
+
+      results.each do |check|
+        indicator = case check.status
+        when :pass then set_color("\u2713", :green)
+        when :warn then set_color("!", :yellow)
+        when :fail then set_color("\u2717", :red)
+        when :skip then set_color("\u2014", :cyan)
+        end
+
+        say "#{indicator} #{check.name}: #{check.message}"
+        say "  \u2192 #{check.fix}" if check.fix && check.status != :pass
+      end
+
+      say ""
+      pass_count = results.count { |r| r.status == :pass }
+      warn_count = results.count { |r| r.status == :warn }
+      fail_count = results.count { |r| r.status == :fail }
+      skip_count = results.count { |r| r.status == :skip }
+
+      parts = []
+      parts << "#{pass_count} passed" if pass_count > 0
+      parts << "#{warn_count} warnings" if warn_count > 0
+      parts << "#{fail_count} failed" if fail_count > 0
+      parts << "#{skip_count} optional skipped" if skip_count > 0
+      say parts.join(", ")
+
+      unless CliModule::Doctor.all_required_passed?(results)
+        say "\nFix required issues above to use Arnold.", :red
+        raise SystemExit.new(1)
+      end
+    end
+
     private
 
     def setup_standalone!
@@ -429,11 +497,19 @@ module ArnoldPipeline
     end
 
     def load_config!(options)
+      # Auto-load user config (lowest priority)
+      if File.exist?(USER_CONFIG_PATH)
+        user_config = YAML.safe_load_file(USER_CONFIG_PATH, symbolize_names: true)
+        apply_config!(user_config)
+      end
+
+      # Explicit --config overrides user config
       if options[:config]
         yaml_config = YAML.safe_load_file(options[:config], symbolize_names: true)
         apply_config!(yaml_config)
       end
 
+      # CLI flags override everything
       ArnoldPipeline.configure do |c|
         c.llm_provider = options[:provider].to_sym if options[:provider]
         c.llm_model = options[:model] if options[:model]
@@ -514,6 +590,7 @@ module ArnoldPipeline
       yield
     rescue ArnoldPipeline::ConfigurationError => e
       say_error "Configuration error: #{e.message}", :red
+      say_error "Run 'arnold doctor' to check your setup.", :yellow
       raise SystemExit.new(1)
     rescue Errno::ENOENT => e
       say_error "File not found: #{e.message.sub(/ @ rb_sysopen/, '')}", :red

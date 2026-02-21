@@ -32,8 +32,10 @@ module ArnoldPipeline
         end
 
         test "build raises ConfigurationError when api_key is nil" do
-          original = ENV["ANTHROPIC_API_KEY"]
+          original_anthropic = ENV["ANTHROPIC_API_KEY"]
+          original_openai = ENV["OPENAI_API_KEY"]
           ENV.delete("ANTHROPIC_API_KEY")
+          ENV.delete("OPENAI_API_KEY")
           ArnoldPipeline.configure { |c| c.llm_api_key = nil }
 
           error = assert_raises(ConfigurationError) do
@@ -41,7 +43,8 @@ module ArnoldPipeline
           end
           assert_match(/LLM API key is required/, error.message)
         ensure
-          ENV["ANTHROPIC_API_KEY"] = original
+          original_anthropic ? ENV["ANTHROPIC_API_KEY"] = original_anthropic : ENV.delete("ANTHROPIC_API_KEY")
+          original_openai ? ENV["OPENAI_API_KEY"] = original_openai : ENV.delete("OPENAI_API_KEY")
           ArnoldPipeline.reset_configuration!
         end
 

@@ -281,7 +281,10 @@ module ArnoldPipeline
             - Task descriptions MUST reference specific tools, gems, generators, and commands
               from the spec and recipe context. Be prescriptive, not generic.
               WRONG: "Set up the project with a database and CSS framework"
-              RIGHT: "Run `rails new` with PostgreSQL (`--database=postgresql`), install Tailwind CSS via `tailwindcss-rails`, configure Propshaft asset pipeline"
+              RIGHT: "Run `rails new . --force` with SQLite (`--database=sqlite3`), install Tailwind CSS via `tailwindcss-rails`, configure Propshaft asset pipeline"
+            - IMPORTANT: The bootstrap task MUST use `rails new . --force` (dot = current directory)
+              to initialize in the working directory. NEVER use `rails new app_name` — that creates
+              a subdirectory which breaks the execution provider's diff capture.
               WRONG: "Implement authentication"
               RIGHT: "Implement authentication using Rails 8 authentication generator (`bin/rails generate authentication`), configure `has_secure_password`, add `bcrypt` gem"
             - The bootstrap task (position 0) MUST name the specific framework, database,
