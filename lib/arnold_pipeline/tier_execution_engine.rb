@@ -125,7 +125,8 @@ module ArnoldPipeline
           if gate_result
             if ArnoldPipeline.configuration.tier_gate_enabled && !gate_result["pass"]
               handle_tier_gate_failure!(pipeline_run, tier_num, tier_tasks, gate_result, accumulated_context,
-                                        acceptance_criteria_summary:)
+                                        acceptance_criteria_summary:,
+                                        verification_results: verification_results)
             end
 
             if ArnoldPipeline.configuration.context_propagation_enabled
