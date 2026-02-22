@@ -185,6 +185,7 @@ module ArnoldPipeline
     def merge_tier_results!(pipeline_run, tier_tasks)
       logger.info { "[Arnold] Merging tier results..." }
       executor.merge_results(pipeline_run:, tasks: tier_tasks)
+      dedup_migration_timestamps!
     rescue => e
       raise unless recoverable_merge_error?(e)
       logger.warn { "[Arnold] Tier merge failed (non-fatal): #{e.message}" }
@@ -192,6 +193,47 @@ module ArnoldPipeline
 
     def recoverable_merge_error?(error)
       executor.provider.recoverable_errors.any? { |klass| error.is_a?(klass) }
+    end
+
+    # Detect and rename migration files with duplicate timestamps.
+    # Parallel worktree tasks can create migrations with the same timestamp
+    # when they start from the same HEAD. After sequential merge, the duplicates
+    # cause schema version confusion and boot failures.
+    def dedup_migration_timestamps!
+      repo_path = ArnoldPipeline.configuration.claude_code_repo_path
+      return unless repo_path
+
+      migrate_dir = File.join(repo_path, "db", "migrate")
+      return unless Dir.exist?(migrate_dir)
+
+      files = Dir.glob("*.rb", base: migrate_dir).sort
+      timestamps = files.group_by { |f| f[/\A(\d+)_/, 1] }
+      duplicates = timestamps.select { |_ts, group| group.size > 1 }
+      return if duplicates.empty?
+
+      logger.warn { "[Arnold] Found #{duplicates.size} duplicate migration timestamp(s), renaming..." }
+
+      all_timestamps = Set.new(timestamps.keys)
+      duplicates.each do |ts, group|
+        # Keep the first file, rename the rest
+        group[1..].each do |filename|
+          new_ts = ts.to_i + 1
+          new_ts += 1 while all_timestamps.include?(new_ts.to_s)
+          all_timestamps.add(new_ts.to_s)
+
+          new_filename = filename.sub(/\A\d+/, new_ts.to_s)
+          old_path = File.join(migrate_dir, filename)
+          new_path = File.join(migrate_dir, new_filename)
+          File.rename(old_path, new_path)
+
+          system("git", "add", old_path, new_path, chdir: repo_path)
+          logger.info { "[Arnold] Renamed migration: #{filename} → #{new_filename}" }
+        end
+      end
+
+      system("git", "commit", "-m", "fix: deduplicate migration timestamps after parallel merge", "--no-verify", chdir: repo_path)
+    rescue => e
+      logger.warn { "[Arnold] Migration dedup failed (non-fatal): #{e.message}" }
     end
 
     def gate_check_needed?

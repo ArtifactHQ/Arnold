@@ -147,6 +147,69 @@ module ArnoldPipeline
       end
     end
 
+    # --- dedup_migration_timestamps! ---
+
+    test "dedup_migration_timestamps! renames duplicate timestamp migrations" do
+      Dir.mktmpdir("dedup_test") do |tmpdir|
+        # Init a git repo
+        system("git", "init", chdir: tmpdir, out: File::NULL, err: File::NULL)
+        system("git", "-C", tmpdir, "commit", "--allow-empty", "-m", "init", out: File::NULL, err: File::NULL)
+
+        migrate_dir = File.join(tmpdir, "db", "migrate")
+        FileUtils.mkdir_p(migrate_dir)
+
+        # Create two migrations with the same timestamp (parallel merge artifact)
+        File.write(File.join(migrate_dir, "20260222230017_create_sessions.rb"), "class CreateSessions < ActiveRecord::Migration[8.1]; end")
+        File.write(File.join(migrate_dir, "20260222230017_create_resources.rb"), "class CreateResources < ActiveRecord::Migration[8.1]; end")
+        File.write(File.join(migrate_dir, "20260222230016_create_users.rb"), "class CreateUsers < ActiveRecord::Migration[8.1]; end")
+        system("git", "-C", tmpdir, "add", ".", out: File::NULL)
+        system("git", "-C", tmpdir, "commit", "-m", "add migrations", out: File::NULL, err: File::NULL)
+
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+
+        @engine.send(:dedup_migration_timestamps!)
+
+        files = Dir.glob("*.rb", base: migrate_dir).sort
+        timestamps = files.map { |f| f[/\A(\d+)_/, 1] }
+
+        assert_equal 3, files.size
+        assert_equal timestamps.uniq.size, timestamps.size, "All timestamps should be unique after dedup"
+        assert_includes timestamps, "20260222230016"
+        assert_includes timestamps, "20260222230017"
+        assert_includes timestamps, "20260222230018"
+      end
+    end
+
+    test "dedup_migration_timestamps! is a no-op when no duplicates" do
+      Dir.mktmpdir("dedup_noop") do |tmpdir|
+        system("git", "init", chdir: tmpdir, out: File::NULL, err: File::NULL)
+        system("git", "-C", tmpdir, "commit", "--allow-empty", "-m", "init", out: File::NULL, err: File::NULL)
+
+        migrate_dir = File.join(tmpdir, "db", "migrate")
+        FileUtils.mkdir_p(migrate_dir)
+        File.write(File.join(migrate_dir, "20260222230001_create_users.rb"), "class CreateUsers; end")
+        File.write(File.join(migrate_dir, "20260222230002_create_posts.rb"), "class CreatePosts; end")
+        system("git", "-C", tmpdir, "add", ".", out: File::NULL)
+        system("git", "-C", tmpdir, "commit", "-m", "migrations", out: File::NULL, err: File::NULL)
+
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+
+        # Should not create any commits
+        before_sha, = Open3.capture2("git", "-C", tmpdir, "rev-parse", "HEAD")
+        @engine.send(:dedup_migration_timestamps!)
+        after_sha, = Open3.capture2("git", "-C", tmpdir, "rev-parse", "HEAD")
+
+        assert_equal before_sha, after_sha, "No commit should be created when no duplicates exist"
+      end
+    end
+
+    test "dedup_migration_timestamps! handles missing db/migrate directory" do
+      Dir.mktmpdir("dedup_missing") do |tmpdir|
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+        assert_nothing_raised { @engine.send(:dedup_migration_timestamps!) }
+      end
+    end
+
     # --- run_tier_gate! ---
 
     test "run_tier_gate! logs warning with backtrace on error" do
