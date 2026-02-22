@@ -172,7 +172,10 @@ module ArnoldPipeline
 
     def task_failure_reason(task)
       return nil unless task.failed?
-      if task.result_diff.blank? || task.result_diff == "[]"
+
+      if task.result_comments&.any? { |c| c["body"]&.start_with?("Merge failed:") }
+        "merge_failed"
+      elsif task.result_diff.blank? || task.result_diff == "[]"
         "empty_diff"
       else
         "execution_error"

@@ -2051,6 +2051,36 @@ module ArnoldPipeline
       assert_equal "execution_error", @engine.send(:task_failure_reason, task)
     end
 
+    test "task_failure_reason returns merge_failed for failed task with merge error comment" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Merge Fail", position: 0, status: :failed, result_diff: "[]",
+        result_comments: [{ "source" => "arnold", "author" => "system", "body" => "Merge failed: Your local changes would be overwritten" }]
+      )
+
+      assert_equal "merge_failed", @engine.send(:task_failure_reason, task)
+    end
+
+    test "task_failure_reason returns empty_diff for failed task with non-merge comments" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Empty", position: 0, status: :failed, result_diff: "[]",
+        result_comments: [{ "source" => "arnold", "author" => "system", "body" => "Some other error" }]
+      )
+
+      assert_equal "empty_diff", @engine.send(:task_failure_reason, task)
+    end
+
+    test "task_failure_reason returns merge_failed even when result_diff is nil" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Merge Nil", position: 0, status: :failed, result_diff: nil,
+        result_comments: [{ "source" => "arnold", "author" => "system", "body" => "Merge failed: conflict" }]
+      )
+
+      assert_equal "merge_failed", @engine.send(:task_failure_reason, task)
+    end
+
     # --- iteration_number propagation ---
 
     test "execute_tiers! propagates iteration_number to all events" do
