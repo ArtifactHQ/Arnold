@@ -234,5 +234,108 @@ module ArnoldPipeline
       assert result[:success]
       assert_equal 2000, result[:stdout].length
     end
+
+    test "auto-commits files dirtied by hook but not listed in commit_paths" do
+      script_path = File.join(@tmpdir, "generate.sh")
+      File.write(script_path, "#!/bin/sh\necho 'listed' > listed.txt\necho 'unlisted' > unlisted.txt\n")
+      File.chmod(0o755, script_path)
+      system("git", "-C", @tmpdir, "add", "generate.sh")
+      system("git", "-C", @tmpdir, "commit", "-m", "add script", "--no-verify", out: File::NULL, err: File::NULL)
+
+      hook = PostMergeHook.new(
+        name: "generate",
+        trigger_paths: ["*.rb"],
+        command: "./generate.sh",
+        commit_paths: ["listed.txt"],
+        commit_message: "chore: update listed file"
+      )
+
+      results = PostMergeHookRunner.call(
+        repo_path: @tmpdir,
+        changed_files: ["app.rb"],
+        hooks: [hook]
+      )
+
+      assert results.first[:success]
+
+      status_output, = Open3.capture3("git", "status", "--porcelain", chdir: @tmpdir)
+      assert_empty status_output.strip, "Expected clean working tree but found: #{status_output}"
+
+      assert File.exist?(File.join(@tmpdir, "unlisted.txt"))
+      log_output, = Open3.capture3("git", "log", "--oneline", "-1", chdir: @tmpdir)
+      assert_includes log_output, "Auto-commit"
+    end
+
+    test "auto-commit result includes list of unexpected files" do
+      script_path = File.join(@tmpdir, "generate.sh")
+      File.write(script_path, "#!/bin/sh\necho 'a' > extra_a.txt\necho 'b' > extra_b.txt\n")
+      File.chmod(0o755, script_path)
+      system("git", "-C", @tmpdir, "add", "generate.sh")
+      system("git", "-C", @tmpdir, "commit", "-m", "add script", "--no-verify", out: File::NULL, err: File::NULL)
+
+      hook = PostMergeHook.new(
+        name: "generate",
+        trigger_paths: ["*.rb"],
+        command: "./generate.sh"
+      )
+
+      results = PostMergeHookRunner.call(
+        repo_path: @tmpdir,
+        changed_files: ["app.rb"],
+        hooks: [hook]
+      )
+
+      assert results.first[:success]
+      assert_includes results.first[:auto_committed], "extra_a.txt"
+      assert_includes results.first[:auto_committed], "extra_b.txt"
+    end
+
+    test "does not auto-commit files that were already dirty before hook ran" do
+      File.write(File.join(@tmpdir, "preexisting.txt"), "dirty before hook")
+
+      script_path = File.join(@tmpdir, "generate.sh")
+      File.write(script_path, "#!/bin/sh\necho 'new' > hook_output.txt\n")
+      File.chmod(0o755, script_path)
+      system("git", "-C", @tmpdir, "add", "generate.sh")
+      system("git", "-C", @tmpdir, "commit", "-m", "add script", "--no-verify", out: File::NULL, err: File::NULL)
+
+      hook = PostMergeHook.new(
+        name: "generate",
+        trigger_paths: ["*.rb"],
+        command: "./generate.sh"
+      )
+
+      results = PostMergeHookRunner.call(
+        repo_path: @tmpdir,
+        changed_files: ["app.rb"],
+        hooks: [hook]
+      )
+
+      assert results.first[:success]
+      assert_includes results.first[:auto_committed], "hook_output.txt"
+
+      status_output, = Open3.capture3("git", "status", "--porcelain", chdir: @tmpdir)
+      assert_includes status_output, "preexisting.txt"
+    end
+
+    test "no auto-commit when hook leaves no new dirty files" do
+      hook = PostMergeHook.new(
+        name: "clean",
+        trigger_paths: ["*.rb"],
+        command: "echo clean"
+      )
+
+      before_log, = Open3.capture3("git", "rev-list", "--count", "HEAD", chdir: @tmpdir)
+
+      results = PostMergeHookRunner.call(
+        repo_path: @tmpdir,
+        changed_files: ["app.rb"],
+        hooks: [hook]
+      )
+
+      after_log, = Open3.capture3("git", "rev-list", "--count", "HEAD", chdir: @tmpdir)
+      assert_equal before_log.strip, after_log.strip
+      assert_empty results.first[:auto_committed] || []
+    end
   end
 end

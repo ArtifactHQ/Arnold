@@ -27,6 +27,8 @@ module ArnoldPipeline
         return { name: hook.name, triggered: false, success: nil, stdout: nil, stderr: nil, exit_code: nil }
       end
 
+      pre_hook_dirty = current_dirty_files
+
       stdout, stderr, status = Bundler.with_unbundled_env do
         Open3.capture3(hook.command, chdir: @repo_path)
       end
@@ -40,8 +42,9 @@ module ArnoldPipeline
         exit_code: status.exitstatus
       }
 
-      if status.success? && hook.commit_paths.any?
-        commit_derived_files(hook)
+      if status.success?
+        commit_derived_files(hook) if hook.commit_paths.any?
+        result[:auto_committed] = auto_commit_remaining!(hook, pre_hook_dirty)
       end
 
       result
@@ -60,6 +63,26 @@ module ArnoldPipeline
       return if diff_status.success?
 
       system("git", "commit", "-m", hook.commit_message, "--no-verify", chdir: @repo_path)
+    end
+
+    def auto_commit_remaining!(hook, pre_hook_dirty)
+      post_hook_dirty = current_dirty_files
+      newly_dirty = post_hook_dirty - pre_hook_dirty
+      return [] if newly_dirty.empty?
+
+      @logger&.warn("[Arnold] Hook '#{hook.name}' modified files not in commit_paths: #{newly_dirty.join(', ')}. Auto-committing.")
+
+      newly_dirty.each do |path|
+        system("git", "add", path, chdir: @repo_path)
+      end
+
+      system("git", "commit", "-m", "Auto-commit files modified by hook '#{hook.name}'", "--no-verify", chdir: @repo_path)
+      newly_dirty
+    end
+
+    def current_dirty_files
+      output, = Open3.capture3("git", "status", "--porcelain", chdir: @repo_path)
+      output.lines.map { |line| line[3..].strip }.reject(&:empty?)
     end
 
     def truncate(str)
