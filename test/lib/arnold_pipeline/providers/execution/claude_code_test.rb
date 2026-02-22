@@ -1024,6 +1024,33 @@ module ArnoldPipeline
           system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
         end
 
+        test "setup_worktree recovers from stale branch left by crashed run" do
+          branch = "test-stale-branch"
+          # Create a worktree + branch, then remove just the worktree dir (simulating a crash)
+          worktree_path = @provider.send(:setup_worktree, branch)
+          system("git", "-C", @repo_path, "worktree", "remove", "--force", worktree_path)
+          # Branch still exists but worktree is gone — this is the crash state
+          branches, = Open3.capture2("git", "-C", @repo_path, "branch", "--list", branch)
+          assert_includes branches, branch, "Stale branch should still exist"
+
+          # setup_worktree should succeed despite the stale branch (uses -B)
+          new_worktree_path = @provider.send(:setup_worktree, branch)
+          assert Dir.exist?(new_worktree_path), "Worktree should be recreated"
+        ensure
+          system("git", "-C", @repo_path, "worktree", "remove", "--force", new_worktree_path) if new_worktree_path && Dir.exist?(new_worktree_path)
+        end
+
+        test "cleanup_worktree removes dirty worktrees with --force" do
+          branch = "test-dirty-cleanup"
+          worktree_path = @provider.send(:setup_worktree, branch)
+          # Create an untracked file to make the worktree dirty
+          File.write(File.join(worktree_path, "dirty_file.txt"), "uncommitted content")
+
+          # cleanup should succeed despite dirty worktree
+          @provider.send(:cleanup_worktree, branch)
+          refute Dir.exist?(worktree_path), "Dirty worktree should be force-removed"
+        end
+
         # --- JSON output parsing tests ---
 
         test "parse_claude_output extracts fields from valid JSON" do

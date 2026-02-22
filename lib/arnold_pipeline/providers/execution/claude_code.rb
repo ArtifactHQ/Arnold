@@ -443,7 +443,7 @@ module ArnoldPipeline
 
           cleanup_worktree(branch)
 
-          system("git", "-C", repo_path, "worktree", "add", "-b", branch, worktree_path,
+          system("git", "-C", repo_path, "worktree", "add", "-B", branch, worktree_path,
             exception: true)
 
           ensure_gitignore!(worktree_path)
@@ -652,7 +652,7 @@ module ArnoldPipeline
 
         def cleanup_worktree(branch)
           worktree_path = File.join(repo_path, ".worktrees", branch)
-          system("git", "-C", repo_path, "worktree", "remove", worktree_path) if Dir.exist?(worktree_path)
+          system("git", "-C", repo_path, "worktree", "remove", "--force", worktree_path) if Dir.exist?(worktree_path)
         end
 
         # Remove binary noise files (storage/*.sqlite3, etc.) from the branch
