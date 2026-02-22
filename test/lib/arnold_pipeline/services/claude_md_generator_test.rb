@@ -115,6 +115,132 @@ module ArnoldPipeline
         refute_includes result, "## Tech Stack"
         refute_includes result, "## Conventions"
       end
+
+      test "includes schema section when repo_path has db/schema.rb" do
+        Dir.mktmpdir do |dir|
+          FileUtils.mkdir_p(File.join(dir, "db"))
+          File.write(File.join(dir, "db", "schema.rb"), <<~SCHEMA)
+            ActiveRecord::Schema[8.0].define(version: 2026_02_21) do
+              enable_extension "plpgsql"
+
+              create_table "users", force: :cascade do |t|
+                t.string "email", null: false
+                t.string "name"
+                t.timestamps
+              end
+
+              create_table "posts", force: :cascade do |t|
+                t.references "user", null: false
+                t.string "title"
+                t.timestamps
+              end
+            end
+          SCHEMA
+
+          result = ClaudeMdGenerator.call(
+            persona: @persona, recipe: @recipe, domain_type: @domain_type,
+            repo_path: dir
+          )
+          assert_includes result, "## Current Database Schema"
+          assert_includes result, "create_table \"users\""
+          assert_includes result, "create_table \"posts\""
+          refute_includes result, "enable_extension"
+          refute_includes result, "ActiveRecord::Schema"
+        end
+      end
+
+      test "includes routes section when repo_path has config/routes.rb" do
+        Dir.mktmpdir do |dir|
+          FileUtils.mkdir_p(File.join(dir, "config"))
+          File.write(File.join(dir, "config", "routes.rb"), <<~ROUTES)
+            Rails.application.routes.draw do
+              resources :users
+              resources :posts
+              root "pages#home"
+            end
+          ROUTES
+
+          result = ClaudeMdGenerator.call(
+            persona: @persona, recipe: @recipe, domain_type: @domain_type,
+            repo_path: dir
+          )
+          assert_includes result, "## Current Routes"
+          assert_includes result, "resources :users"
+          assert_includes result, "root \"pages#home\""
+        end
+      end
+
+      test "includes Gemfile section when repo_path has Gemfile" do
+        Dir.mktmpdir do |dir|
+          File.write(File.join(dir, "Gemfile"), <<~GEMFILE)
+            source "https://rubygems.org"
+
+            # Rails framework
+            gem "rails", "~> 8.0"
+            gem "sqlite3"
+
+            # Authentication
+            gem "bcrypt", "~> 3.1.7"
+          GEMFILE
+
+          result = ClaudeMdGenerator.call(
+            persona: @persona, recipe: @recipe, domain_type: @domain_type,
+            repo_path: dir
+          )
+          assert_includes result, "## Current Gemfile"
+          assert_includes result, 'gem "rails"'
+          assert_includes result, 'gem "bcrypt"'
+          refute_includes result, "# Rails framework"
+          refute_includes result, "# Authentication"
+        end
+      end
+
+      test "omits project state sections when repo_path is nil" do
+        result = ClaudeMdGenerator.call(
+          persona: @persona, recipe: @recipe, domain_type: @domain_type,
+          repo_path: nil
+        )
+        refute_includes result, "Current Database Schema"
+        refute_includes result, "Current Routes"
+        refute_includes result, "Current Gemfile"
+      end
+
+      test "omits missing files gracefully" do
+        Dir.mktmpdir do |dir|
+          result = ClaudeMdGenerator.call(
+            persona: @persona, recipe: @recipe, domain_type: @domain_type,
+            repo_path: dir
+          )
+          refute_includes result, "Current Database Schema"
+          refute_includes result, "Current Routes"
+          refute_includes result, "Current Gemfile"
+        end
+      end
+
+      test "schema truncation strips indexes and version info" do
+        Dir.mktmpdir do |dir|
+          FileUtils.mkdir_p(File.join(dir, "db"))
+          File.write(File.join(dir, "db", "schema.rb"), <<~SCHEMA)
+            ActiveRecord::Schema[8.0].define(version: 2026_02_21) do
+              enable_extension "plpgsql"
+
+              create_table "users", force: :cascade do |t|
+                t.string "email"
+                t.index ["email"], name: "index_users_on_email", unique: true
+                t.timestamps
+              end
+            end
+          SCHEMA
+
+          result = ClaudeMdGenerator.call(
+            persona: @persona, recipe: @recipe, domain_type: @domain_type,
+            repo_path: dir
+          )
+          assert_includes result, "create_table \"users\""
+          assert_includes result, "t.string \"email\""
+          refute_includes result, "t.index"
+        end
+      end
     end
   end
 end
