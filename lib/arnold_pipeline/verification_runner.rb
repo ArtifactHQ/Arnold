@@ -41,9 +41,10 @@ module ArnoldPipeline
     def run_check(check)
       @logger&.info("[VerificationRunner] Running check: #{check.name}")
 
+      command = check.type == :solid_stack ? solid_stack_command : check.command
       start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       stdout, stderr, status = Bundler.with_unbundled_env do
-        Open3.capture3(check.command, chdir: @repo_path)
+        Open3.capture3(command, chdir: @repo_path)
       end
       duration_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000).round
 
@@ -70,6 +71,47 @@ module ArnoldPipeline
         stderr: e.message[0, STDERR_CAP],
         duration_ms: duration_ms
       }
+    end
+
+    SOLID_STACK_SCRIPT = <<~'RUBY'
+      errors = []
+      if defined?(SolidQueue::Record)
+        begin
+          SolidQueue::Record.connection.active?
+          puts "SolidQueue: OK"
+        rescue => e
+          errors << "SolidQueue: #{e.message}. Ensure config.solid_queue.connects_to = { database: { writing: :queue } } is set in config/environments/development.rb"
+        end
+      end
+      if defined?(SolidCache::Record)
+        begin
+          SolidCache::Record.connection.active?
+          puts "SolidCache: OK"
+        rescue => e
+          errors << "SolidCache: #{e.message}. Ensure config.solid_cache.connects_to = { database: { writing: :cache } } is set in config/environments/development.rb"
+        end
+      end
+      if defined?(ActionCable) && ActionCable.const_defined?(:Record, false)
+        begin
+          ActionCable::Record.connection.active?
+          puts "ActionCable: OK"
+        rescue => e
+          errors << "ActionCable: #{e.message}. Check cable database configuration in config/environments/development.rb"
+        end
+      end
+      if errors.any?
+        $stderr.puts errors.join("\n")
+        exit 1
+      else
+        puts "All Solid stack connections OK"
+      end
+    RUBY
+
+    def solid_stack_command
+      script_path = File.join(@repo_path, "tmp", "arnold_solid_check.rb")
+      FileUtils.mkdir_p(File.dirname(script_path))
+      File.write(script_path, SOLID_STACK_SCRIPT)
+      "bin/rails runner #{script_path}"
     end
 
     # Capture the LAST n characters of output so that test summary lines

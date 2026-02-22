@@ -177,6 +177,57 @@ module ArnoldPipeline
       assert_includes result[:checks][0][:stdout], "hello world"
     end
 
+    test "VerificationCheck accepts solid_stack type without command" do
+      check = VerificationCheck.new(name: "solid", type: :solid_stack, required: true)
+      assert_equal :solid_stack, check.type
+      assert_nil check.command
+      assert check.required?
+    end
+
+    test "solid_stack check generates and runs probe script" do
+      runner_script = File.join(@tmpdir, "bin", "rails")
+      FileUtils.mkdir_p(File.join(@tmpdir, "bin"))
+      File.write(runner_script, <<~BASH)
+        #!/bin/bash
+        # Simulate bin/rails runner — just run the script it's given
+        ruby "$2"
+      BASH
+      FileUtils.chmod(0o755, runner_script)
+
+      checks = [
+        VerificationCheck.new(name: "Solid stack", type: :solid_stack, required: true)
+      ]
+
+      result = VerificationRunner.call(repo_path: @tmpdir, checks: checks)
+
+      assert_equal 1, result[:checks].size
+      assert result[:checks][0][:success], "Expected solid_stack check to pass but got: #{result[:checks][0][:stderr]}"
+      assert_equal :solid_stack, result[:checks][0][:type]
+      assert_includes result[:checks][0][:stdout], "Solid stack connections OK"
+    end
+
+    test "solid_stack check reports failure when probe script exits non-zero" do
+      runner_script = File.join(@tmpdir, "bin", "rails")
+      FileUtils.mkdir_p(File.join(@tmpdir, "bin"))
+      File.write(runner_script, <<~BASH)
+        #!/bin/bash
+        echo "SolidQueue: no such table: solid_queue_jobs. Ensure config.solid_queue.connects_to is set" >&2
+        exit 1
+      BASH
+      FileUtils.chmod(0o755, runner_script)
+
+      checks = [
+        VerificationCheck.new(name: "Solid stack", type: :solid_stack, required: true)
+      ]
+
+      result = VerificationRunner.call(repo_path: @tmpdir, checks: checks)
+
+      assert_equal 1, result[:checks].size
+      refute result[:checks][0][:success]
+      assert_includes result[:checks][0][:stderr], "SolidQueue"
+      refute result[:all_passed]
+    end
+
     test "returns empty results when checks array is empty" do
       result = VerificationRunner.call(repo_path: @tmpdir, checks: [])
 

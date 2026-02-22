@@ -961,6 +961,21 @@ module ArnoldPipeline
       @engine.execute_tiers!(pipeline_run)
     end
 
+    test "build_checks creates solid_stack check without command" do
+      ArnoldPipeline.configure do |c|
+        c.verification_checks = [
+          { "name" => "Solid stack", "type" => "solid_stack", "required" => true }
+        ]
+      end
+
+      checks = @engine.send(:build_checks)
+
+      assert_equal 1, checks.size
+      assert_equal :solid_stack, checks[0].type
+      assert_nil checks[0].command
+      assert checks[0].required?
+    end
+
     test "passes verification_results to tier gate check" do
       ArnoldPipeline.configure do |c|
         c.llm_api_key = "test"
