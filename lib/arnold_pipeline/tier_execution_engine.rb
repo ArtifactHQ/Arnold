@@ -461,7 +461,7 @@ module ArnoldPipeline
     end
 
     def handle_tier_gate_failure!(pipeline_run, tier_num, tier_tasks, gate_result, accumulated_context,
-                                   acceptance_criteria_summary: nil)
+                                   acceptance_criteria_summary: nil, verification_results: nil)
       max_retries = ArnoldPipeline.configuration.max_tier_retries
       metadata = pipeline_run.metadata || {}
       tier_retries = metadata["tier_retries"] || {}
@@ -490,7 +490,8 @@ module ArnoldPipeline
             base_description: td["description"],
             gate_issues: gate_issues,
             original_tier_tasks: tier_tasks,
-            acceptance_criteria_summary: acceptance_criteria_summary
+            acceptance_criteria_summary: acceptance_criteria_summary,
+            verification_output: extract_test_output(verification_results)
           )
 
           pipeline_run.tasks.create!(
@@ -546,6 +547,7 @@ module ArnoldPipeline
         all_tier_tasks = pipeline_run.tasks.in_tier(tier_num).to_a
         acceptance_criteria_summary = run_criteria_check!(pipeline_run, all_tier_tasks, tier_num)
         retry_verification_results = run_verification_checks(tier_num)
+        verification_results = retry_verification_results
         gate_result = run_tier_gate!(pipeline_run, tier_num, all_tier_tasks,
                                      acceptance_criteria_summary:,
                                      verification_results: retry_verification_results)
@@ -955,7 +957,20 @@ module ArnoldPipeline
       "## Prior Implementation Context\n\n#{lines.join("\n\n")}"
     end
 
-    def build_corrective_description(base_description:, gate_issues: [], original_tier_tasks: [], acceptance_criteria_summary: nil)
+    def extract_test_output(verification_results)
+      return nil unless verification_results
+
+      test_check = verification_results[:checks]&.find { |c| c[:type] == :test_suite }
+      return nil unless test_check
+
+      output = [test_check[:stdout], test_check[:stderr]].compact.join("\n")
+      return nil if output.strip.empty?
+
+      # Keep last 3000 chars — failure summary is at the bottom
+      output.length > 3000 ? output[-3000..] : output
+    end
+
+    def build_corrective_description(base_description:, gate_issues: [], original_tier_tasks: [], acceptance_criteria_summary: nil, verification_output: nil)
       sections = [base_description]
 
       if gate_issues.present?
@@ -974,6 +989,10 @@ module ArnoldPipeline
 
       if acceptance_criteria_summary.present?
         sections << "## Acceptance Criteria Status\n#{acceptance_criteria_summary}"
+      end
+
+      if verification_output.present?
+        sections << "## Test Output\n```\n#{verification_output}\n```"
       end
 
       return base_description if sections.size == 1

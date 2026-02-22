@@ -2289,6 +2289,124 @@ module ArnoldPipeline
       assert_includes result["corrective_tasks"].first["labels"], "bugfix"
     end
 
+    # --- extract_test_output ---
+
+    test "extract_test_output returns nil when verification_results is nil" do
+      result = @engine.send(:extract_test_output, nil)
+      assert_nil result
+    end
+
+    test "extract_test_output extracts test_suite stdout" do
+      verification_results = {
+        checks: [
+          { name: "Test suite", type: :test_suite, success: false, exit_code: 1,
+            stdout: "FAIL test_something\nExpected 1 got 2", stderr: "" }
+        ]
+      }
+      result = @engine.send(:extract_test_output, verification_results)
+      assert_includes result, "FAIL test_something"
+    end
+
+    test "extract_test_output truncates to last 3000 chars" do
+      long_output = "x" * 5000
+      verification_results = {
+        checks: [
+          { name: "Test suite", type: :test_suite, success: false, exit_code: 1,
+            stdout: long_output, stderr: "" }
+        ]
+      }
+      result = @engine.send(:extract_test_output, verification_results)
+      assert_equal 3000, result.length
+    end
+
+    test "extract_test_output returns nil when no test_suite check exists" do
+      verification_results = {
+        checks: [
+          { name: "Boot check", type: :boot, success: true, exit_code: 0, stdout: "OK", stderr: "" }
+        ]
+      }
+      result = @engine.send(:extract_test_output, verification_results)
+      assert_nil result
+    end
+
+    # --- build_corrective_description with verification_output ---
+
+    test "build_corrective_description includes test output when verification_output provided" do
+      verification_output = "1 runs, 0 assertions, 1 failures\nFAIL UserTest#test_validates_email\nExpected nil to not be nil"
+
+      result = @engine.send(:build_corrective_description,
+        base_description: "Fix the failing tests",
+        gate_issues: ["test failures"],
+        original_tier_tasks: [],
+        acceptance_criteria_summary: nil,
+        verification_output: verification_output
+      )
+
+      assert_includes result, "## Test Output"
+      assert_includes result, "FAIL UserTest#test_validates_email"
+      assert_includes result, "Expected nil to not be nil"
+    end
+
+    test "build_corrective_description omits test output when verification_output is nil" do
+      result = @engine.send(:build_corrective_description,
+        base_description: "Fix the failing tests",
+        gate_issues: ["test failures"],
+        original_tier_tasks: [],
+        acceptance_criteria_summary: nil,
+        verification_output: nil
+      )
+
+      refute_includes result, "## Test Output"
+    end
+
+    # --- handle_tier_gate_failure! with verification_results ---
+
+    test "handle_tier_gate_failure! passes verification output to corrective task descriptions" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 1
+        c.tier_gate_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      pipeline_run = ArnoldPipeline::PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      gate_fail = {
+        "pass" => false,
+        "issues" => ["test failures"],
+        "corrective_tasks" => [
+          { "title" => "Fix tests", "description" => "fix the test failures" }
+        ],
+        "context_summary" => "context"
+      }
+      gate_pass = { "pass" => true, "issues" => [], "context_summary" => "Fixed.", "corrective_tasks" => [] }
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @tier_gate_check.stubs(:call).returns(gate_pass)
+
+      verification_results = {
+        all_passed: false,
+        checks: [
+          { name: "Test suite", type: :test_suite, success: false, exit_code: 1,
+            stdout: "1 runs, 0 assertions, 1 failures, 0 errors\nFAIL UserTest#test_validates_email\nExpected nil to not be nil",
+            stderr: "" }
+        ]
+      }
+
+      @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [], gate_fail, [],
+                   verification_results: verification_results)
+
+      corrective = pipeline_run.tasks.where(title: "Fix tests").first
+      assert_not_nil corrective
+      assert_includes corrective.description, "## Test Output"
+      assert_includes corrective.description, "FAIL UserTest#test_validates_email"
+    end
+
     private
 
     def build_recording_event_recorder
