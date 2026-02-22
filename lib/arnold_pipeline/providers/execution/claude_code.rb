@@ -470,7 +470,8 @@ module ArnoldPipeline
           content = Services::ClaudeMdGenerator.call(
             persona: @library_selections[:persona],
             recipe: @library_selections[:recipe],
-            domain_type: @library_selections[:domain_type]
+            domain_type: @library_selections[:domain_type],
+            repo_path: worktree_path
           )
 
           if File.exist?(File.join(worktree_path, "CLAUDE.md"))

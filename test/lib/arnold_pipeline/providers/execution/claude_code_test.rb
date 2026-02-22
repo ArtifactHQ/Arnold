@@ -1214,6 +1214,33 @@ module ArnoldPipeline
           FileUtils.remove_entry(worktree_path)
         end
 
+        test "write_claude_md! passes worktree_path to ClaudeMdGenerator for project state" do
+          @provider.instance_variable_set(:@library_selections, {
+            persona: ArnoldPipeline::Library::Persona.new(
+              name: "SA", role: "sa", keywords: [], description: "d", system_prompt: "sp"
+            ),
+            recipe: ArnoldPipeline::Library::Recipe.new(
+              name: "Web App", type: "web_app", keywords: [], description: "d",
+              framework: { "primary" => "Rails 8+" }, sections: [], verification: {}
+            ),
+            domain_type: nil
+          })
+
+          worktree_path = Dir.mktmpdir
+          FileUtils.mkdir_p(File.join(worktree_path, "config"))
+          File.write(File.join(worktree_path, "config", "routes.rb"), "Rails.application.routes.draw do\n  root 'home#index'\nend")
+
+          @provider.send(:write_claude_md!, worktree_path)
+
+          claude_md_path = File.join(worktree_path, "CLAUDE.md")
+          assert File.exist?(claude_md_path), "CLAUDE.md should exist"
+          content = File.read(claude_md_path)
+          assert_includes content, "Current Routes"
+          assert_includes content, "root 'home#index'"
+        ensure
+          FileUtils.remove_entry(worktree_path) if worktree_path
+        end
+
         # --- Merge conflict resolution tests ---
 
         # Helper: create a conflict scenario.
