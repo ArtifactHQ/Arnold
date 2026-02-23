@@ -83,7 +83,7 @@ module ArnoldPipeline
         lines << "- **Domain:** #{@domain_type.name}"
         lines << "- **Primary value:** #{@domain_type.primary_value}" if @domain_type.primary_value&.present?
 
-        if @domain_type.emphasis.any?
+        if @domain_type.emphasis&.any?
           lines << "- **Priorities:**"
           @domain_type.emphasis.each { |e| lines << "  - #{e}" }
         end

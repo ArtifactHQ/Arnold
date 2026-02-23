@@ -1103,9 +1103,9 @@ module ArnoldPipeline
           meta = results.first[:execution_metadata]
 
           assert_kind_of Hash, meta
-          assert_equal 0.034, meta[:cost_usd]
-          assert_equal 28470, meta[:duration_ms]
-          assert_equal 12, meta[:num_turns]
+          assert_equal 0.034, meta["cost_usd"]
+          assert_equal 28470, meta["duration_ms"]
+          assert_equal 12, meta["num_turns"]
         end
 
         test "fetch_results returns empty execution_metadata when no parsed data" do
@@ -1151,6 +1151,36 @@ module ArnoldPipeline
 
           results = @provider.fetch_results(pipeline_run: @pipeline_run)
           assert_equal [], results.first[:comments]
+        end
+
+        test "fetch_results truncates long failure comments" do
+          task = @pipeline_run.tasks.create!(title: "Task", position: 0, external_id: "cc-1-0")
+          long_message = "x" * 5000
+          @provider.instance_variable_set(:@results, {
+            "cc-1-0" => {
+              success: false, diff: "", error: "CLI exited with code 1",
+              parsed: { result: long_message }
+            }
+          })
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run)
+          body = results.first[:comments].first["body"]
+          assert body.length < 3100, "Failure comment should be truncated"
+          assert_includes body, "(truncated)"
+        end
+
+        test "execute_work_item marks task failed when is_error is true despite exit 0" do
+          @provider.stubs(:execute_claude_code).returns({ success: true, output: { "result" => "Hit max turns", "is_error" => true, "subtype" => "max_turns", "total_cost_usd" => 0.5, "duration_ms" => 1000, "num_turns" => 25, "session_id" => "s1" }.to_json, error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("diff --git a/f.rb b/f.rb\n+x")
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+
+          item = { prompt: "do stuff", branch_name: "test-branch", external_id: "cc-1-0", title: "Task", index: 0 }
+          @provider.send(:execute_work_item, item)
+
+          stored = @provider.instance_variable_get(:@results)["cc-1-0"]
+          refute stored[:success], "Task should be marked failed when is_error is true"
+          assert_includes stored[:error], "Claude reported error"
         end
 
         # --- CLAUDE.md generation tests ---

@@ -122,18 +122,19 @@ module ArnoldPipeline
             parsed = stored[:parsed] || {}
 
             comments = if !stored[:success] && parsed[:result]
-              [{ "source" => "claude_code", "author" => "claude",
-                 "body" => "Task failed: #{parsed[:result]}" }]
+              body = "Task failed: #{parsed[:result]}"
+              body = body[0..3000] + "\n\n(truncated)" if body.length > 3000
+              [{ "source" => "claude_code", "author" => "claude", "body" => body }]
             else
               []
             end
 
             metadata = {
-              cost_usd: parsed[:cost_usd],
-              duration_ms: parsed[:duration_ms],
-              num_turns: parsed[:num_turns],
-              model: model,
-              session_id: parsed[:session_id]
+              "cost_usd" => parsed[:cost_usd],
+              "duration_ms" => parsed[:duration_ms],
+              "num_turns" => parsed[:num_turns],
+              "model" => model,
+              "session_id" => parsed[:session_id]
             }.compact
 
             {
@@ -243,6 +244,13 @@ module ArnoldPipeline
           end
 
           parsed = parse_claude_output(result[:output] || "")
+
+          if result[:success] && parsed[:is_error]
+            result = result.merge(
+              success: false,
+              error: "Claude reported error: #{parsed[:subtype] || "unknown"}"
+            )
+          end
 
           @results_mutex.synchronize do
             @results[item[:external_id]] = {
