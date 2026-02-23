@@ -52,6 +52,29 @@ module ArnoldPipeline
       refute result[:checks][0][:success]
     end
 
+    test "result hash includes required flag from check config" do
+      checks = [
+        VerificationCheck.new(name: "required_check", command: @pass_script, required: true),
+        VerificationCheck.new(name: "optional_check", command: @pass_script, required: false)
+      ]
+
+      result = VerificationRunner.call(repo_path: @tmpdir, checks: checks)
+
+      assert_equal true, result[:checks][0][:required]
+      assert_equal false, result[:checks][1][:required]
+    end
+
+    test "result hash includes required flag even on exception" do
+      checks = [
+        VerificationCheck.new(name: "bad_cmd", command: "/nonexistent/command/xyz_12345", required: true)
+      ]
+
+      result = VerificationRunner.call(repo_path: @tmpdir, checks: checks)
+
+      assert_equal true, result[:checks][0][:required]
+      refute result[:checks][0][:success]
+    end
+
     test "continues past non-required check failure" do
       checks = [
         VerificationCheck.new(name: "optional_fail", command: @fail_script, required: false),

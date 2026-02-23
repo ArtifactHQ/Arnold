@@ -55,7 +55,8 @@ module ArnoldPipeline
         exit_code: status.exitstatus,
         stdout: tail_capture(stdout, STDOUT_CAP),
         stderr: tail_capture(stderr, STDERR_CAP),
-        duration_ms: duration_ms
+        duration_ms: duration_ms,
+        required: check.required?
       }
     rescue => e
       duration_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - (start || Process.clock_gettime(Process::CLOCK_MONOTONIC))) * 1000).round
@@ -69,7 +70,8 @@ module ArnoldPipeline
         exit_code: nil,
         stdout: "",
         stderr: e.message[0, STDERR_CAP],
-        duration_ms: duration_ms
+        duration_ms: duration_ms,
+        required: check.required?
       }
     end
 
