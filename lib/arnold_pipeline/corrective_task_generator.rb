@@ -82,7 +82,7 @@ module ArnoldPipeline
     end
 
     def call
-      return [] if @test_result.passed
+      return [] unless @test_result.has_issues?
 
       if @test_result.failures.empty?
         @logger.warn { "Test failures detected but no individual failures parsed — generating generic corrective task" }

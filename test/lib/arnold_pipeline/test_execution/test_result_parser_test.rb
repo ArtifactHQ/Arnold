@@ -48,6 +48,9 @@ module ArnoldPipeline
         assert_equal 2, result.failures.size
         assert_equal "AuthTest#test_login", result.failures[0][:name]
         assert_includes result.failures[0][:message], "Expected 200, got 401"
+        assert_equal "AuthTest#test_signup", result.failures[1][:name]
+        assert_equal "test/auth_test.rb:58", result.failures[1][:location]
+        assert_includes result.failures[1][:message], "NoMethodError"
       end
 
       test "parses minitest error-only output with stack traces" do

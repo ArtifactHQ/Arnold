@@ -64,12 +64,20 @@ module ArnoldPipeline
         # NameError: uninitialized constant Foo
         #     app/file.rb:1:in `<main>'
         @combined.scan(/\d+\)\s+Error:\n\s*(.+?):\n(.+?)(?=\n\n|\n\s*\d+\)|\z)/m).each do |name, body|
+          clean_name = name.strip
+          # Some minitest errors include bracket location: TestName#method [path:line]
+          bracket_match = clean_name.match(/\A(.+?)\s+\[(.+?)\]\z/)
+          if bracket_match
+            clean_name = bracket_match[1]
+            bracket_location = bracket_match[2]
+          end
+
           first_line = body.strip.lines.first&.strip || body.strip
           stack_match = body.match(/^\s+(\S+:\d+):in\s/)
           failures << {
-            name: name.strip,
+            name: clean_name,
             message: first_line,
-            location: stack_match&.[](1)
+            location: bracket_location || stack_match&.[](1)
           }
         end
 

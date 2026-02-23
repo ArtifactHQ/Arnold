@@ -350,6 +350,8 @@ After each tier completes, results are merged before the next tier begins.
 - AND it groups failures by category: view_markup, integration_expectation, unit_expectation, missing_reference, routing, and general.
 - AND it generates one corrective task per failure category, with file:line references from the test output included in the task description.
 - AND if the LLM-based task generation fails, it falls back to direct task construction from the parsed test results.
+- AND if no individual failures can be parsed from the test output (e.g., error blocks that the parser cannot extract), it generates a single generic corrective task containing the raw test summary so the executor can diagnose and fix failures.
+- AND TestResultParser extracts both minitest Failure blocks (bracket location format) and Error blocks (stack trace format) as structured failure data.
 
 #### Scenario: Tier Gate Evaluation Path Selection [SPEC-TIER-009]
 - GIVEN a tier has completed execution and merge.
@@ -362,6 +364,7 @@ After each tier completes, results are merged before the next tier begins.
 - GIVEN a tier that has failed the gate check max_tier_retries times.
 - WHEN the retry limit is reached.
 - THEN the pipeline is paused with status "paused", metadata records the tier_gate_failure details, and a TierGateError is raised.
+- AND if a retry produces no corrective tasks (empty array from generator), it still consumes a retry attempt and loops back rather than silently proceeding to the next tier.
 
 #### Scenario: Empty Diff Detection (Claude Code Provider) [SPEC-TIER-005]
 - GIVEN a task executed by the Claude Code provider.
