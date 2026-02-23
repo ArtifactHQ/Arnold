@@ -82,7 +82,12 @@ module ArnoldPipeline
     end
 
     def call
-      return [] if @test_result.passed || @test_result.failures.empty?
+      return [] if @test_result.passed
+
+      if @test_result.failures.empty?
+        @logger.warn { "Test failures detected but no individual failures parsed — generating generic corrective task" }
+        return [generic_failure_task]
+      end
 
       grouped = group_failures_by_category(@test_result.failures)
       return [] if grouped.empty?
@@ -206,6 +211,17 @@ module ArnoldPipeline
         "title" => "Fix #{category.to_s.tr('_', ' ')} failures (#{failures.size} test#{'s' if failures.size != 1})",
         "description" => "#{failures.size} test failure#{'s' if failures.size != 1} in the #{category} category need fixing.\n\nFailures:\n#{failure_summary}#{ref_text}",
         "labels" => [category_info[:label]]
+      }
+    end
+
+    def generic_failure_task
+      {
+        "title" => "Fix test failures: #{@test_result.summary}",
+        "description" => "The test suite failed but individual failure details could not be parsed from the output.\n\n" \
+          "## Test Summary\n#{@test_result.summary}\n\n" \
+          "## Instructions\nRun the full test suite, identify all failures and errors, and fix them.\n" \
+          "Focus on errors first (often missing constants, undefined methods) as these frequently cause cascading failures.",
+        "labels" => ["test-fix"]
       }
     end
   end

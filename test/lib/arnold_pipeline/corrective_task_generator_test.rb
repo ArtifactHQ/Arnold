@@ -27,9 +27,9 @@ module ArnoldPipeline
       assert_equal [], result
     end
 
-    test "handles test result with empty failures array" do
+    test "generates generic fallback task when failures array is empty but tests failed" do
       test_result = TestExecution::TestResult.new(
-        passed: false, exit_code: 1, summary: "5 runs, 10 assertions, 1 failures, 0 errors",
+        passed: false, exit_code: 1, summary: "14 runs, 0 assertions, 0 failures, 14 errors",
         failures: [], framework: "minitest"
       )
 
@@ -37,7 +37,25 @@ module ArnoldPipeline
         test_result:, diffs: @diffs, task_summaries: @task_summaries, llm_client: @llm
       )
 
-      assert_equal [], result
+      assert_equal 1, result.size
+      task = result.first
+      assert_match(/Fix test failures/, task["title"])
+      assert_includes task["labels"], "test-fix"
+      assert_includes task["description"], "14 runs, 0 assertions, 0 failures, 14 errors"
+    end
+
+    test "generic fallback task includes raw test summary in description" do
+      test_result = TestExecution::TestResult.new(
+        passed: false, exit_code: 1, summary: "50 runs, 124 assertions, 2 failures, 0 errors",
+        failures: [], framework: "minitest"
+      )
+
+      result = CorrectiveTaskGenerator.call(
+        test_result:, diffs: @diffs, task_summaries: @task_summaries, llm_client: @llm
+      )
+
+      assert_equal 1, result.size
+      assert_includes result.first["description"], "50 runs, 124 assertions, 2 failures, 0 errors"
     end
 
     # -- Categorization --
