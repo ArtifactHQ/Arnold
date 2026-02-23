@@ -16,6 +16,8 @@ module ArnoldPipeline
                   :claude_code_repo_path, :claude_code_model,
                   :claude_code_max_turns, :claude_code_permission_mode,
                   :claude_code_max_concurrency,
+                  :claude_code_max_budget_usd,
+                  :claude_code_tools, :claude_code_allowed_tools, :claude_code_disallowed_tools,
                   :claude_code_task_timeout,
                   :max_iterations, :analysis_done_threshold, :library_path,
                   :polling_interval, :polling_timeout, :polling_max_interval,
@@ -43,9 +45,13 @@ module ArnoldPipeline
       @github_issue_mention = nil
       @claude_code_repo_path      = nil
       @claude_code_model          = "sonnet"
-      @claude_code_max_turns      = nil
+      @claude_code_max_turns      = 25
       @claude_code_permission_mode = "bypassPermissions"
       @claude_code_max_concurrency = 4
+      @claude_code_max_budget_usd  = nil
+      @claude_code_tools           = nil
+      @claude_code_allowed_tools   = nil
+      @claude_code_disallowed_tools = nil
       @claude_code_task_timeout    = 30
       @max_iterations     = 3
       @analysis_done_threshold = nil
@@ -111,6 +117,8 @@ module ArnoldPipeline
       validate_test_timeout!
       validate_criteria_check_mode!
       validate_claude_code_task_timeout!
+      validate_claude_code_max_budget_usd!
+      validate_claude_code_tool_restrictions!
       true
     end
 
@@ -193,6 +201,23 @@ module ArnoldPipeline
       return if @claude_code_task_timeout.is_a?(Numeric) && @claude_code_task_timeout > 0
 
       raise ConfigurationError, "claude_code_task_timeout must be nil or a positive number (minutes)."
+    end
+
+    def validate_claude_code_max_budget_usd!
+      return if @claude_code_max_budget_usd.nil?
+      return if @claude_code_max_budget_usd.is_a?(Numeric) && @claude_code_max_budget_usd > 0
+
+      raise ConfigurationError, "claude_code_max_budget_usd must be nil or a positive number"
+    end
+
+    def validate_claude_code_tool_restrictions!
+      %i[claude_code_tools claude_code_allowed_tools claude_code_disallowed_tools].each do |attr|
+        value = instance_variable_get(:"@#{attr}")
+        next if value.nil?
+        unless value.is_a?(Array) && value.all? { |v| v.is_a?(String) }
+          raise ConfigurationError, "#{attr} must be nil or an Array of Strings"
+        end
+      end
     end
 
     def validate_polling_config!

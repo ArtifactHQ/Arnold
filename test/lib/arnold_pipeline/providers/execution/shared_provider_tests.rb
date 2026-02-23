@@ -29,6 +29,22 @@ module ArnoldPipeline
         def test_async_returns_boolean
           assert_includes [true, false], provider_instance.async?
         end
+
+        def test_fetch_results_execution_metadata_shape
+          # Providers may return execution_metadata as nil or Hash
+          # This test verifies the contract is respected when results exist
+          # Subclasses must set up @pipeline_run with at least one task that has stored results
+          return unless respond_to?(:setup_fetch_results_for_metadata_test)
+
+          setup_fetch_results_for_metadata_test
+          results = provider_instance.fetch_results(pipeline_run: @pipeline_run)
+          results.each do |r|
+            meta = r[:execution_metadata]
+            assert(meta.nil? || meta.is_a?(Hash),
+              "execution_metadata must be nil or Hash, got #{meta.class}")
+            assert_nothing_raised { meta&.to_json }
+          end
+        end
       end
     end
   end

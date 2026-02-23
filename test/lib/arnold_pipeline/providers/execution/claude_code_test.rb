@@ -1,5 +1,8 @@
 require "test_helper"
 require "arnold_pipeline/providers/execution/claude_code"
+require "arnold_pipeline/library/persona"
+require "arnold_pipeline/library/recipe"
+require "arnold_pipeline/library/domain_type"
 require_relative "shared_provider_tests"
 
 module ArnoldPipeline
@@ -164,10 +167,11 @@ module ArnoldPipeline
           assert_equal task1.id, results.first[:task_id]
         end
 
-        test "fetch_results always returns empty comments" do
+        test "fetch_results returns empty comments on success" do
           @pipeline_run.tasks.create!(title: "Task", position: 0, external_id: "cc-1-0")
           @provider.instance_variable_set(:@results, {
-            "cc-1-0" => { success: true, diff: "", output: "Done" }
+            "cc-1-0" => { success: true, diff: "", output: "Done",
+                          parsed: { result: "All done" } }
           })
 
           results = @provider.fetch_results(pipeline_run: @pipeline_run)
@@ -261,19 +265,28 @@ module ArnoldPipeline
 
         # --- Prompt tests ---
 
-        test "build_prompt includes working directory rules" do
-          prompt = @provider.send(:build_prompt,
-            title: "Setup Rails",
-            description: "Create project",
-            labels: ["setup"],
-            prior_context: nil
-          )
-
-          assert_includes prompt, "Working Directory Rules"
-          assert_includes prompt, "do NOT create a project subdirectory"
-          assert_includes prompt, "Do NOT run `git init`"
-          assert_includes prompt, "rails new . --force"
+        test "system_prompt includes behavioral instructions" do
+          prompt = @provider.send(:system_prompt)
+          assert_includes prompt, "automated pipeline"
+          assert_includes prompt, "without asking questions"
+          assert_includes prompt, "test suite"
           assert_includes prompt, "Commit all changes"
+        end
+
+        test "build_prompt contains only task content" do
+          prompt = @provider.send(:build_prompt, title: "Setup", description: "Init project", labels: ["backend"], prior_context: nil)
+          assert_includes prompt, "Setup"
+          assert_includes prompt, "Init project"
+          assert_includes prompt, "Labels: backend"
+          # Should NOT contain behavioral instructions (those are in system_prompt now)
+          refute_includes prompt, "Working Directory Rules"
+          refute_includes prompt, "git init"
+        end
+
+        test "build_prompt includes prior context when provided" do
+          prompt = @provider.send(:build_prompt, title: "Auth", description: "Add auth", labels: [], prior_context: "Tier 1 set up the database")
+          assert_includes prompt, "Prior Implementation Context"
+          assert_includes prompt, "Tier 1 set up the database"
         end
 
         # --- normalize_worktree tests ---
@@ -521,6 +534,24 @@ module ArnoldPipeline
           assert_equal "haiku", provider.model
         end
 
+        test "build_from_config respects nil max_turns for unlimited" do
+          config = ArnoldPipeline::Configuration.new
+          config.claude_code_repo_path = @repo_path
+          config.claude_code_max_turns = nil
+
+          provider = ClaudeCode.build_from_config(config)
+          assert_nil provider.max_turns
+        end
+
+        test "build_from_config respects nil max_budget_usd" do
+          config = ArnoldPipeline::Configuration.new
+          config.claude_code_repo_path = @repo_path
+          config.claude_code_max_budget_usd = nil
+
+          provider = ClaudeCode.build_from_config(config)
+          assert_nil provider.max_budget_usd
+        end
+
         test "Execution.build resolves :claude_code" do
           ArnoldPipeline.configure do |c|
             c.execution_provider = :claude_code
@@ -593,7 +624,7 @@ module ArnoldPipeline
           @provider.stubs(:setup_worktree).returns(@repo_path)
 
           @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
-          assert_includes prompt_received, "first tier"
+          assert_includes prompt_received, "first implementation tier"
         end
 
         test "validate_configuration! raises for invalid permission_mode" do
@@ -771,8 +802,9 @@ module ArnoldPipeline
           provider = ClaudeCode.new(repo_path: @repo_path)
           assert_equal @repo_path, provider.repo_path
           assert_equal "sonnet", provider.model
-          assert_nil provider.max_turns
+          assert_equal 25, provider.max_turns
           assert_equal "bypassPermissions", provider.permission_mode
+          assert_nil provider.max_budget_usd
         end
 
         test "constructor accepts all options" do
@@ -780,11 +812,70 @@ module ArnoldPipeline
             repo_path: @repo_path,
             model: "opus",
             max_turns: 10,
-            permission_mode: "default"
+            permission_mode: "default",
+            max_budget_usd: 5.0
           )
           assert_equal "opus", provider.model
           assert_equal 10, provider.max_turns
           assert_equal "default", provider.permission_mode
+          assert_equal 5.0, provider.max_budget_usd
+        end
+
+        # --- Tool restriction flags tests ---
+
+        test "tool_restriction_flags returns empty when all nil" do
+          assert_equal [], @provider.send(:tool_restriction_flags)
+        end
+
+        test "tool_restriction_flags includes --tools when configured" do
+          ArnoldPipeline.configure { |c| c.claude_code_tools = ["Bash", "Edit", "Read"] }
+          flags = @provider.send(:tool_restriction_flags)
+          assert_includes flags, "--tools"
+          assert_includes flags, "Bash,Edit,Read"
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "tool_restriction_flags includes --allowedTools for each pattern" do
+          ArnoldPipeline.configure { |c| c.claude_code_allowed_tools = ["Bash(git *)", "Read"] }
+          flags = @provider.send(:tool_restriction_flags)
+          assert_equal ["--allowedTools", "Bash(git *)", "--allowedTools", "Read"], flags
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "tool_restriction_flags includes --disallowedTools for each pattern" do
+          ArnoldPipeline.configure { |c| c.claude_code_disallowed_tools = ["WebSearch"] }
+          flags = @provider.send(:tool_restriction_flags)
+          assert_equal ["--disallowedTools", "WebSearch"], flags
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        # --- build_cli_command tests ---
+
+        test "build_cli_command includes --append-system-prompt" do
+          cmd = @provider.send(:build_cli_command, "test prompt")
+          assert_includes cmd, "--append-system-prompt"
+        end
+
+        test "build_cli_command includes --max-budget-usd when configured" do
+          provider = ArnoldPipeline::Providers::Execution::ClaudeCode.new(repo_path: @repo_path, max_budget_usd: 5.0)
+          cmd = provider.send(:build_cli_command, "test prompt")
+          assert_includes cmd, "--max-budget-usd"
+          assert_includes cmd, "5.0"
+        end
+
+        test "build_cli_command omits --max-budget-usd when nil" do
+          cmd = @provider.send(:build_cli_command, "test prompt")
+          refute_includes cmd, "--max-budget-usd"
+        end
+
+        test "build_cli_command includes max_turns by default (25)" do
+          provider = ArnoldPipeline::Providers::Execution::ClaudeCode.new(repo_path: @repo_path)
+          cmd = provider.send(:build_cli_command, "test prompt")
+          assert_includes cmd, "--max-turns"
+          assert_includes cmd, "25"
         end
 
         # --- Worktree hygiene tests ---
@@ -931,6 +1022,280 @@ module ArnoldPipeline
           assert_equal "*.secret\n", content, "Existing .gitignore should not be overwritten"
         ensure
           system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
+        end
+
+        test "setup_worktree recovers from stale branch left by crashed run" do
+          branch = "test-stale-branch"
+          # Create a worktree + branch, then remove just the worktree dir (simulating a crash)
+          worktree_path = @provider.send(:setup_worktree, branch)
+          system("git", "-C", @repo_path, "worktree", "remove", "--force", worktree_path)
+          # Branch still exists but worktree is gone — this is the crash state
+          branches, = Open3.capture2("git", "-C", @repo_path, "branch", "--list", branch)
+          assert_includes branches, branch, "Stale branch should still exist"
+
+          # setup_worktree should succeed despite the stale branch (uses -B)
+          new_worktree_path = @provider.send(:setup_worktree, branch)
+          assert Dir.exist?(new_worktree_path), "Worktree should be recreated"
+        ensure
+          system("git", "-C", @repo_path, "worktree", "remove", "--force", new_worktree_path) if new_worktree_path && Dir.exist?(new_worktree_path)
+        end
+
+        test "cleanup_worktree removes dirty worktrees with --force" do
+          branch = "test-dirty-cleanup"
+          worktree_path = @provider.send(:setup_worktree, branch)
+          # Create an untracked file to make the worktree dirty
+          File.write(File.join(worktree_path, "dirty_file.txt"), "uncommitted content")
+
+          # cleanup should succeed despite dirty worktree
+          @provider.send(:cleanup_worktree, branch)
+          refute Dir.exist?(worktree_path), "Dirty worktree should be force-removed"
+        end
+
+        # --- JSON output parsing tests ---
+
+        test "parse_claude_output extracts fields from valid JSON" do
+          json = {
+            "result" => "Task completed successfully",
+            "total_cost_usd" => 0.034,
+            "duration_ms" => 28470,
+            "num_turns" => 12,
+            "session_id" => "abc-123",
+            "is_error" => false,
+            "subtype" => "success"
+          }.to_json
+
+          parsed = @provider.send(:parse_claude_output, json)
+
+          assert_equal "Task completed successfully", parsed[:result]
+          assert_equal 0.034, parsed[:cost_usd]
+          assert_equal 28470, parsed[:duration_ms]
+          assert_equal 12, parsed[:num_turns]
+          assert_equal "abc-123", parsed[:session_id]
+          assert_equal false, parsed[:is_error]
+        end
+
+        test "parse_claude_output handles invalid JSON gracefully" do
+          parsed = @provider.send(:parse_claude_output, "not json at all")
+
+          assert_equal "not json at all", parsed[:result]
+          assert_nil parsed[:cost_usd]
+          assert_nil parsed[:duration_ms]
+          assert_nil parsed[:num_turns]
+        end
+
+        test "parse_claude_output handles empty string" do
+          parsed = @provider.send(:parse_claude_output, "")
+          assert_equal "", parsed[:result]
+        end
+
+        # --- Execution metadata in fetch_results ---
+
+        test "fetch_results populates execution_metadata from parsed output" do
+          task = @pipeline_run.tasks.create!(title: "Task", position: 0, external_id: "cc-1-0")
+          @provider.instance_variable_set(:@results, {
+            "cc-1-0" => {
+              success: true, diff: "diff --git a/f.rb b/f.rb\n+x", output: "Done",
+              parsed: { cost_usd: 0.034, duration_ms: 28470, num_turns: 12, session_id: "abc" }
+            }
+          })
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run)
+          meta = results.first[:execution_metadata]
+
+          assert_kind_of Hash, meta
+          assert_equal 0.034, meta["cost_usd"]
+          assert_equal 28470, meta["duration_ms"]
+          assert_equal 12, meta["num_turns"]
+        end
+
+        test "fetch_results returns empty execution_metadata when no parsed data" do
+          task = @pipeline_run.tasks.create!(title: "Task", position: 0, external_id: "cc-1-0")
+          @provider.instance_variable_set(:@results, {
+            "cc-1-0" => { success: true, diff: "", output: "Done" }
+          })
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run)
+          meta = results.first[:execution_metadata]
+
+          assert_kind_of Hash, meta
+        end
+
+        # --- Failure comments ---
+
+        test "fetch_results includes failure comment with Claude's message on failure" do
+          task = @pipeline_run.tasks.create!(title: "Task", position: 0, external_id: "cc-1-0")
+          @provider.instance_variable_set(:@results, {
+            "cc-1-0" => {
+              success: false, diff: "", error: "CLI exited with code 1",
+              parsed: { result: "I couldn't complete this because the database wasn't configured" }
+            }
+          })
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run)
+          comments = results.first[:comments]
+
+          assert_equal 1, comments.size
+          assert_equal "claude_code", comments.first["source"]
+          assert_equal "claude", comments.first["author"]
+          assert_includes comments.first["body"], "database wasn't configured"
+        end
+
+        test "fetch_results returns empty comments for successful task with parsed data" do
+          task = @pipeline_run.tasks.create!(title: "Task", position: 0, external_id: "cc-1-0")
+          @provider.instance_variable_set(:@results, {
+            "cc-1-0" => {
+              success: true, diff: "diff --git a/f.rb b/f.rb\n+x", output: "Done",
+              parsed: { result: "All done" }
+            }
+          })
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run)
+          assert_equal [], results.first[:comments]
+        end
+
+        test "fetch_results truncates long failure comments" do
+          task = @pipeline_run.tasks.create!(title: "Task", position: 0, external_id: "cc-1-0")
+          long_message = "x" * 5000
+          @provider.instance_variable_set(:@results, {
+            "cc-1-0" => {
+              success: false, diff: "", error: "CLI exited with code 1",
+              parsed: { result: long_message }
+            }
+          })
+
+          results = @provider.fetch_results(pipeline_run: @pipeline_run)
+          body = results.first[:comments].first["body"]
+          assert body.length < 3100, "Failure comment should be truncated"
+          assert_includes body, "(truncated)"
+        end
+
+        test "execute_work_item marks task failed when is_error is true despite exit 0" do
+          @provider.stubs(:execute_claude_code).returns({ success: true, output: { "result" => "Hit max turns", "is_error" => true, "subtype" => "max_turns", "total_cost_usd" => 0.5, "duration_ms" => 1000, "num_turns" => 25, "session_id" => "s1" }.to_json, error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("diff --git a/f.rb b/f.rb\n+x")
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+
+          item = { prompt: "do stuff", branch_name: "test-branch", external_id: "cc-1-0", title: "Task", index: 0 }
+          @provider.send(:execute_work_item, item)
+
+          stored = @provider.instance_variable_get(:@results)["cc-1-0"]
+          refute stored[:success], "Task should be marked failed when is_error is true"
+          assert_includes stored[:error], "Claude reported error"
+        end
+
+        # --- CLAUDE.md generation tests ---
+
+        test "create_tasks resolves library_selections from pipeline_run metadata" do
+          @pipeline_run.update!(metadata: {
+            "library_selections" => {
+              "persona" => "Software Architect",
+              "recipe" => "Web App",
+              "domain_type" => "GAME"
+            }
+          })
+
+          tasks = [{ "title" => "Setup", "description" => "Init" }]
+          @provider.stubs(:execute_claude_code).returns({ success: true, output: "{}", error: nil })
+          @provider.stubs(:normalize_worktree)
+          @provider.stubs(:capture_diff).returns("diff --git a/f.rb b/f.rb\n+x")
+          @provider.stubs(:setup_worktree).returns(@repo_path)
+
+          @provider.create_tasks(tasks: tasks, pipeline_run: @pipeline_run)
+
+          selections = @provider.instance_variable_get(:@library_selections)
+          assert_not_nil selections
+          assert_not_nil selections[:recipe]
+          assert_equal "Web App", selections[:recipe].name
+        end
+
+        test "write_claude_md! writes CLAUDE.md when repo has none" do
+          @provider.instance_variable_set(:@library_selections, {
+            persona: ArnoldPipeline::Library::Persona.new(
+              name: "SA", role: "sa", keywords: [], description: "d", system_prompt: "sp"
+            ),
+            recipe: ArnoldPipeline::Library::Recipe.new(
+              name: "Web App", type: "web_app", keywords: [], description: "d",
+              framework: { "primary" => "Rails 8+" }, sections: [], verification: {}
+            ),
+            domain_type: ArnoldPipeline::Library::DomainType.new(
+              code: "GAME", name: "Game", keywords: [], description: "d",
+              primary_value: "Fun", emphasis: [], document_focus: [], watch_for: [], terminology: {}
+            )
+          })
+
+          worktree_path = Dir.mktmpdir
+          @provider.send(:write_claude_md!, worktree_path)
+
+          claude_md_path = File.join(worktree_path, "CLAUDE.md")
+          assert File.exist?(claude_md_path)
+          content = File.read(claude_md_path)
+          assert_includes content, "Rails 8+"
+        ensure
+          FileUtils.remove_entry(worktree_path)
+        end
+
+        test "write_claude_md! writes to .claude/CLAUDE.md when repo has existing CLAUDE.md" do
+          @provider.instance_variable_set(:@library_selections, {
+            persona: nil,
+            recipe: ArnoldPipeline::Library::Recipe.new(
+              name: "Web App", type: "web_app", keywords: [], description: "d",
+              framework: { "primary" => "Rails 8+" }, sections: [], verification: {}
+            ),
+            domain_type: nil
+          })
+
+          worktree_path = Dir.mktmpdir
+          File.write(File.join(worktree_path, "CLAUDE.md"), "# Existing project instructions")
+
+          @provider.send(:write_claude_md!, worktree_path)
+
+          # Original untouched
+          assert_equal "# Existing project instructions", File.read(File.join(worktree_path, "CLAUDE.md"))
+          # Generated in subdirectory
+          generated = File.join(worktree_path, ".claude", "CLAUDE.md")
+          assert File.exist?(generated)
+          assert_includes File.read(generated), "Rails 8+"
+        ensure
+          FileUtils.remove_entry(worktree_path)
+        end
+
+        test "write_claude_md! is no-op when library_selections is nil" do
+          @provider.instance_variable_set(:@library_selections, nil)
+
+          worktree_path = Dir.mktmpdir
+          @provider.send(:write_claude_md!, worktree_path)
+
+          refute File.exist?(File.join(worktree_path, "CLAUDE.md"))
+          refute File.exist?(File.join(worktree_path, ".claude", "CLAUDE.md"))
+        ensure
+          FileUtils.remove_entry(worktree_path)
+        end
+
+        test "write_claude_md! passes worktree_path to ClaudeMdGenerator for project state" do
+          @provider.instance_variable_set(:@library_selections, {
+            persona: ArnoldPipeline::Library::Persona.new(
+              name: "SA", role: "sa", keywords: [], description: "d", system_prompt: "sp"
+            ),
+            recipe: ArnoldPipeline::Library::Recipe.new(
+              name: "Web App", type: "web_app", keywords: [], description: "d",
+              framework: { "primary" => "Rails 8+" }, sections: [], verification: {}
+            ),
+            domain_type: nil
+          })
+
+          worktree_path = Dir.mktmpdir
+          FileUtils.mkdir_p(File.join(worktree_path, "config"))
+          File.write(File.join(worktree_path, "config", "routes.rb"), "Rails.application.routes.draw do\n  root 'home#index'\nend")
+
+          @provider.send(:write_claude_md!, worktree_path)
+
+          claude_md_path = File.join(worktree_path, "CLAUDE.md")
+          assert File.exist?(claude_md_path), "CLAUDE.md should exist"
+          content = File.read(claude_md_path)
+          assert_includes content, "Current Routes"
+          assert_includes content, "root 'home#index'"
+        ensure
+          FileUtils.remove_entry(worktree_path) if worktree_path
         end
 
         # --- Merge conflict resolution tests ---

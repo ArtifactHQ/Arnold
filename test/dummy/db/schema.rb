@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_02_11_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_02_12_000001) do
   create_table "arnold_pipeline_iterations", force: :cascade do |t|
     t.integer "confidence"
     t.json "corrective_data"
@@ -90,6 +90,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_11_000001) do
     t.datetime "created_at", null: false
     t.json "depends_on", default: []
     t.text "description"
+    t.json "execution_metadata", default: {}
     t.string "external_id"
     t.string "external_url"
     t.json "labels", default: []

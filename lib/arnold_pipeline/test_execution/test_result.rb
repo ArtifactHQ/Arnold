@@ -13,6 +13,10 @@ module ArnoldPipeline
         super
       end
 
+      def has_issues?
+        !passed
+      end
+
       def to_gate_summary
         lines = []
         lines << "## Test Execution Results"

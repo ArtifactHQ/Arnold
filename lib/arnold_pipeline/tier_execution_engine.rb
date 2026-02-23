@@ -125,7 +125,8 @@ module ArnoldPipeline
           if gate_result
             if ArnoldPipeline.configuration.tier_gate_enabled && !gate_result["pass"]
               handle_tier_gate_failure!(pipeline_run, tier_num, tier_tasks, gate_result, accumulated_context,
-                                        acceptance_criteria_summary:)
+                                        acceptance_criteria_summary:,
+                                        verification_results: verification_results)
             end
 
             if ArnoldPipeline.configuration.context_propagation_enabled
@@ -171,7 +172,10 @@ module ArnoldPipeline
 
     def task_failure_reason(task)
       return nil unless task.failed?
-      if task.result_diff.blank? || task.result_diff == "[]"
+
+      if task.result_comments&.any? { |c| c["body"]&.start_with?("Merge failed:") }
+        "merge_failed"
+      elsif task.result_diff.blank? || task.result_diff == "[]"
         "empty_diff"
       else
         "execution_error"
@@ -181,6 +185,7 @@ module ArnoldPipeline
     def merge_tier_results!(pipeline_run, tier_tasks)
       logger.info { "[Arnold] Merging tier results..." }
       executor.merge_results(pipeline_run:, tasks: tier_tasks)
+      dedup_migration_timestamps!
     rescue => e
       raise unless recoverable_merge_error?(e)
       logger.warn { "[Arnold] Tier merge failed (non-fatal): #{e.message}" }
@@ -188,6 +193,47 @@ module ArnoldPipeline
 
     def recoverable_merge_error?(error)
       executor.provider.recoverable_errors.any? { |klass| error.is_a?(klass) }
+    end
+
+    # Detect and rename migration files with duplicate timestamps.
+    # Parallel worktree tasks can create migrations with the same timestamp
+    # when they start from the same HEAD. After sequential merge, the duplicates
+    # cause schema version confusion and boot failures.
+    def dedup_migration_timestamps!
+      repo_path = ArnoldPipeline.configuration.claude_code_repo_path
+      return unless repo_path
+
+      migrate_dir = File.join(repo_path, "db", "migrate")
+      return unless Dir.exist?(migrate_dir)
+
+      files = Dir.glob("*.rb", base: migrate_dir).sort
+      timestamps = files.group_by { |f| f[/\A(\d+)_/, 1] }
+      duplicates = timestamps.select { |_ts, group| group.size > 1 }
+      return if duplicates.empty?
+
+      logger.warn { "[Arnold] Found #{duplicates.size} duplicate migration timestamp(s), renaming..." }
+
+      all_timestamps = Set.new(timestamps.keys)
+      duplicates.each do |ts, group|
+        # Keep the first file, rename the rest
+        group[1..].each do |filename|
+          new_ts = ts.to_i + 1
+          new_ts += 1 while all_timestamps.include?(new_ts.to_s)
+          all_timestamps.add(new_ts.to_s)
+
+          new_filename = filename.sub(/\A\d+/, new_ts.to_s)
+          old_path = File.join(migrate_dir, filename)
+          new_path = File.join(migrate_dir, new_filename)
+          File.rename(old_path, new_path)
+
+          system("git", "add", old_path, new_path, chdir: repo_path)
+          logger.info { "[Arnold] Renamed migration: #{filename} → #{new_filename}" }
+        end
+      end
+
+      system("git", "commit", "-m", "fix: deduplicate migration timestamps after parallel merge", "--no-verify", chdir: repo_path)
+    rescue => e
+      logger.warn { "[Arnold] Migration dedup failed (non-fatal): #{e.message}" }
     end
 
     def gate_check_needed?
@@ -213,7 +259,7 @@ module ArnoldPipeline
       comments = format_task_comments(tier_tasks)
       repo_context = build_repo_context(pipeline_run, tier_num)
 
-      if verification_results && has_test_suite_result?(verification_results)
+      if verification_results && should_use_verification_path?(verification_results)
         return evaluate_with_verification(
           pipeline_run:, tier_num:, tier_tasks:,
           task_summaries:, diffs:, comments:, repo_context:,
@@ -232,6 +278,13 @@ module ArnoldPipeline
       nil
     end
 
+    def should_use_verification_path?(verification_results)
+      checks = verification_results[:checks]
+      return false if checks.blank?
+
+      has_test_suite_result?(verification_results) || has_failed_required_checks?(verification_results)
+    end
+
     def has_test_suite_result?(verification_results)
       verification_results[:checks]&.any? { |c| c[:type] == :test_suite }
     end
@@ -243,6 +296,10 @@ module ArnoldPipeline
 
     def required_checks_passed?(verification_results)
       verification_results[:checks].select { |c| c[:required] }.all? { |c| c[:success] }
+    end
+
+    def has_failed_required_checks?(verification_results)
+      verification_results[:checks]&.any? { |c| c[:required] && !c[:success] }
     end
 
     def evaluate_with_verification(pipeline_run:, tier_num:, tier_tasks:,
@@ -461,7 +518,7 @@ module ArnoldPipeline
     end
 
     def handle_tier_gate_failure!(pipeline_run, tier_num, tier_tasks, gate_result, accumulated_context,
-                                   acceptance_criteria_summary: nil)
+                                   acceptance_criteria_summary: nil, verification_results: nil)
       max_retries = ArnoldPipeline.configuration.max_tier_retries
       metadata = pipeline_run.metadata || {}
       tier_retries = metadata["tier_retries"] || {}
@@ -490,7 +547,8 @@ module ArnoldPipeline
             base_description: td["description"],
             gate_issues: gate_issues,
             original_tier_tasks: tier_tasks,
-            acceptance_criteria_summary: acceptance_criteria_summary
+            acceptance_criteria_summary: acceptance_criteria_summary,
+            verification_output: extract_verification_output(verification_results)
           )
 
           pipeline_run.tasks.create!(
@@ -513,7 +571,10 @@ module ArnoldPipeline
           end
         end
 
-        return if created_tasks.empty?
+        if created_tasks.empty?
+          logger.warn { "[Arnold] Tier #{tier_num} gate failed but no corrective tasks generated (retry #{retry_count}/#{max_retries})" }
+          next
+        end
 
         # Include the current tier's context_summary so corrective tasks know what was already built
         current_tier_summary = gate_result["context_summary"]
@@ -539,12 +600,15 @@ module ArnoldPipeline
           end
 
           merge_tier_results!(pipeline_run, [task])
+          task.reload
+          run_post_merge_hooks([task], tier_num)
         end
 
         # Re-run empirical checks and gate check
         all_tier_tasks = pipeline_run.tasks.in_tier(tier_num).to_a
         acceptance_criteria_summary = run_criteria_check!(pipeline_run, all_tier_tasks, tier_num)
         retry_verification_results = run_verification_checks(tier_num)
+        verification_results = retry_verification_results
         gate_result = run_tier_gate!(pipeline_run, tier_num, all_tier_tasks,
                                      acceptance_criteria_summary:,
                                      verification_results: retry_verification_results)
@@ -954,7 +1018,26 @@ module ArnoldPipeline
       "## Prior Implementation Context\n\n#{lines.join("\n\n")}"
     end
 
-    def build_corrective_description(base_description:, gate_issues: [], original_tier_tasks: [], acceptance_criteria_summary: nil)
+    def extract_verification_output(verification_results)
+      return nil unless verification_results
+
+      failed_checks = verification_results[:checks]&.select { |c| !c[:success] }
+      return nil if failed_checks.blank?
+
+      sections = failed_checks.map do |c|
+        output = [c[:stdout], c[:stderr]].compact.reject(&:empty?).join("\n")
+        next if output.strip.empty?
+
+        truncated = output.length > 3000 ? output[-3000..] : output
+        "### #{c[:name]} (FAILED, exit code #{c[:exit_code]})\n#{truncated}"
+      end.compact
+
+      return nil if sections.empty?
+
+      sections.join("\n\n")
+    end
+
+    def build_corrective_description(base_description:, gate_issues: [], original_tier_tasks: [], acceptance_criteria_summary: nil, verification_output: nil)
       sections = [base_description]
 
       if gate_issues.present?
@@ -973,6 +1056,10 @@ module ArnoldPipeline
 
       if acceptance_criteria_summary.present?
         sections << "## Acceptance Criteria Status\n#{acceptance_criteria_summary}"
+      end
+
+      if verification_output.present?
+        sections << "## Verification Output\n```\n#{verification_output}\n```"
       end
 
       return base_description if sections.size == 1

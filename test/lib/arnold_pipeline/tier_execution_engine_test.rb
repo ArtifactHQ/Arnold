@@ -147,6 +147,69 @@ module ArnoldPipeline
       end
     end
 
+    # --- dedup_migration_timestamps! ---
+
+    test "dedup_migration_timestamps! renames duplicate timestamp migrations" do
+      Dir.mktmpdir("dedup_test") do |tmpdir|
+        # Init a git repo
+        system("git", "init", chdir: tmpdir, out: File::NULL, err: File::NULL)
+        system("git", "-C", tmpdir, "commit", "--allow-empty", "-m", "init", out: File::NULL, err: File::NULL)
+
+        migrate_dir = File.join(tmpdir, "db", "migrate")
+        FileUtils.mkdir_p(migrate_dir)
+
+        # Create two migrations with the same timestamp (parallel merge artifact)
+        File.write(File.join(migrate_dir, "20260222230017_create_sessions.rb"), "class CreateSessions < ActiveRecord::Migration[8.1]; end")
+        File.write(File.join(migrate_dir, "20260222230017_create_resources.rb"), "class CreateResources < ActiveRecord::Migration[8.1]; end")
+        File.write(File.join(migrate_dir, "20260222230016_create_users.rb"), "class CreateUsers < ActiveRecord::Migration[8.1]; end")
+        system("git", "-C", tmpdir, "add", ".", out: File::NULL)
+        system("git", "-C", tmpdir, "commit", "-m", "add migrations", out: File::NULL, err: File::NULL)
+
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+
+        @engine.send(:dedup_migration_timestamps!)
+
+        files = Dir.glob("*.rb", base: migrate_dir).sort
+        timestamps = files.map { |f| f[/\A(\d+)_/, 1] }
+
+        assert_equal 3, files.size
+        assert_equal timestamps.uniq.size, timestamps.size, "All timestamps should be unique after dedup"
+        assert_includes timestamps, "20260222230016"
+        assert_includes timestamps, "20260222230017"
+        assert_includes timestamps, "20260222230018"
+      end
+    end
+
+    test "dedup_migration_timestamps! is a no-op when no duplicates" do
+      Dir.mktmpdir("dedup_noop") do |tmpdir|
+        system("git", "init", chdir: tmpdir, out: File::NULL, err: File::NULL)
+        system("git", "-C", tmpdir, "commit", "--allow-empty", "-m", "init", out: File::NULL, err: File::NULL)
+
+        migrate_dir = File.join(tmpdir, "db", "migrate")
+        FileUtils.mkdir_p(migrate_dir)
+        File.write(File.join(migrate_dir, "20260222230001_create_users.rb"), "class CreateUsers; end")
+        File.write(File.join(migrate_dir, "20260222230002_create_posts.rb"), "class CreatePosts; end")
+        system("git", "-C", tmpdir, "add", ".", out: File::NULL)
+        system("git", "-C", tmpdir, "commit", "-m", "migrations", out: File::NULL, err: File::NULL)
+
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+
+        # Should not create any commits
+        before_sha, = Open3.capture2("git", "-C", tmpdir, "rev-parse", "HEAD")
+        @engine.send(:dedup_migration_timestamps!)
+        after_sha, = Open3.capture2("git", "-C", tmpdir, "rev-parse", "HEAD")
+
+        assert_equal before_sha, after_sha, "No commit should be created when no duplicates exist"
+      end
+    end
+
+    test "dedup_migration_timestamps! handles missing db/migrate directory" do
+      Dir.mktmpdir("dedup_missing") do |tmpdir|
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+        assert_nothing_raised { @engine.send(:dedup_migration_timestamps!) }
+      end
+    end
+
     # --- run_tier_gate! ---
 
     test "run_tier_gate! logs warning with backtrace on error" do
@@ -311,6 +374,50 @@ module ArnoldPipeline
       # Verify 2 corrective tasks were created
       corrective = pipeline_run.tasks.where(tier: 0).where.not(title: "Setup DB")
       assert_equal 2, corrective.count
+    end
+
+    test "handle_tier_gate_failure! runs post-merge hooks after each corrective task merge" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 1
+        c.tier_gate_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = "/tmp/test-repo"
+        c.post_merge_hooks = [
+          { name: "schema", trigger_paths: ["db/migrate/**"], command: "bin/rails db:prepare" }
+        ]
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      gate_fail = {
+        "pass" => false,
+        "issues" => ["migration conflict"],
+        "corrective_tasks" => [
+          { "title" => "Fix migration", "description" => "remove duplicate migration" }
+        ],
+        "context_summary" => "context"
+      }
+      gate_pass = { "pass" => true, "issues" => [], "context_summary" => "Fixed.", "corrective_tasks" => [] }
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @tier_gate_check.stubs(:call).returns(gate_pass)
+
+      # Expect post-merge hooks to be called after corrective task merge
+      hook_call_count = 0
+      ArnoldPipeline::PostMergeHookRunner.stubs(:call).with { |**kwargs|
+        hook_call_count += 1
+        true
+      }.returns([])
+
+      @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [], gate_fail, [])
+
+      assert_equal 1, hook_call_count, "Post-merge hooks should run once per corrective task merge"
     end
 
     test "handle_tier_gate_failure! sequential execution works with sync provider" do
@@ -823,6 +930,34 @@ module ArnoldPipeline
       assert_equal 2, (pipeline_run.metadata["tier_retries"] || {})["0"]
     end
 
+    test "handle_tier_gate_failure! consumes retry when corrective_tasks is empty instead of silently returning" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 2
+        c.tier_gate_enabled = true
+        c.context_propagation_enabled = false
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "test", status: :executing)
+
+      gate_fail = {
+        "pass" => false,
+        "issues" => ["Test suite failed: 14 runs, 0 assertions, 0 failures, 14 errors"],
+        "corrective_tasks" => []
+      }
+
+      assert_raises(TierGateError) do
+        @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [], gate_fail, [])
+      end
+
+      pipeline_run.reload
+      assert_equal "paused", pipeline_run.status
+      assert_equal 2, (pipeline_run.metadata["tier_retries"] || {})["0"]
+    end
+
     # --- Post-merge hooks and verification checks ---
 
     test "runs post-merge hooks after merge and before gate check" do
@@ -915,6 +1050,21 @@ module ArnoldPipeline
       ArnoldPipeline::VerificationRunner.expects(:call).never
 
       @engine.execute_tiers!(pipeline_run)
+    end
+
+    test "build_checks creates solid_stack check without command" do
+      ArnoldPipeline.configure do |c|
+        c.verification_checks = [
+          { "name" => "Solid stack", "type" => "solid_stack", "required" => true }
+        ]
+      end
+
+      checks = @engine.send(:build_checks)
+
+      assert_equal 1, checks.size
+      assert_equal :solid_stack, checks[0].type
+      assert_nil checks[0].command
+      assert checks[0].required?
     end
 
     test "passes verification_results to tier gate check" do
@@ -2007,6 +2157,36 @@ module ArnoldPipeline
       assert_equal "execution_error", @engine.send(:task_failure_reason, task)
     end
 
+    test "task_failure_reason returns merge_failed for failed task with merge error comment" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Merge Fail", position: 0, status: :failed, result_diff: "[]",
+        result_comments: [{ "source" => "arnold", "author" => "system", "body" => "Merge failed: Your local changes would be overwritten" }]
+      )
+
+      assert_equal "merge_failed", @engine.send(:task_failure_reason, task)
+    end
+
+    test "task_failure_reason returns empty_diff for failed task with non-merge comments" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Empty", position: 0, status: :failed, result_diff: "[]",
+        result_comments: [{ "source" => "arnold", "author" => "system", "body" => "Some other error" }]
+      )
+
+      assert_equal "empty_diff", @engine.send(:task_failure_reason, task)
+    end
+
+    test "task_failure_reason returns merge_failed even when result_diff is nil" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      task = pipeline_run.tasks.create!(
+        title: "Merge Nil", position: 0, status: :failed, result_diff: nil,
+        result_comments: [{ "source" => "arnold", "author" => "system", "body" => "Merge failed: conflict" }]
+      )
+
+      assert_equal "merge_failed", @engine.send(:task_failure_reason, task)
+    end
+
     # --- iteration_number propagation ---
 
     test "execute_tiers! propagates iteration_number to all events" do
@@ -2243,6 +2423,194 @@ module ArnoldPipeline
       assert_equal 1, result["corrective_tasks"].size
       assert_equal "Fix test failures", result["corrective_tasks"].first["title"]
       assert_includes result["corrective_tasks"].first["labels"], "bugfix"
+    end
+
+    # --- should_use_verification_path? ---
+
+    test "should_use_verification_path? returns true when test_suite check present" do
+      verification_results = {
+        checks: [
+          { name: "Boot check", type: :boot, success: true, required: true },
+          { name: "Test suite", type: :test_suite, success: true, required: false }
+        ]
+      }
+      assert @engine.send(:should_use_verification_path?, verification_results)
+    end
+
+    test "should_use_verification_path? returns true when required check failed (no test_suite)" do
+      verification_results = {
+        checks: [
+          { name: "Bundle install", type: :custom, success: true, required: true },
+          { name: "Boot check", type: :boot, success: false, required: true }
+        ]
+      }
+      assert @engine.send(:should_use_verification_path?, verification_results)
+    end
+
+    test "should_use_verification_path? returns false when all pass and no test_suite" do
+      verification_results = {
+        checks: [
+          { name: "Bundle install", type: :custom, success: true, required: true },
+          { name: "Boot check", type: :boot, success: true, required: true }
+        ]
+      }
+      refute @engine.send(:should_use_verification_path?, verification_results)
+    end
+
+    test "should_use_verification_path? returns false when checks empty" do
+      verification_results = { checks: [] }
+      refute @engine.send(:should_use_verification_path?, verification_results)
+    end
+
+    # --- extract_verification_output ---
+
+    test "extract_verification_output returns nil when verification_results is nil" do
+      result = @engine.send(:extract_verification_output, nil)
+      assert_nil result
+    end
+
+    test "extract_verification_output extracts test_suite output" do
+      verification_results = {
+        checks: [
+          { name: "Test suite", type: :test_suite, success: false, exit_code: 1,
+            stdout: "FAIL test_something\nExpected 1 got 2", stderr: "" }
+        ]
+      }
+      result = @engine.send(:extract_verification_output, verification_results)
+      assert_includes result, "### Test suite (FAILED, exit code 1)"
+      assert_includes result, "FAIL test_something"
+    end
+
+    test "extract_verification_output extracts boot check output" do
+      verification_results = {
+        checks: [
+          { name: "Boot check", type: :boot, success: false, required: true, exit_code: 1,
+            stdout: "", stderr: "NameError: uninitialized constant UsersController" }
+        ]
+      }
+      result = @engine.send(:extract_verification_output, verification_results)
+      assert_includes result, "### Boot check (FAILED, exit code 1)"
+      assert_includes result, "NameError: uninitialized constant UsersController"
+    end
+
+    test "extract_verification_output includes all failed checks" do
+      verification_results = {
+        checks: [
+          { name: "Bundle install", type: :custom, success: true, exit_code: 0,
+            stdout: "ok", stderr: "" },
+          { name: "Boot check", type: :boot, success: false, required: true, exit_code: 1,
+            stdout: "", stderr: "LoadError: cannot load file" },
+          { name: "Test suite", type: :test_suite, success: false, exit_code: 1,
+            stdout: "2 failures", stderr: "" }
+        ]
+      }
+      result = @engine.send(:extract_verification_output, verification_results)
+      assert_includes result, "### Boot check (FAILED, exit code 1)"
+      assert_includes result, "LoadError: cannot load file"
+      assert_includes result, "### Test suite (FAILED, exit code 1)"
+      assert_includes result, "2 failures"
+      refute_includes result, "Bundle install"
+    end
+
+    test "extract_verification_output returns nil when all checks pass" do
+      verification_results = {
+        checks: [
+          { name: "Boot check", type: :boot, success: true, exit_code: 0,
+            stdout: "OK", stderr: "" }
+        ]
+      }
+      result = @engine.send(:extract_verification_output, verification_results)
+      assert_nil result
+    end
+
+    test "extract_verification_output truncates individual check output to 3000 chars" do
+      long_output = "x" * 5000
+      verification_results = {
+        checks: [
+          { name: "Test suite", type: :test_suite, success: false, exit_code: 1,
+            stdout: long_output, stderr: "" }
+        ]
+      }
+      result = @engine.send(:extract_verification_output, verification_results)
+      assert result.length < 3200
+    end
+
+    # --- build_corrective_description with verification_output ---
+
+    test "build_corrective_description includes verification output when provided" do
+      verification_output = "### Test suite (FAILED, exit code 1)\n1 runs, 0 assertions, 1 failures\nFAIL UserTest#test_validates_email\nExpected nil to not be nil"
+
+      result = @engine.send(:build_corrective_description,
+        base_description: "Fix the failing tests",
+        gate_issues: ["test failures"],
+        original_tier_tasks: [],
+        acceptance_criteria_summary: nil,
+        verification_output: verification_output
+      )
+
+      assert_includes result, "## Verification Output"
+      assert_includes result, "FAIL UserTest#test_validates_email"
+      assert_includes result, "Expected nil to not be nil"
+    end
+
+    test "build_corrective_description omits verification output when nil" do
+      result = @engine.send(:build_corrective_description,
+        base_description: "Fix the failing tests",
+        gate_issues: ["test failures"],
+        original_tier_tasks: [],
+        acceptance_criteria_summary: nil,
+        verification_output: nil
+      )
+
+      refute_includes result, "## Verification Output"
+    end
+
+    # --- handle_tier_gate_failure! with verification_results ---
+
+    test "handle_tier_gate_failure! passes verification output to corrective task descriptions" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 1
+        c.tier_gate_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      pipeline_run = ArnoldPipeline::PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      gate_fail = {
+        "pass" => false,
+        "issues" => ["test failures"],
+        "corrective_tasks" => [
+          { "title" => "Fix tests", "description" => "fix the test failures" }
+        ],
+        "context_summary" => "context"
+      }
+      gate_pass = { "pass" => true, "issues" => [], "context_summary" => "Fixed.", "corrective_tasks" => [] }
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @tier_gate_check.stubs(:call).returns(gate_pass)
+
+      verification_results = {
+        all_passed: false,
+        checks: [
+          { name: "Test suite", type: :test_suite, success: false, exit_code: 1,
+            stdout: "1 runs, 0 assertions, 1 failures, 0 errors\nFAIL UserTest#test_validates_email\nExpected nil to not be nil",
+            stderr: "" }
+        ]
+      }
+
+      @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [], gate_fail, [],
+                   verification_results: verification_results)
+
+      corrective = pipeline_run.tasks.where(title: "Fix tests").first
+      assert_not_nil corrective
+      assert_includes corrective.description, "## Verification Output"
+      assert_includes corrective.description, "FAIL UserTest#test_validates_email"
     end
 
     private

@@ -359,6 +359,78 @@ module ArnoldPipeline
       assert_match(/criteria_check_mode must be one of/, error.message)
     end
 
+    # --- claude_code config defaults ---
+
+    test "claude_code_max_turns defaults to 25" do
+      assert_equal 25, @config.claude_code_max_turns
+    end
+
+    test "claude_code_max_budget_usd defaults to nil" do
+      assert_nil @config.claude_code_max_budget_usd
+    end
+
+    test "claude_code_tools defaults to nil" do
+      assert_nil @config.claude_code_tools
+    end
+
+    test "claude_code_allowed_tools defaults to nil" do
+      assert_nil @config.claude_code_allowed_tools
+    end
+
+    test "claude_code_disallowed_tools defaults to nil" do
+      assert_nil @config.claude_code_disallowed_tools
+    end
+
+    # --- claude_code_max_budget_usd validation ---
+
+    test "validate! rejects invalid claude_code_max_budget_usd" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+
+      [0, -5, "30"].each do |bad|
+        @config.claude_code_max_budget_usd = bad
+        error = assert_raises(ConfigurationError, "Expected ConfigurationError for #{bad.inspect}") { @config.validate! }
+        assert_match(/claude_code_max_budget_usd must be nil or a positive number/, error.message)
+      end
+    end
+
+    test "validate! accepts valid claude_code_max_budget_usd" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+
+      [nil, 1.0, 5, 0.5].each do |good|
+        @config.claude_code_max_budget_usd = good
+        assert @config.validate!, "Expected validate! to pass for #{good.inspect}"
+      end
+    end
+
+    test "validate! rejects invalid claude_code_tool_restrictions" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+
+      %i[claude_code_tools claude_code_allowed_tools claude_code_disallowed_tools].each do |attr|
+        @config.send(:"#{attr}=", "not_an_array")
+        assert_raises(ConfigurationError) { @config.validate! }
+        @config.send(:"#{attr}=", [123])
+        assert_raises(ConfigurationError) { @config.validate! }
+        @config.send(:"#{attr}=", nil)
+      end
+    end
+
+    test "validate! accepts valid claude_code_tool_restrictions" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+
+      @config.claude_code_tools = ["Bash", "Edit"]
+      @config.claude_code_allowed_tools = ["Bash(git *)"]
+      @config.claude_code_disallowed_tools = nil
+      assert @config.validate!
+    end
+
     # --- Auto-detection tests ---
 
     test "auto-detects anthropic when ANTHROPIC_API_KEY is set" do

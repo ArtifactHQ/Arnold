@@ -151,6 +151,19 @@ module ArnoldPipeline
         assert_includes prompt, "Solid Queue, Solid Cache, Solid Cable"
       end
 
+      test "system_prompt includes parallel execution resource collision guidance" do
+        prompt = TaskBreakdown.system_prompt
+        assert_includes prompt, "Parallel Execution & Resource Conflicts"
+        assert_includes prompt, "isolated git worktrees"
+        assert_includes prompt, "conflicting migrations"
+        assert_includes prompt, "depends_on"
+      end
+
+      test "system_prompt omits parallel execution guidance in delta-scoped mode" do
+        prompt = TaskBreakdown.system_prompt(deltas: sample_deltas)
+        refute_includes prompt, "Parallel Execution & Resource Conflicts"
+      end
+
       # --- Delta-scoped prompt tests ---
 
       test "system_prompt includes Delta Scope section when deltas present" do
