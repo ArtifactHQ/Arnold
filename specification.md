@@ -53,7 +53,7 @@ The first task (position 0) SHOULD be a bootstrap task that sets up the project 
 
 ### Requirement: Task Execution
 The system SHALL publish generated tasks to the configured execution provider and collect code results.
-Execution providers implement a common interface: `create_tasks`, `fetch_results`, `merge_results`, and `async?`.
+Execution providers implement a common interface: `create_tasks`, `fetch_results`, `merge_results`, and `async?`. Results from `fetch_results` may optionally include an `execution_metadata` hash (string-keyed, JSON-serializable) for provider-specific observability data; the Executor stores it on the task record when present.
 Async providers (e.g., GitHub) use polling to await results; sync providers (e.g., Claude Code) return results immediately.
 
 #### Built-in Providers
@@ -62,6 +62,34 @@ Async providers (e.g., GitHub) use polling to await results; sync providers (e.g
 - **Null** (`:null`) — Test-only provider that returns empty results.
 
 Custom providers can be registered via `ArnoldPipeline::Providers::Execution.register(:name, ProviderClass)`.
+
+#### Scenario: Claude Code Execution Metadata [SPEC-EXEC-002]
+- GIVEN a task executed by the Claude Code provider.
+- WHEN the task completes (success or failure).
+- THEN the provider parses the JSON output from `claude --print --output-format json` and extracts execution metadata: `cost_usd`, `duration_ms`, `num_turns`, `model`, and `session_id`.
+- AND the metadata is stored on the task record's `execution_metadata` JSON column using string keys.
+- AND execution_metadata is an optional field in the provider contract — providers that omit it continue working unchanged.
+
+#### Scenario: Claude Code Failure Diagnostics [SPEC-EXEC-003]
+- GIVEN a task executed by the Claude Code provider that fails.
+- WHEN `fetch_results` assembles the result for the executor.
+- THEN Claude's final message is captured as a comment (`source: "claude_code"`, `author: "claude"`, body prefixed with "Task failed:").
+- AND the comment body is truncated to 3000 characters if it exceeds that limit.
+- AND the comment is visible to the analysis agent for failure diagnosis.
+
+#### Scenario: Claude Code Error Detection [SPEC-EXEC-004]
+- GIVEN a task executed by the Claude Code provider.
+- AND the Claude CLI exits with code 0 but the JSON output contains `is_error: true`.
+- WHEN the provider processes the result.
+- THEN the task is marked as failed with error "Claude reported error: {subtype}".
+- AND this prevents silent failures when Claude hits max turns or encounters internal errors.
+
+#### Scenario: Claude Code Prompt Layering [SPEC-EXEC-005]
+- GIVEN a task to be executed by the Claude Code provider.
+- WHEN the CLI command is constructed.
+- THEN behavioral instructions (test running, commit rules, working directory constraints) are sent via `--append-system-prompt`.
+- AND project context is provided via a generated CLAUDE.md file in the worktree (auto-loaded by Claude Code).
+- AND the main prompt contains only task-specific content (title, description, labels, prior context).
 
 #### Scenario: Task Ingestion (GitHub)
 - GIVEN a list of tasks from the Task Breakdown Agent.
@@ -190,6 +218,21 @@ The system SHOULD support dynamic selection based on NL input keyword matching. 
 - GIVEN an NL input.
 - WHEN keyword matching is performed against the library's persona and recipe keywords.
 - THEN the most relevant persona (e.g., Domain Expert for fintech) and recipe (e.g., API Service) are retrieved and injected into prompts.
+
+#### Scenario: Library Selections Persistence [SPEC-LIBRARY-003]
+- GIVEN the Spec Generation Agent has matched a persona, recipe, and domain type from the Library.
+- WHEN the orchestrator completes spec generation.
+- THEN the selected library items are persisted in `pipeline_run.metadata["library_selections"]` as a hash with keys: `persona` (name string), `recipe` (name string), `supporting_recipes` (array of name strings), `domain_type` (code string).
+- AND these selections are available to downstream stages (e.g., execution provider) without re-running library matching.
+
+#### Scenario: Library-Driven CLAUDE.md Generation [SPEC-LIBRARY-004]
+- GIVEN library selections are available in `pipeline_run.metadata["library_selections"]`.
+- WHEN the Claude Code provider sets up a worktree for task execution.
+- THEN the `ClaudeMdGenerator` service assembles a CLAUDE.md file from the resolved persona, recipe, and domain type YAML data.
+- AND the generated file includes sections derived from library data: Tech Stack (from recipe framework), Conventions (from recipe sections guidance), Testing (from recipe verification), Domain Context (from domain type), Terminology (from domain type), Watch For (from domain type).
+- AND sections with no data are omitted (nil-safe).
+- AND if the target repo already has a root `CLAUDE.md`, the generated file is written to `.claude/CLAUDE.md` instead (additive loading).
+- AND if no library selections are available, no CLAUDE.md is generated (no-op).
 
 ### Requirement: Recipe Structural Metadata [SPEC-LIBRARY-002]
 Recipes MAY include structural metadata on their sections to guide task breakdown and execution ordering.
@@ -843,9 +886,14 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | github_issue_mention | String | nil | None |
 | claude_code_repo_path | String | nil | Required when execution_provider is :claude_code (must be valid directory) |
 | claude_code_model | String | "sonnet" | None |
-| claude_code_max_turns | Integer | nil | None |
+| claude_code_max_turns | Integer | 25 | nil or positive integer |
 | claude_code_permission_mode | String | "bypassPermissions" | Must be one of: acceptEdits, bypassPermissions, default, delegate, dontAsk, plan |
 | claude_code_max_concurrency | Integer | 4 | 1-16 |
+| claude_code_max_budget_usd | Numeric | nil | nil or positive number |
+| claude_code_tools | Array of Strings | nil | nil or Array of Strings |
+| claude_code_allowed_tools | Array of Strings | nil | nil or Array of Strings |
+| claude_code_disallowed_tools | Array of Strings | nil | nil or Array of Strings |
+| claude_code_task_timeout | Numeric | 30 | nil or positive number (minutes) |
 | max_iterations | Integer | 3 | 1-10 |
 | analysis_done_threshold | Integer | nil (disabled) | nil or 50-100 |
 | library_path | String | nil (built-in library) | None |
