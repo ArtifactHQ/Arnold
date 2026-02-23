@@ -2425,6 +2425,43 @@ module ArnoldPipeline
       assert_includes result["corrective_tasks"].first["labels"], "bugfix"
     end
 
+    # --- should_use_verification_path? ---
+
+    test "should_use_verification_path? returns true when test_suite check present" do
+      verification_results = {
+        checks: [
+          { name: "Boot check", type: :boot, success: true, required: true },
+          { name: "Test suite", type: :test_suite, success: true, required: false }
+        ]
+      }
+      assert @engine.send(:should_use_verification_path?, verification_results)
+    end
+
+    test "should_use_verification_path? returns true when required check failed (no test_suite)" do
+      verification_results = {
+        checks: [
+          { name: "Bundle install", type: :custom, success: true, required: true },
+          { name: "Boot check", type: :boot, success: false, required: true }
+        ]
+      }
+      assert @engine.send(:should_use_verification_path?, verification_results)
+    end
+
+    test "should_use_verification_path? returns false when all pass and no test_suite" do
+      verification_results = {
+        checks: [
+          { name: "Bundle install", type: :custom, success: true, required: true },
+          { name: "Boot check", type: :boot, success: true, required: true }
+        ]
+      }
+      refute @engine.send(:should_use_verification_path?, verification_results)
+    end
+
+    test "should_use_verification_path? returns false when checks empty" do
+      verification_results = { checks: [] }
+      refute @engine.send(:should_use_verification_path?, verification_results)
+    end
+
     # --- extract_verification_output ---
 
     test "extract_verification_output returns nil when verification_results is nil" do

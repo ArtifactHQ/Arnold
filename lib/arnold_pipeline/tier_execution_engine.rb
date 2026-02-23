@@ -259,7 +259,7 @@ module ArnoldPipeline
       comments = format_task_comments(tier_tasks)
       repo_context = build_repo_context(pipeline_run, tier_num)
 
-      if verification_results && has_test_suite_result?(verification_results)
+      if verification_results && should_use_verification_path?(verification_results)
         return evaluate_with_verification(
           pipeline_run:, tier_num:, tier_tasks:,
           task_summaries:, diffs:, comments:, repo_context:,
@@ -278,6 +278,13 @@ module ArnoldPipeline
       nil
     end
 
+    def should_use_verification_path?(verification_results)
+      checks = verification_results[:checks]
+      return false if checks.blank?
+
+      has_test_suite_result?(verification_results) || has_failed_required_checks?(verification_results)
+    end
+
     def has_test_suite_result?(verification_results)
       verification_results[:checks]&.any? { |c| c[:type] == :test_suite }
     end
@@ -289,6 +296,10 @@ module ArnoldPipeline
 
     def required_checks_passed?(verification_results)
       verification_results[:checks].select { |c| c[:required] }.all? { |c| c[:success] }
+    end
+
+    def has_failed_required_checks?(verification_results)
+      verification_results[:checks]&.any? { |c| c[:required] && !c[:success] }
     end
 
     def evaluate_with_verification(pipeline_run:, tier_num:, tier_tasks:,
@@ -589,6 +600,7 @@ module ArnoldPipeline
           end
 
           merge_tier_results!(pipeline_run, [task])
+          task.reload
           run_post_merge_hooks([task], tier_num)
         end
 
