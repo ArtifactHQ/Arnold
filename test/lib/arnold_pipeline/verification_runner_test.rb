@@ -146,7 +146,7 @@ module ArnoldPipeline
       assert result[:checks][0][:stderr].length > 0
     end
 
-    test "caps stdout at 5000 chars" do
+    test "caps stdout at approximately STDOUT_CAP chars" do
       # Create a script that outputs more than 5000 chars
       verbose_script = File.join(@tmpdir, "verbose.sh")
       File.write(verbose_script, "#!/bin/bash\nprintf 'x%.0s' {1..6000}\nexit 0\n")
@@ -158,10 +158,11 @@ module ArnoldPipeline
 
       result = VerificationRunner.call(repo_path: @tmpdir, checks: checks)
 
-      assert result[:checks][0][:stdout].length <= 5000
+      # head_and_tail_capture adds a truncation marker, so allow a small margin
+      assert result[:checks][0][:stdout].length <= 5020
     end
 
-    test "captures tail of stdout when output exceeds cap" do
+    test "captures tail of stdout when output exceeds cap for test_suite" do
       # Create a script where the important content is at the END
       tail_script = File.join(@tmpdir, "tail_test.sh")
       # Emit 5500 chars of padding then the important summary line
@@ -175,7 +176,7 @@ module ArnoldPipeline
       FileUtils.chmod(0o755, tail_script)
 
       checks = [
-        VerificationCheck.new(name: "tail_check", command: tail_script)
+        VerificationCheck.new(name: "tail_check", command: tail_script, type: :test_suite)
       ]
 
       result = VerificationRunner.call(repo_path: @tmpdir, checks: checks)
@@ -249,6 +250,66 @@ module ArnoldPipeline
       refute result[:checks][0][:success]
       assert_includes result[:checks][0][:stderr], "SolidQueue"
       refute result[:all_passed]
+    end
+
+    test "boot check preserves error message at top of stderr" do
+      boot_script = File.join(@tmpdir, "boot_fail.sh")
+      error_line = "NameError: uninitialized constant UsersController"
+      stack_lines = (1..200).map { |i| "  from /app/lib/file#{i}.rb:#{i}" }.join("\n")
+      stderr_file = File.join(@tmpdir, "boot_stderr.txt")
+      File.write(stderr_file, "#{error_line}\n#{stack_lines}\n")
+      File.write(boot_script, "#!/bin/bash\ncat '#{stderr_file}' >&2\nexit 1\n")
+      FileUtils.chmod(0o755, boot_script)
+
+      checks = [
+        VerificationCheck.new(name: "Boot check", command: boot_script, type: :boot, required: true)
+      ]
+
+      result = VerificationRunner.call(repo_path: @tmpdir, checks: checks)
+
+      stderr = result[:checks][0][:stderr]
+      assert_includes stderr, "NameError: uninitialized constant UsersController"
+    end
+
+    test "test_suite check preserves summary at bottom of stdout" do
+      test_script = File.join(@tmpdir, "test_fail.sh")
+      noise = (1..200).map { |i| "Loading test_#{i}..." }.join("\n")
+      summary = "14 runs, 28 assertions, 2 failures, 0 errors, 0 skips"
+      File.write(test_script, "#!/bin/bash\necho '#{noise}'\necho '#{summary}'\nexit 1\n")
+      FileUtils.chmod(0o755, test_script)
+
+      checks = [
+        VerificationCheck.new(name: "Test suite", command: test_script, type: :test_suite, required: false)
+      ]
+
+      result = VerificationRunner.call(repo_path: @tmpdir, checks: checks)
+
+      stdout = result[:checks][0][:stdout]
+      assert_includes stdout, summary
+    end
+
+    test "head_and_tail_capture preserves both ends when output exceeds cap" do
+      runner = VerificationRunner.new(repo_path: @tmpdir, checks: [])
+      head = "ERROR: Something went wrong\n"
+      middle = "x" * 3000
+      tail = "\nLast relevant line"
+      output = head + middle + tail
+
+      result = runner.send(:head_and_tail_capture, output, 200)
+
+      assert result.length <= 200 + 20 # allow for truncation marker
+      assert_includes result, "ERROR: Something went wrong"
+      assert_includes result, "Last relevant line"
+      assert_includes result, "...[truncated]..."
+    end
+
+    test "head_and_tail_capture returns output unchanged when under cap" do
+      runner = VerificationRunner.new(repo_path: @tmpdir, checks: [])
+      short = "just a short error"
+
+      result = runner.send(:head_and_tail_capture, short, 200)
+
+      assert_equal short, result
     end
 
     test "returns empty results when checks array is empty" do

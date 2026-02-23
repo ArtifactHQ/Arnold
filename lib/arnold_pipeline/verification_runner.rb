@@ -53,8 +53,8 @@ module ArnoldPipeline
         type: check.type,
         success: status.success?,
         exit_code: status.exitstatus,
-        stdout: tail_capture(stdout, STDOUT_CAP),
-        stderr: tail_capture(stderr, STDERR_CAP),
+        stdout: capture_output(check.type, stdout, STDOUT_CAP),
+        stderr: capture_output(check.type, stderr, STDERR_CAP),
         duration_ms: duration_ms,
         required: check.required?
       }
@@ -116,12 +116,30 @@ module ArnoldPipeline
       "bin/rails runner #{script_path}"
     end
 
-    # Capture the LAST n characters of output so that test summary lines
-    # and failure blocks (which appear at the end) are preserved instead
-    # of discarding them in favour of early loading/path output.
+    # Route capture strategy based on check type.
+    # Test suites: keep tail (failure summary at bottom).
+    # Everything else: keep head+tail (exception at top, context at bottom).
+    def capture_output(check_type, output, cap)
+      if check_type == :test_suite
+        tail_capture(output, cap)
+      else
+        head_and_tail_capture(output, cap)
+      end
+    end
+
+    # Keep the LAST n characters — test failure summaries appear at the end.
     def tail_capture(output, cap)
       return output if output.length <= cap
       output[-cap, cap]
+    end
+
+    # Keep the FIRST n/2 and LAST n/2 characters — boot/solid_stack errors
+    # have the exception at the top and recent context at the bottom.
+    def head_and_tail_capture(output, cap)
+      return output if output.length <= cap
+
+      half = cap / 2
+      output[0, half] + "\n...[truncated]...\n" + output[-half, half]
     end
 
     def build_summary(results)
