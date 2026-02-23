@@ -431,6 +431,37 @@ module ArnoldPipeline
         assert_equal "minitest", result.framework
         assert result.passed
       end
+
+      # --- has_issues? ---
+
+      test "has_issues? returns false when passed" do
+        result = TestResultParser.call(
+          stdout: "14 runs, 28 assertions, 0 failures, 0 errors, 0 skips",
+          stderr: "", exit_code: 0
+        )
+        refute result.has_issues?
+      end
+
+      test "has_issues? returns true when failed with parsed failures" do
+        stdout = <<~OUTPUT
+            1) Failure:
+          AuthTest#test_login [test/auth_test.rb:42]:
+          Expected 200, got 401
+
+          14 runs, 28 assertions, 1 failures, 0 errors, 0 skips
+        OUTPUT
+        result = TestResultParser.call(stdout: stdout, stderr: "", exit_code: 1)
+        assert result.has_issues?
+      end
+
+      test "has_issues? returns true when failed with empty failures array" do
+        result = TestExecution::TestResult.new(
+          passed: false, exit_code: 1,
+          summary: "14 runs, 0 assertions, 0 failures, 14 errors",
+          failures: [], framework: "minitest"
+        )
+        assert result.has_issues?
+      end
     end
   end
 end
