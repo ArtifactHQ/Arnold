@@ -560,7 +560,10 @@ module ArnoldPipeline
           end
         end
 
-        return if created_tasks.empty?
+        if created_tasks.empty?
+          logger.warn { "[Arnold] Tier #{tier_num} gate failed but no corrective tasks generated (retry #{retry_count}/#{max_retries})" }
+          next
+        end
 
         # Include the current tier's context_summary so corrective tasks know what was already built
         current_tier_summary = gate_result["context_summary"]

@@ -930,6 +930,34 @@ module ArnoldPipeline
       assert_equal 2, (pipeline_run.metadata["tier_retries"] || {})["0"]
     end
 
+    test "handle_tier_gate_failure! consumes retry when corrective_tasks is empty instead of silently returning" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 2
+        c.tier_gate_enabled = true
+        c.context_propagation_enabled = false
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "test", status: :executing)
+
+      gate_fail = {
+        "pass" => false,
+        "issues" => ["Test suite failed: 14 runs, 0 assertions, 0 failures, 14 errors"],
+        "corrective_tasks" => []
+      }
+
+      assert_raises(TierGateError) do
+        @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [], gate_fail, [])
+      end
+
+      pipeline_run.reload
+      assert_equal "paused", pipeline_run.status
+      assert_equal 2, (pipeline_run.metadata["tier_retries"] || {})["0"]
+    end
+
     # --- Post-merge hooks and verification checks ---
 
     test "runs post-merge hooks after merge and before gate check" do
