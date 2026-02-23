@@ -50,6 +50,61 @@ module ArnoldPipeline
         assert_includes result.failures[0][:message], "Expected 200, got 401"
       end
 
+      test "parses minitest error-only output with stack traces" do
+        stdout = <<~OUTPUT
+          Running 14 tests...
+          ..........E.E.
+
+            1) Error:
+          UsersControllerTest#test_should_get_index:
+          NameError: uninitialized constant UsersController
+              app/controllers/users_controller.rb:1:in `<main>'
+              test/controllers/users_controller_test.rb:4:in `block in <class:UsersControllerTest>'
+
+            2) Error:
+          SessionsControllerTest#test_should_create_session:
+          NoMethodError: undefined method `authenticate' for nil
+              app/controllers/sessions_controller.rb:8:in `create'
+              test/controllers/sessions_controller_test.rb:12:in `block in <class:SessionsControllerTest>'
+
+          14 runs, 0 assertions, 0 failures, 2 errors, 0 skips
+        OUTPUT
+
+        result = TestResultParser.call(stdout: stdout, stderr: "", exit_code: 1)
+
+        refute result.passed
+        assert_equal "minitest", result.framework
+        assert_equal 2, result.failures.size
+        assert_equal "UsersControllerTest#test_should_get_index", result.failures[0][:name]
+        assert_includes result.failures[0][:message], "NameError"
+        assert_equal "SessionsControllerTest#test_should_create_session", result.failures[1][:name]
+        assert_includes result.failures[1][:message], "NoMethodError"
+      end
+
+      test "parses minitest mixed failures and errors" do
+        stdout = <<~OUTPUT
+            1) Failure:
+          AuthTest#test_login [test/auth_test.rb:42]:
+          Expected 200, got 401
+
+            2) Error:
+          UsersControllerTest#test_should_get_index:
+          NameError: uninitialized constant UsersController
+              app/controllers/users_controller.rb:1:in `<main>'
+
+          14 runs, 28 assertions, 1 failures, 1 errors, 0 skips
+        OUTPUT
+
+        result = TestResultParser.call(stdout: stdout, stderr: "", exit_code: 1)
+
+        refute result.passed
+        assert_equal 2, result.failures.size
+        assert_equal "AuthTest#test_login", result.failures[0][:name]
+        assert_equal "test/auth_test.rb:42", result.failures[0][:location]
+        assert_equal "UsersControllerTest#test_should_get_index", result.failures[1][:name]
+        assert_includes result.failures[1][:message], "NameError"
+      end
+
       test "parses minitest singular forms (1 run, 1 assertion)" do
         stdout = "1 run, 1 assertion, 0 failures, 0 errors, 0 skips"
 

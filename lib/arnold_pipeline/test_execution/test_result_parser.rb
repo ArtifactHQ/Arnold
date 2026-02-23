@@ -46,15 +46,30 @@ module ArnoldPipeline
       def extract_minitest_failures
         failures = []
 
-        # Minitest failure blocks look like:
+        # Pass 1: Failure blocks with bracket location
         #   1) Failure:
         # TestName#test_something [path/to/file.rb:42]:
         # Expected true, got false
-        @combined.scan(/\d+\)\s+(?:Failure|Error):\n(.+?)(?:\[(.+?)\])?:?\n(.+?)(?=\n\n|\n\d+\)|\z)/m).each do |name, location, message|
+        @combined.scan(/\d+\)\s+Failure:\n\s*(.+?)\s+\[(.+?)\]:\n(.+?)(?=\n\n|\n\s*\d+\)|\z)/m).each do |name, location, message|
           failures << {
             name: name.strip,
             message: message.strip.lines.first&.strip || message.strip,
-            location: location&.strip
+            location: location.strip
+          }
+        end
+
+        # Pass 2: Error blocks with colon and stack trace
+        #   1) Error:
+        # TestName#test_something:
+        # NameError: uninitialized constant Foo
+        #     app/file.rb:1:in `<main>'
+        @combined.scan(/\d+\)\s+Error:\n\s*(.+?):\n(.+?)(?=\n\n|\n\s*\d+\)|\z)/m).each do |name, body|
+          first_line = body.strip.lines.first&.strip || body.strip
+          stack_match = body.match(/^\s+(\S+:\d+):in\s/)
+          failures << {
+            name: name.strip,
+            message: first_line,
+            location: stack_match&.[](1)
           }
         end
 
