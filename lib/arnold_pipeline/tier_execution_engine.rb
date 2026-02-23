@@ -537,7 +537,7 @@ module ArnoldPipeline
             gate_issues: gate_issues,
             original_tier_tasks: tier_tasks,
             acceptance_criteria_summary: acceptance_criteria_summary,
-            verification_output: extract_test_output(verification_results)
+            verification_output: extract_verification_output(verification_results)
           )
 
           pipeline_run.tasks.create!(
@@ -1006,17 +1006,23 @@ module ArnoldPipeline
       "## Prior Implementation Context\n\n#{lines.join("\n\n")}"
     end
 
-    def extract_test_output(verification_results)
+    def extract_verification_output(verification_results)
       return nil unless verification_results
 
-      test_check = verification_results[:checks]&.find { |c| c[:type] == :test_suite }
-      return nil unless test_check
+      failed_checks = verification_results[:checks]&.select { |c| !c[:success] }
+      return nil if failed_checks.blank?
 
-      output = [test_check[:stdout], test_check[:stderr]].compact.join("\n")
-      return nil if output.strip.empty?
+      sections = failed_checks.map do |c|
+        output = [c[:stdout], c[:stderr]].compact.reject(&:empty?).join("\n")
+        next if output.strip.empty?
 
-      # Keep last 3000 chars — failure summary is at the bottom
-      output.length > 3000 ? output[-3000..] : output
+        truncated = output.length > 3000 ? output[-3000..] : output
+        "### #{c[:name]} (FAILED, exit code #{c[:exit_code]})\n#{truncated}"
+      end.compact
+
+      return nil if sections.empty?
+
+      sections.join("\n\n")
     end
 
     def build_corrective_description(base_description:, gate_issues: [], original_tier_tasks: [], acceptance_criteria_summary: nil, verification_output: nil)
@@ -1041,7 +1047,7 @@ module ArnoldPipeline
       end
 
       if verification_output.present?
-        sections << "## Test Output\n```\n#{verification_output}\n```"
+        sections << "## Verification Output\n```\n#{verification_output}\n```"
       end
 
       return base_description if sections.size == 1

@@ -2425,25 +2425,68 @@ module ArnoldPipeline
       assert_includes result["corrective_tasks"].first["labels"], "bugfix"
     end
 
-    # --- extract_test_output ---
+    # --- extract_verification_output ---
 
-    test "extract_test_output returns nil when verification_results is nil" do
-      result = @engine.send(:extract_test_output, nil)
+    test "extract_verification_output returns nil when verification_results is nil" do
+      result = @engine.send(:extract_verification_output, nil)
       assert_nil result
     end
 
-    test "extract_test_output extracts test_suite stdout" do
+    test "extract_verification_output extracts test_suite output" do
       verification_results = {
         checks: [
           { name: "Test suite", type: :test_suite, success: false, exit_code: 1,
             stdout: "FAIL test_something\nExpected 1 got 2", stderr: "" }
         ]
       }
-      result = @engine.send(:extract_test_output, verification_results)
+      result = @engine.send(:extract_verification_output, verification_results)
+      assert_includes result, "### Test suite (FAILED, exit code 1)"
       assert_includes result, "FAIL test_something"
     end
 
-    test "extract_test_output truncates to last 3000 chars" do
+    test "extract_verification_output extracts boot check output" do
+      verification_results = {
+        checks: [
+          { name: "Boot check", type: :boot, success: false, required: true, exit_code: 1,
+            stdout: "", stderr: "NameError: uninitialized constant UsersController" }
+        ]
+      }
+      result = @engine.send(:extract_verification_output, verification_results)
+      assert_includes result, "### Boot check (FAILED, exit code 1)"
+      assert_includes result, "NameError: uninitialized constant UsersController"
+    end
+
+    test "extract_verification_output includes all failed checks" do
+      verification_results = {
+        checks: [
+          { name: "Bundle install", type: :custom, success: true, exit_code: 0,
+            stdout: "ok", stderr: "" },
+          { name: "Boot check", type: :boot, success: false, required: true, exit_code: 1,
+            stdout: "", stderr: "LoadError: cannot load file" },
+          { name: "Test suite", type: :test_suite, success: false, exit_code: 1,
+            stdout: "2 failures", stderr: "" }
+        ]
+      }
+      result = @engine.send(:extract_verification_output, verification_results)
+      assert_includes result, "### Boot check (FAILED, exit code 1)"
+      assert_includes result, "LoadError: cannot load file"
+      assert_includes result, "### Test suite (FAILED, exit code 1)"
+      assert_includes result, "2 failures"
+      refute_includes result, "Bundle install"
+    end
+
+    test "extract_verification_output returns nil when all checks pass" do
+      verification_results = {
+        checks: [
+          { name: "Boot check", type: :boot, success: true, exit_code: 0,
+            stdout: "OK", stderr: "" }
+        ]
+      }
+      result = @engine.send(:extract_verification_output, verification_results)
+      assert_nil result
+    end
+
+    test "extract_verification_output truncates individual check output to 3000 chars" do
       long_output = "x" * 5000
       verification_results = {
         checks: [
@@ -2451,24 +2494,14 @@ module ArnoldPipeline
             stdout: long_output, stderr: "" }
         ]
       }
-      result = @engine.send(:extract_test_output, verification_results)
-      assert_equal 3000, result.length
-    end
-
-    test "extract_test_output returns nil when no test_suite check exists" do
-      verification_results = {
-        checks: [
-          { name: "Boot check", type: :boot, success: true, exit_code: 0, stdout: "OK", stderr: "" }
-        ]
-      }
-      result = @engine.send(:extract_test_output, verification_results)
-      assert_nil result
+      result = @engine.send(:extract_verification_output, verification_results)
+      assert result.length < 3200
     end
 
     # --- build_corrective_description with verification_output ---
 
-    test "build_corrective_description includes test output when verification_output provided" do
-      verification_output = "1 runs, 0 assertions, 1 failures\nFAIL UserTest#test_validates_email\nExpected nil to not be nil"
+    test "build_corrective_description includes verification output when provided" do
+      verification_output = "### Test suite (FAILED, exit code 1)\n1 runs, 0 assertions, 1 failures\nFAIL UserTest#test_validates_email\nExpected nil to not be nil"
 
       result = @engine.send(:build_corrective_description,
         base_description: "Fix the failing tests",
@@ -2478,12 +2511,12 @@ module ArnoldPipeline
         verification_output: verification_output
       )
 
-      assert_includes result, "## Test Output"
+      assert_includes result, "## Verification Output"
       assert_includes result, "FAIL UserTest#test_validates_email"
       assert_includes result, "Expected nil to not be nil"
     end
 
-    test "build_corrective_description omits test output when verification_output is nil" do
+    test "build_corrective_description omits verification output when nil" do
       result = @engine.send(:build_corrective_description,
         base_description: "Fix the failing tests",
         gate_issues: ["test failures"],
@@ -2492,7 +2525,7 @@ module ArnoldPipeline
         verification_output: nil
       )
 
-      refute_includes result, "## Test Output"
+      refute_includes result, "## Verification Output"
     end
 
     # --- handle_tier_gate_failure! with verification_results ---
@@ -2539,7 +2572,7 @@ module ArnoldPipeline
 
       corrective = pipeline_run.tasks.where(title: "Fix tests").first
       assert_not_nil corrective
-      assert_includes corrective.description, "## Test Output"
+      assert_includes corrective.description, "## Verification Output"
       assert_includes corrective.description, "FAIL UserTest#test_validates_email"
     end
 
