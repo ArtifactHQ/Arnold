@@ -2,6 +2,10 @@ require_relative "context"
 require_relative "tools/base"
 require_relative "tools/get_spec"
 require_relative "tools/get_tasks"
+require_relative "tools/start_task"
+require_relative "tools/complete_task"
+require_relative "tools/report_issue"
+require_relative "tools/validate_tier"
 
 module ArnoldPipeline
   module Mcp
@@ -53,6 +57,10 @@ module ArnoldPipeline
       def register_default_tools
         register(Tools::GetSpec)
         register(Tools::GetTasks)
+        register(Tools::StartTask)
+        register(Tools::CompleteTask)
+        register(Tools::ReportIssue)
+        register(Tools::ValidateTier)
       end
 
       def error_result(code, message)
