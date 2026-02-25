@@ -2,6 +2,9 @@ require_relative "context"
 require_relative "tools/base"
 require_relative "tools/get_spec"
 require_relative "tools/get_tasks"
+require_relative "tools/ask_engineer"
+require_relative "tools/explore_architecture"
+require_relative "tools/explain_recipe"
 
 module ArnoldPipeline
   module Mcp
@@ -53,6 +56,9 @@ module ArnoldPipeline
       def register_default_tools
         register(Tools::GetSpec)
         register(Tools::GetTasks)
+        register(Tools::AskEngineer)
+        register(Tools::ExploreArchitecture)
+        register(Tools::ExplainRecipe)
       end
 
       def error_result(code, message)
