@@ -2,10 +2,17 @@ require_relative "context"
 require_relative "tools/base"
 require_relative "tools/get_spec"
 require_relative "tools/get_tasks"
+<<<<<<< HEAD
 require_relative "tools/describe_product"
 require_relative "tools/explore_domain"
 require_relative "tools/propose_change"
 require_relative "tools/confirm_change"
+=======
+require_relative "tools/start_task"
+require_relative "tools/complete_task"
+require_relative "tools/report_issue"
+require_relative "tools/validate_tier"
+>>>>>>> worktree-agent-aedfbd1e
 
 module ArnoldPipeline
   module Mcp
@@ -57,10 +64,17 @@ module ArnoldPipeline
       def register_default_tools
         register(Tools::GetSpec)
         register(Tools::GetTasks)
+<<<<<<< HEAD
         register(Tools::DescribeProduct)
         register(Tools::ExploreDomain)
         register(Tools::ProposeChange)
         register(Tools::ConfirmChange)
+=======
+        register(Tools::StartTask)
+        register(Tools::CompleteTask)
+        register(Tools::ReportIssue)
+        register(Tools::ValidateTier)
+>>>>>>> worktree-agent-aedfbd1e
       end
 
       def error_result(code, message)
