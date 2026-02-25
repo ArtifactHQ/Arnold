@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_02_12_000001) do
+ActiveRecord::Schema[8.1].define(version: 2025_02_25_000001) do
   create_table "arnold_pipeline_iterations", force: :cascade do |t|
     t.integer "confidence"
     t.json "corrective_data"
@@ -108,6 +108,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_12_000001) do
     t.index ["pipeline_run_id"], name: "index_arnold_pipeline_tasks_on_pipeline_run_id"
   end
 
+  create_table "arnold_pipeline_drift_findings", force: :cascade do |t|
+    t.integer "pipeline_run_id", null: false
+    t.integer "spec_revision_id"
+    t.string "domain"
+    t.string "drift_type", null: false
+    t.string "severity", null: false
+    t.text "description", null: false
+    t.text "spec_expectation"
+    t.text "actual_state"
+    t.json "files_examined", default: []
+    t.json "affected_tasks", default: []
+    t.string "recommendation"
+    t.string "resolution"
+    t.datetime "resolved_at"
+    t.text "notes"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["pipeline_run_id", "domain"], name: "idx_drift_findings_on_run_and_domain"
+    t.index ["pipeline_run_id", "resolution"], name: "idx_drift_findings_on_run_and_resolution"
+    t.index ["pipeline_run_id"], name: "index_arnold_pipeline_drift_findings_on_pipeline_run_id"
+    t.index ["spec_revision_id"], name: "index_arnold_pipeline_drift_findings_on_spec_revision_id"
+  end
+
+  add_foreign_key "arnold_pipeline_drift_findings", "arnold_pipeline_pipeline_runs", column: "pipeline_run_id"
+  add_foreign_key "arnold_pipeline_drift_findings", "arnold_pipeline_spec_revisions", column: "spec_revision_id"
   add_foreign_key "arnold_pipeline_pipeline_events", "arnold_pipeline_pipeline_runs", column: "pipeline_run_id"
   add_foreign_key "arnold_pipeline_iterations", "arnold_pipeline_pipeline_runs", column: "pipeline_run_id"
   add_foreign_key "arnold_pipeline_spec_deltas", "arnold_pipeline_iterations", column: "iteration_id"
