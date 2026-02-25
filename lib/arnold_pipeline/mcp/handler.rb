@@ -13,6 +13,8 @@ require_relative "tools/validate_tier"
 require_relative "tools/ask_engineer"
 require_relative "tools/explore_architecture"
 require_relative "tools/explain_recipe"
+require_relative "tools/detect_drift"
+require_relative "tools/resolve_drift"
 
 module ArnoldPipeline
   module Mcp
@@ -75,6 +77,8 @@ module ArnoldPipeline
         register(Tools::AskEngineer)
         register(Tools::ExploreArchitecture)
         register(Tools::ExplainRecipe)
+        register(Tools::DetectDrift)
+        register(Tools::ResolveDrift)
       end
 
       def error_result(code, message)
