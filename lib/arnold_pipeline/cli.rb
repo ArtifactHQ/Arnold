@@ -413,6 +413,18 @@ module ArnoldPipeline
       end
     end
 
+    desc "mcp", "Start the MCP (Model Context Protocol) server over stdio"
+    option :config, type: :string, desc: "Path to YAML config file"
+    def mcp
+      setup_standalone!
+      load_config!(options) if options[:config]
+      require "arnold_pipeline/mcp/server"
+
+      logger = Logger.new($stderr, level: Logger::INFO)
+      server = Mcp::Server.new(logger: logger)
+      server.start
+    end
+
     desc "version", "Show the version"
     def version
       say "arnold_pipeline #{ArnoldPipeline::VERSION}"

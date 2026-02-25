@@ -1,0 +1,63 @@
+require_relative "context"
+require_relative "tools/base"
+require_relative "tools/get_spec"
+require_relative "tools/get_tasks"
+
+module ArnoldPipeline
+  module Mcp
+    class Handler
+      ERROR_METHOD_NOT_FOUND = -32601
+      ERROR_INVALID_PARAMS = -32602
+      ERROR_INTERNAL = -32603
+
+      def initialize(context: nil)
+        @context = context || Context.new
+        @tools = {}
+        register_default_tools
+      end
+
+      def register(tool_class)
+        @tools[tool_class.tool_name] = tool_class
+      end
+
+      def tools_list
+        @tools.values.map { |tool|
+          {
+            name: tool.tool_name,
+            description: tool.description,
+            inputSchema: tool.input_schema
+          }
+        }
+      end
+
+      def call_tool(name, arguments = {})
+        tool = @tools[name]
+        unless tool
+          return error_result(ERROR_METHOD_NOT_FOUND, "Unknown tool: #{name}")
+        end
+
+        result = tool.call(arguments, @context)
+        {
+          content: [
+            { type: "text", text: JSON.generate(result) }
+          ]
+        }
+      rescue ArgumentError => e
+        error_result(ERROR_INVALID_PARAMS, e.message)
+      rescue => e
+        error_result(ERROR_INTERNAL, "#{e.class}: #{e.message}")
+      end
+
+      private
+
+      def register_default_tools
+        register(Tools::GetSpec)
+        register(Tools::GetTasks)
+      end
+
+      def error_result(code, message)
+        { error: { code: code, message: message } }
+      end
+    end
+  end
+end
