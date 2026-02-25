@@ -8,7 +8,7 @@ module ArnoldPipeline
       ArnoldPipeline.configure do |c|
         c.llm_provider = :anthropic
         c.llm_api_key = "sk-test-key"
-        c.llm_model = "claude-sonnet-4-20250514"
+        c.llm_model = "claude-sonnet-4-6"
         c.execution_provider = :github
         c.github_token = "ghp_test"
         c.github_repo = "testowner/testrepo"

@@ -1146,7 +1146,7 @@ module ArnoldPipeline
       File.write(user_config_file, YAML.dump("llm_model" => "gpt-4o", "llm_provider" => "openai"))
 
       explicit_config_file = File.join(Dir.tmpdir, "arnold_explicit_config_#{SecureRandom.hex(4)}.yml")
-      File.write(explicit_config_file, YAML.dump("llm_model" => "claude-sonnet-4-20250514"))
+      File.write(explicit_config_file, YAML.dump("llm_model" => "claude-sonnet-4-6"))
 
       mock_run = PipelineRun.create!(nl_input: "Build an app", status: :completed)
       mock_orchestrator = mock("orchestrator")
@@ -1158,7 +1158,7 @@ module ArnoldPipeline
       end
 
       # Explicit config should override the user config value for llm_model
-      assert_equal "claude-sonnet-4-20250514", ArnoldPipeline.configuration.llm_model
+      assert_equal "claude-sonnet-4-6", ArnoldPipeline.configuration.llm_model
       # User config value for llm_provider should still be applied (explicit config didn't set it)
       assert_equal :openai, ArnoldPipeline.configuration.llm_provider
     ensure

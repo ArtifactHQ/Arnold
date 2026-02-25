@@ -9,7 +9,7 @@ module ArnoldPipeline
         cover "ArnoldPipeline::Providers::Llm::Anthropic*"
 
         setup do
-          @provider = Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-20250514")
+          @provider = Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-6")
         end
 
         test "sends chat request and returns text" do
@@ -57,7 +57,7 @@ module ArnoldPipeline
 
         test "chat logs response body on 400 error" do
           log_output = StringIO.new
-          provider = Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-20250514",
+          provider = Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-6",
             logger: Logger.new(log_output))
 
           stub_request(:post, "https://api.anthropic.com/v1/messages")
@@ -76,17 +76,17 @@ module ArnoldPipeline
 
         test "passes request_timeout to client" do
           ::Anthropic::Client.expects(:new).with(access_token: "sk-test-key", request_timeout: 300).returns(stub(messages: {}))
-          Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-20250514", request_timeout: 300)
+          Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-6", request_timeout: 300)
         end
 
         test "defaults request_timeout to 600" do
           ::Anthropic::Client.expects(:new).with(access_token: "sk-test-key", request_timeout: 600).returns(stub(messages: {}))
-          Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-20250514")
+          Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-6")
         end
 
         test "chat logs response body on 429 error" do
           log_output = StringIO.new
-          provider = Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-20250514",
+          provider = Anthropic.new(api_key: "sk-test-key", model: "claude-sonnet-4-6",
             logger: Logger.new(log_output))
 
           stub_request(:post, "https://api.anthropic.com/v1/messages")
