@@ -213,11 +213,11 @@ module ArnoldPipeline
           content.lines.each do |line|
             if line.match?(/^##\s/i)
               in_domain_section = line.downcase.include?(domain_lower)
-            elsif in_domain_section && line.match?(/^###\s*Requirement:\s*(.+)/i)
-              req_name = $1.strip.sub(/\s*\[REQ-.*?\]\s*$/, "")
+            elsif in_domain_section && (m = line.match(/^###\s*Requirement:\s*(.+)/i))
+              req_name = m[1].strip.sub(/\s*\[REQ-.*?\]\s*$/, "")
               capabilities << { description: req_name, status: "defined" }
-            elsif in_domain_section && line.match?(/^[-*]\s+(.+)/)
-              cap = $1.strip
+            elsif in_domain_section && (m = line.match(/^[-*]\s+(.+)/))
+              cap = m[1].strip
               capabilities << { description: cap, status: "defined" } if cap.length > 5
             end
           end

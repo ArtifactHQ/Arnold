@@ -420,8 +420,7 @@ module ArnoldPipeline
       load_config!(options) if options[:config]
       require "arnold_pipeline/mcp/server"
 
-      logger = Logger.new($stderr, level: Logger::INFO)
-      server = Mcp::Server.new(logger: logger)
+      server = Mcp::Server.new
       server.start
     end
 

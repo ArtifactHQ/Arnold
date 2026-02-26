@@ -58,7 +58,8 @@ module ArnoldPipeline
       rescue ArgumentError => e
         error_result(ERROR_INVALID_PARAMS, e.message)
       rescue => e
-        error_result(ERROR_INTERNAL, "#{e.class}: #{e.message}")
+        location = e.backtrace&.first&.sub(%r{.*/lib/}, "lib/")
+        error_result(ERROR_INTERNAL, "#{e.class}: #{e.message} (at #{location})")
       end
 
       private

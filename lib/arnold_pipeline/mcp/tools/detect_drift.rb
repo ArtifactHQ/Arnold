@@ -66,8 +66,9 @@ module ArnoldPipeline
           end
 
           # Run drift detection
+          llm = build_llm(depth)
           agent = Agents::DriftDetector.new(
-            llm: build_llm,
+            llm: llm,
             logger: Logger.new(File::NULL)
           )
 
@@ -102,11 +103,17 @@ module ArnoldPipeline
           }
         end
 
-        private_class_method def self.build_llm
+        private_class_method def self.build_llm(depth)
           Providers::Llm.build
         rescue => e
-          # Return nil - agent will handle building its own LLM
-          nil
+          raise if depth != "structural"
+          # Structural depth is deterministic - use a no-op LLM placeholder
+          NullLlm.new
+        end
+
+        class NullLlm
+          def chat(**) = ""
+          def chat_json(**) = { "findings" => [] }
         end
 
         private_class_method def self.latest_revision(spec)
