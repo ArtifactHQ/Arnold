@@ -96,6 +96,70 @@ The CLI stores pipeline runs in a standalone SQLite database at `~/.arnold_pipel
 
 **User config file:** Arnold auto-loads `~/.arnold_pipeline/config.yml` on every CLI invocation. This is the lowest-priority config source — `--config FILE` overrides it, and CLI flags override everything. Use `arnold run --preview` to interactively set up your API key and save it to this file.
 
+## Claude Code Plugin (MCP)
+
+Arnold ships an MCP (Model Context Protocol) server that integrates directly with Claude Code. Instead of running CLI commands, you interact with Arnold through natural conversation — "describe the product", "what tasks are left?", "start the next task".
+
+### Installation
+
+```bash
+# 1. Install Arnold
+brew tap ArtifactHQ/arnold && brew install arnold
+# (or: gem install arnold_pipeline)
+
+# 2. Verify arnold is on your PATH
+which arnold
+
+# 3. Install the Claude Code plugin
+claude plugin add arnold
+```
+
+That's it. The plugin registers an MCP server that launches `arnold mcp` over stdio, a session hook that verifies Arnold is available, and slash commands for common workflows.
+
+### What the Plugin Provides
+
+| Component | Description |
+|-----------|-------------|
+| **MCP Server** | 15 tools across 4 tracks, available as native Claude Code tools |
+| **Session Hook** | Checks `arnold` is on PATH at session start |
+| **Slash Commands** | `/arnold:status`, `/arnold:build`, `/arnold:drift` |
+| **Agent Definition** | Behavioral rules so Claude knows when and how to use each tool |
+
+### MCP Tools
+
+The MCP server exposes 15 tools organized into four tracks:
+
+| Track | Tools | Purpose |
+|-------|-------|---------|
+| **Product** | `describe_product`, `explore_domain`, `propose_change`, `confirm_change` | Understand and evolve the product design |
+| **Engineering** | `ask_engineer`, `explore_architecture`, `explain_recipe` | Technical questions, stack exploration |
+| **Execution** | `get_spec`, `get_tasks`, `start_task`, `complete_task`, `report_issue`, `validate_tier` | Tier-by-tier task lifecycle |
+| **Drift** | `detect_drift`, `resolve_drift` | Spec-vs-code alignment checks |
+
+### Example Conversations
+
+```
+You: "Describe the product from my latest pipeline run"
+  → Claude calls describe_product, summarizes what's being built
+
+You: "What tasks are left in tier 2?"
+  → Claude calls get_tasks with tier filter, shows remaining work
+
+You: "Start the next task"
+  → Claude calls start_task, gets context, implements, calls complete_task
+
+You: "Check if the code has drifted from the spec"
+  → Claude calls detect_drift, reports findings
+```
+
+### Troubleshooting
+
+**"Arnold is not installed"** at session start — The `arnold` executable isn't on your PATH. If you installed via RubyGems, ensure your Ruby bin directory is in PATH (e.g., `~/.rbenv/shims` or `~/.gem/ruby/4.0.0/bin`). Homebrew handles this automatically.
+
+**MCP tools not appearing** — Restart your Claude Code session after installing the plugin. Claude Code discovers MCP servers at session startup.
+
+**"No pipeline runs found"** — Run `arnold run "..." --preview` first to create a pipeline run, or check `arnold list` to verify existing runs.
+
 ## Execution Providers
 
 Arnold supports multiple execution backends. The execution provider controls how tasks are dispatched, how results are collected, and how code is merged. Everything else — spec generation, task breakdown, analysis, tier gating — is the same regardless of provider.
@@ -148,6 +212,7 @@ arnold list [options]                # List all runs
 arnold spec ID [options]             # Export a run's specification
 arnold tasks ID [options]            # Export a run's tasks
 arnold log ID [options]              # Show event audit trail
+arnold mcp [options]                 # Start MCP server over stdio (used by Claude Code plugin)
 arnold doctor                        # Check environment health
 arnold version                       # Show version
 arnold tree                          # Print command tree
@@ -202,6 +267,9 @@ arnold tree                          # Print command tree
 #   --json             Output as JSON
 #   --stage STAGE      Filter events by pipeline stage
 #   --verbose          Include full event payloads
+
+# Options for `mcp`:
+#   --config FILE      YAML config file (optional)
 ```
 
 ### Exporting Specifications
