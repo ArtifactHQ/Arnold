@@ -49,19 +49,20 @@ module ArnoldPipeline
         assert_equal ArnoldPipeline::VERSION, server_info["version"]
       end
 
-      test "tools/list returns all 15 registered tools" do
+      test "tools/list returns all 20 registered tools" do
         send_request(jsonrpc: "2.0", id: 1, method: "tools/list", params: {})
         response = read_response
 
         tools = response.dig("result", "tools")
         assert_kind_of Array, tools
-        assert_equal 15, tools.length
+        assert_equal 20, tools.length
 
         expected_tools = %w[
           describe_product explore_domain propose_change confirm_change
           ask_engineer explore_architecture explain_recipe
           get_spec get_tasks start_task complete_task report_issue validate_tier
           detect_drift resolve_drift
+          create_product explore_persona explore_capability what_if get_history
         ]
 
         tool_names = tools.map { |t| t["name"] }

@@ -15,6 +15,11 @@ require_relative "tools/explore_architecture"
 require_relative "tools/explain_recipe"
 require_relative "tools/detect_drift"
 require_relative "tools/resolve_drift"
+require_relative "tools/create_product"
+require_relative "tools/explore_persona"
+require_relative "tools/explore_capability"
+require_relative "tools/what_if"
+require_relative "tools/get_history"
 
 module ArnoldPipeline
   module Mcp
@@ -80,6 +85,11 @@ module ArnoldPipeline
         register(Tools::ExplainRecipe)
         register(Tools::DetectDrift)
         register(Tools::ResolveDrift)
+        register(Tools::CreateProduct)
+        register(Tools::ExplorePersona)
+        register(Tools::ExploreCapability)
+        register(Tools::WhatIf)
+        register(Tools::GetHistory)
       end
 
       def error_result(code, message)
