@@ -3,6 +3,7 @@ require "yaml"
 require "json"
 require "logger"
 require "fileutils"
+require_relative "version"
 require_relative "log_formatter"
 
 module ArnoldPipeline
