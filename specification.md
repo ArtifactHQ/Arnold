@@ -872,6 +872,119 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 - AND the full spec is still provided as context so the LLM understands the broader application.
 - AND when `fork_deltas` is absent from metadata (non-forked runs), task generation uses the standard full-spec behavior.
 
+#### Command: mcp [SPEC-CLI-MCP-001]
+- WHEN `arnold mcp` is executed.
+- THEN the MCP (Model Context Protocol) server starts over stdio using JSON-RPC 2.0.
+- AND the server listens for requests on stdin and writes responses to stdout.
+- AND the server runs until stdin closes or a SIGINT/SIGTERM signal is received.
+- Options: --config (YAML path).
+
+### Requirement: Drift Detection [SPEC-DRIFT-001]
+The system SHALL provide a DriftDetector agent that analyzes completed pipeline work against the specification to identify divergence.
+Drift findings SHALL be persisted as DriftFinding records and support resolution workflows.
+
+#### Scenario: Structural Drift Detection [SPEC-DRIFT-002]
+- GIVEN a pipeline run with completed tasks.
+- WHEN drift detection runs at `structural` depth.
+- THEN completed tasks with empty diffs are flagged as warnings ("completed task has no code changes").
+- AND spec sections with no corresponding tasks are flagged as info ("spec section has no corresponding tasks").
+- AND no LLM is required for structural checks (deterministic only).
+
+#### Scenario: Behavioral Drift Detection [SPEC-DRIFT-003]
+- GIVEN a pipeline run with completed tasks that have non-empty diffs.
+- WHEN drift detection runs at `behavioral` or `full` depth.
+- THEN an LLM compares task diff excerpts against the specification to identify behavioral divergence.
+- AND only genuine issues are reported (not minor style differences).
+- AND findings include domain, severity (critical/warning/info), description, spec_expectation, actual_state, and recommendation.
+
+#### Scenario: Intent Drift Detection [SPEC-DRIFT-004]
+- GIVEN a pipeline run with completed tasks.
+- WHEN drift detection runs at `full` depth.
+- THEN an LLM checks for completed work that does not map to any section of the specification (unrequested work).
+- AND findings are typed as `intent` drift.
+
+#### Scenario: Drift Scoping [SPEC-DRIFT-005]
+- GIVEN a drift detection request with scope parameter.
+- WHEN scope is `full`, all completed tasks are analyzed.
+- WHEN scope is `domain` with a target label, only tasks matching that label are analyzed.
+- WHEN scope is `task` with a target task ID, only that task is analyzed.
+
+#### Scenario: Drift Resolution [SPEC-DRIFT-006]
+- GIVEN a drift finding that is unresolved.
+- WHEN resolution is `update_spec`, the SpecIterator generates deltas and the DeltaMerger applies them, creating a new SpecRevision.
+- WHEN resolution is `update_code`, a corrective task is created with the finding details as description.
+- WHEN resolution is `accept`, the finding is marked as accepted and excluded from future drift checks for the same spec revision.
+- WHEN resolution is `ignore`, the finding is dismissed but may reappear on future drift checks.
+
+### Requirement: MCP Server [SPEC-MCP-001]
+The system SHALL expose a Model Context Protocol (MCP) server that enables external AI agents (e.g., Claude Code) to interact with pipeline data and operations through a standardized tool interface.
+The server communicates via JSON-RPC 2.0 over stdio and implements the MCP protocol version `2025-03-26`.
+
+#### Scenario: Server Initialization [SPEC-MCP-002]
+- GIVEN the MCP server is started via `arnold mcp`.
+- WHEN a client sends an `initialize` request.
+- THEN the server responds with protocol version `2025-03-26`, capabilities `{ tools: {} }`, and server info (name: "arnold", version from gem).
+- AND the server accepts a `notifications/initialized` notification without response.
+- AND the server responds to `ping` with an empty result.
+
+#### Scenario: Tool Registration and Discovery [SPEC-MCP-003]
+- GIVEN the MCP server is running.
+- WHEN a client sends `tools/list`.
+- THEN the server returns all 20 registered tools with name, description, and JSON Schema input definitions.
+- AND each tool implements the Base interface: `.tool_name`, `.description`, `.input_schema`, `.call(params, context)`.
+
+#### Scenario: Tool Invocation [SPEC-MCP-004]
+- GIVEN a registered tool name and valid arguments.
+- WHEN a client sends `tools/call` with the tool name and arguments.
+- THEN the tool is executed with the arguments and a shared Context object.
+- AND the result is returned as `{ content: [{ type: "text", text: <JSON> }] }`.
+- AND ArgumentError maps to error code -32602 (invalid params).
+- AND all other errors map to error code -32603 (internal) with class, message, and source location.
+
+#### Scenario: Pipeline Run Resolution [SPEC-MCP-005]
+- GIVEN a tool call with an optional `run_id` parameter.
+- WHEN `run_id` is provided, the Context resolves the specific PipelineRun by ID.
+- WHEN `run_id` is omitted, the Context resolves the most recent PipelineRun.
+- AND if no pipeline run is found, the tool returns `{ error: "No pipeline run found" }`.
+
+### Requirement: MCP Tool Categories [SPEC-MCP-006]
+The MCP server SHALL provide 20 tools organized into five categories: Discovery, Query, Task Lifecycle, Change Management, and Drift.
+
+#### Discovery Tools
+Read-only tools for exploring the product being built:
+- `create_product` — Runs the orchestrator with `stop_after: :spec` and returns a product-level overview (name, summary, personas, domains, recipes, open questions). Requires description (minimum 10 characters).
+- `describe_product` — Extracts a narrative product description from the spec's structured data, organized by persona and domain.
+- `explore_domain` — Fuzzy-matches a domain name and returns its capabilities, relationships, and associated tasks.
+- `explore_persona` — Returns a persona's journey, capabilities, pain points, and which domains they touch.
+- `explore_capability` — Returns a detailed capability description, user flow, dependencies, and open questions.
+- `explore_architecture` — Returns a structural view of the system by domain, including stack info, recipes, and components.
+- `what_if` — Evaluates a hypothetical change against the spec without making any state changes.
+- `get_history` — Returns a chronological list of spec revisions with product-level summaries of what changed.
+
+#### Query Tools
+Read-only tools for retrieving pipeline data:
+- `get_spec` — Returns the specification content. Supports `format: "full"` (default) or `"summary"`.
+- `get_tasks` — Returns the task list ordered by tier. Supports `status` and `tier` filters.
+- `ask_engineer` — Answers a technical question grounded in the spec, recipes, and architectural constraints.
+- `explain_recipe` — Returns a deep dive into a recipe: purpose, what it provides, framework configuration, trade-offs, and selection rationale.
+
+#### Task Lifecycle Tools
+Mutating tools for executing pipeline work:
+- `start_task` — Transitions a task to `in_progress` and returns contextual guidance.
+- `complete_task` — Stores a summary and list of files changed, returns tier progress.
+- `report_issue` — Records an issue preventing task completion, returns a suggested resolution.
+- `validate_tier` — Validates a completed tier against the spec (checks task completion, dependencies, and result data).
+
+#### Change Management Tools
+Mutating tools for evolving the specification:
+- `propose_change` — Evaluates a change request against the spec via the SpecIterator agent (dry run). Returns an impact analysis with affected domains, personas, new/modified/removed capabilities, open questions, and a confidence level (high/medium/low). Returns a `change_id` for later confirmation.
+- `confirm_change` — Applies a previously proposed change by its `change_id`. Creates a new spec revision and optionally invalidates affected tasks. Supports optional `answers` to questions raised during the proposal.
+
+#### Drift Tools
+Tools for detecting and resolving spec-vs-code divergence:
+- `detect_drift` — Runs the DriftDetector agent with specified scope and depth, persists findings as DriftFinding records, and returns findings with coverage statistics. Accepted findings from the current spec revision are automatically excluded.
+- `resolve_drift` — Resolves a drift finding by ID using one of four strategies: `update_spec`, `update_code`, `accept`, or `ignore` (see SPEC-DRIFT-006).
+
 ### Requirement: Configuration
 The system SHALL be configurable via a Ruby block (`ArnoldPipeline.configure`) or YAML config file.
 When multiple sources provide the same key, CLI flags take precedence over YAML config, which takes precedence over defaults (CLI > YAML > defaults).

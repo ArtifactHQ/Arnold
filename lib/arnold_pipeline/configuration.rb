@@ -3,7 +3,7 @@ require "arnold_pipeline/providers/execution/base"
 module ArnoldPipeline
   class Configuration
     VALID_LLM_PROVIDERS = %i[anthropic openai].freeze
-    VALID_EXECUTION_PROVIDERS = %i[github].freeze
+    VALID_EXECUTION_PROVIDERS = %i[github claude_code].freeze
     VALID_CRITERIA_CHECK_MODES = %i[advisory gating disabled].freeze
 
     PROVIDER_DEFAULTS = {
