@@ -36,5 +36,11 @@ tmp/
 # Test coverage reports
 coverage/
 
+# Gem lock file (library — consumers resolve their own versions)
+Gemfile.lock
+
+# Audit reports (local-only)
+reports/
+
 # Bundled dependencies
 vendor/bundle
