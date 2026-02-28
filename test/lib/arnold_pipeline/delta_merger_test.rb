@@ -184,7 +184,7 @@ module ArnoldPipeline
 
     test "snapshot_revision! handles failure gracefully" do
       # Force a validation error by using an invalid change_source
-      deltas = [{ "operation" => "added", "section" => "X", "rationale" => "Y" }]
+      deltas = [ { "operation" => "added", "section" => "X", "rationale" => "Y" } ]
 
       # Create a spec with version 0 which will fail the version > 0 validation on revision
       @spec.update_column(:version, 0)

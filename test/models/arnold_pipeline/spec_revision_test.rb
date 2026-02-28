@@ -66,20 +66,20 @@ module ArnoldPipeline
       @spec.spec_revisions.create!(version: 3, content: "v3")
 
       versions = @spec.spec_revisions.ordered.map(&:version)
-      assert_equal [1, 2, 3], versions
+      assert_equal [ 1, 2, 3 ], versions
     end
 
     test "stores structured_data as JSON" do
       revision = @spec.spec_revisions.create!(
         version: 1,
         content: "c",
-        structured_data: { "features" => ["auth"] }
+        structured_data: { "features" => [ "auth" ] }
       )
-      assert_equal({ "features" => ["auth"] }, revision.reload.structured_data)
+      assert_equal({ "features" => [ "auth" ] }, revision.reload.structured_data)
     end
 
     test "stores delta_summary as JSON array" do
-      summary = ["ADDED: Auth > Password Reset", "MODIFIED: Auth > Login"]
+      summary = [ "ADDED: Auth > Password Reset", "MODIFIED: Auth > Login" ]
       revision = @spec.spec_revisions.create!(
         version: 1,
         content: "c",

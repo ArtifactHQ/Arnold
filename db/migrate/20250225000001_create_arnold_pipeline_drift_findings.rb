@@ -18,7 +18,7 @@ class CreateArnoldPipelineDriftFindings < ActiveRecord::Migration[8.0]
       t.timestamps
     end
 
-    add_index :arnold_pipeline_drift_findings, [:pipeline_run_id, :domain]
-    add_index :arnold_pipeline_drift_findings, [:pipeline_run_id, :resolution]
+    add_index :arnold_pipeline_drift_findings, [ :pipeline_run_id, :domain ]
+    add_index :arnold_pipeline_drift_findings, [ :pipeline_run_id, :resolution ]
   end
 end

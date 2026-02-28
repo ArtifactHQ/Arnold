@@ -7,7 +7,7 @@ module ArnoldPipeline
     end
 
     def to_s
-      lines = ["Proposed changes to specification (v#{@from_version} → v#{@to_version}):", ""]
+      lines = [ "Proposed changes to specification (v#{@from_version} → v#{@to_version}):", "" ]
       @deltas.each do |delta|
         lines.concat(format_delta(delta))
         lines << ""

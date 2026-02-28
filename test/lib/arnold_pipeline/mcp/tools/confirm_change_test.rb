@@ -17,7 +17,7 @@ module ArnoldPipeline
             content: "# Fitness Tracker\n\n## Purpose\nA fitness app.\n\n## Requirements\n- Track workouts",
             version: 1,
             structured_data: {
-              "domains" => [{ "name" => "Workouts" }]
+              "domains" => [ { "name" => "Workouts" } ]
             }
           )
 
@@ -103,7 +103,7 @@ module ArnoldPipeline
         test "call invalidates affected pending tasks" do
           task = Task.create!(
             pipeline_run: @run, title: "Social feature task", position: 0,
-            status: :pending, labels: ["social"]
+            status: :pending, labels: [ "social" ]
           )
 
           result = ConfirmChange.call({ "change_id" => @change_id }, @context)
@@ -116,7 +116,7 @@ module ArnoldPipeline
         test "call does not invalidate completed tasks" do
           task = Task.create!(
             pipeline_run: @run, title: "Social feature task", position: 0,
-            status: :completed, labels: ["social"]
+            status: :completed, labels: [ "social" ]
           )
 
           result = ConfirmChange.call({ "change_id" => @change_id }, @context)
@@ -129,7 +129,7 @@ module ArnoldPipeline
         test "call does not invalidate unrelated tasks" do
           task = Task.create!(
             pipeline_run: @run, title: "Database setup", position: 0,
-            status: :pending, labels: ["backend"]
+            status: :pending, labels: [ "backend" ]
           )
 
           result = ConfirmChange.call({ "change_id" => @change_id }, @context)
@@ -147,7 +147,7 @@ module ArnoldPipeline
         test "call returns ready_for_execution based on task state" do
           Task.create!(
             pipeline_run: @run, title: "Active task", position: 0,
-            status: :in_progress, labels: ["unrelated"]
+            status: :in_progress, labels: [ "unrelated" ]
           )
 
           result = ConfirmChange.call({ "change_id" => @change_id }, @context)

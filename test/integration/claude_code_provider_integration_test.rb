@@ -50,14 +50,14 @@ module ArnoldPipeline
       executor = Agents::Executor.new(provider:, logger: Logger.new(File::NULL))
 
       # Publish tasks
-      executor.call(tasks: [task], pipeline_run:)
+      executor.call(tasks: [ task ], pipeline_run:)
       task.reload
       assert task.external_id.present?, "Task should have external_id after publish"
       assert_equal "in_progress", task.status
 
       # Fetch results — sync, no polling
       assert_equal false, provider.async?
-      results = executor.fetch_results(pipeline_run:, tasks: [task])
+      results = executor.fetch_results(pipeline_run:, tasks: [ task ])
       assert_equal 1, results.size
       assert_equal :completed, results.first[:status]
       assert_equal false, results.first[:workflow_active]
@@ -145,7 +145,7 @@ module ArnoldPipeline
       sleep_called = false
       executor.stubs(:sleep_func).returns(->(_) { sleep_called = true })
 
-      results = executor.fetch_results(pipeline_run:, tasks: [task])
+      results = executor.fetch_results(pipeline_run:, tasks: [ task ])
       assert_equal 1, results.size
       refute sleep_called, "Sync provider should not trigger polling sleep"
     end

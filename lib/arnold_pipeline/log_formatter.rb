@@ -56,12 +56,12 @@ module ArnoldPipeline
             type: :analysis,
             iteration: event.iteration_number,
             duration_ms: event.duration_ms,
-            events: [event]
+            events: [ event ]
           }
           next
         when "pipeline_completed", "pipeline_failed", "pipeline_paused"
           blocks << current_block unless current_block[:events].empty?
-          blocks << { type: :terminal, events: [event] }
+          blocks << { type: :terminal, events: [ event ] }
           current_block = { type: :preamble, events: [] }
           next
         end
@@ -279,10 +279,10 @@ module ArnoldPipeline
       confidence = s["confidence"]
 
       marker, color_sym = case decision
-      when "done" then ["✓", :green]
-      when "iterate_tasks" then ["↻", :yellow]
-      when "iterate_spec" then ["↻", :yellow]
-      else ["?", :white]
+      when "done" then [ "✓", :green ]
+      when "iterate_tasks" then [ "↻", :yellow ]
+      when "iterate_spec" then [ "↻", :yellow ]
+      else [ "?", :white ]
       end
 
       line = "  #{ts}  #{label('decision')}  #{c("#{marker} #{decision}", color_sym)}  confidence=#{confidence}%"
@@ -300,10 +300,10 @@ module ArnoldPipeline
       decision = s["decision"]
 
       marker, color_sym = case decision
-      when "done" then ["✓ DONE", :green]
-      when "iterate_tasks" then ["↻ iterate_tasks", :yellow]
-      when "iterate_spec" then ["↻ iterate_spec", :yellow]
-      else [decision, :white]
+      when "done" then [ "✓ DONE", :green ]
+      when "iterate_tasks" then [ "↻ iterate_tasks", :yellow ]
+      when "iterate_spec" then [ "↻ iterate_spec", :yellow ]
+      else [ decision, :white ]
       end
 
       details = []

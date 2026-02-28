@@ -234,7 +234,7 @@ module ArnoldPipeline
           user_content = build_llm_context(spec, stack, domains, recipe_names, domain_filter)
 
           result = agent.send(:chat_json,
-            messages: [{ role: "user", content: user_content }],
+            messages: [ { role: "user", content: user_content } ],
             system: SYSTEM_PROMPT,
             schema: RESPONSE_SCHEMA
           )

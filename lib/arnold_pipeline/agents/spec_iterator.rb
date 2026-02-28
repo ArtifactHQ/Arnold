@@ -40,7 +40,7 @@ module ArnoldPipeline
         user = Prompts::SpecIteration.user_prompt(spec_content:, change_request:)
 
         result = chat_json(
-          messages: [{ role: :user, content: user }],
+          messages: [ { role: :user, content: user } ],
           system:,
           schema: SCHEMA
         )

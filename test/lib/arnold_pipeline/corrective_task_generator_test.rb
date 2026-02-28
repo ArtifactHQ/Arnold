@@ -176,7 +176,7 @@ module ArnoldPipeline
 
       # Two categories: view_markup (2 failures) and unit_expectation (1 failure)
       @llm.stubs(:chat_json).returns({
-        "tasks" => [{ "title" => "Fix test", "description" => "details", "labels" => ["view-fix"] }]
+        "tasks" => [ { "title" => "Fix test", "description" => "details", "labels" => [ "view-fix" ] } ]
       })
 
       result = CorrectiveTaskGenerator.call(
@@ -194,7 +194,7 @@ module ArnoldPipeline
       ])
 
       @llm.stubs(:chat_json).returns({
-        "tasks" => [{ "title" => "Fix issue", "description" => "details", "labels" => ["fix"] }]
+        "tasks" => [ { "title" => "Fix issue", "description" => "details", "labels" => [ "fix" ] } ]
       })
 
       result = CorrectiveTaskGenerator.call(
@@ -215,7 +215,7 @@ module ArnoldPipeline
         user_msg.include?("test/views/home_test.rb:42") &&
           user_msg.include?("Expected element matching 'h1'")
       }.returns({
-        "tasks" => [{ "title" => "Fix view", "description" => "Fix at test/views/home_test.rb:42", "labels" => ["view-fix"] }]
+        "tasks" => [ { "title" => "Fix view", "description" => "Fix at test/views/home_test.rb:42", "labels" => [ "view-fix" ] } ]
       })
 
       result = CorrectiveTaskGenerator.call(
@@ -238,7 +238,7 @@ module ArnoldPipeline
           user_msg.include?("test_5") &&
           !user_msg.include?("test_6")
       }.returns({
-        "tasks" => [{ "title" => "Fix views", "description" => "Fix view tests", "labels" => ["view-fix"] }]
+        "tasks" => [ { "title" => "Fix views", "description" => "Fix view tests", "labels" => [ "view-fix" ] } ]
       })
 
       CorrectiveTaskGenerator.call(
@@ -328,7 +328,7 @@ module ArnoldPipeline
         user_msg.include?("### Repository Context") &&
           user_msg.include?("app/models/user.rb")
       }.returns({
-        "tasks" => [{ "title" => "Fix", "description" => "d", "labels" => ["unit-fix"] }]
+        "tasks" => [ { "title" => "Fix", "description" => "d", "labels" => [ "unit-fix" ] } ]
       })
 
       CorrectiveTaskGenerator.call(
@@ -346,7 +346,7 @@ module ArnoldPipeline
         user_msg = params[:messages].first[:content]
         !user_msg.include?("Repository Context")
       }.returns({
-        "tasks" => [{ "title" => "Fix", "description" => "d", "labels" => ["unit-fix"] }]
+        "tasks" => [ { "title" => "Fix", "description" => "d", "labels" => [ "unit-fix" ] } ]
       })
 
       CorrectiveTaskGenerator.call(
@@ -368,7 +368,7 @@ module ArnoldPipeline
 
     def stub_llm_response(llm, label)
       llm.stubs(:chat_json).returns({
-        "tasks" => [{ "title" => "Fix #{label} issue", "description" => "Fix the failing tests", "labels" => [label] }]
+        "tasks" => [ { "title" => "Fix #{label} issue", "description" => "Fix the failing tests", "labels" => [ label ] } ]
       })
     end
   end

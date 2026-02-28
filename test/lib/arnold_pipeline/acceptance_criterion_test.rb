@@ -103,14 +103,14 @@ module ArnoldPipeline
         "path" => "/api/users",
         "input" => { "name" => "Test" },
         "expected_status" => 201,
-        "expected_body_contains" => ["id"]
+        "expected_body_contains" => [ "id" ]
       )
 
       assert_equal "POST", criterion.params["method"]
       assert_equal "/api/users", criterion.params["path"]
       assert_equal({ "name" => "Test" }, criterion.params["input"])
       assert_equal 201, criterion.params["expected_status"]
-      assert_equal ["id"], criterion.params["expected_body_contains"]
+      assert_equal [ "id" ], criterion.params["expected_body_contains"]
     end
 
     test "Data.define creates frozen immutable objects" do

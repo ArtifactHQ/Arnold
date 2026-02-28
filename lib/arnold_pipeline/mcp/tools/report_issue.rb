@@ -115,13 +115,13 @@ module ArnoldPipeline
             detail += " Suggestion: #{suggestion}"
           end
 
-          actions = ["Identified issue as spec-related", "Flagged for spec review"]
-          [detail, actions, nil]
+          actions = [ "Identified issue as spec-related", "Flagged for spec review" ]
+          [ detail, actions, nil ]
         end
 
         private_class_method def self.resolve_dependency_fix(task, issue, run)
           dep_ids = task.depends_on || []
-          actions = ["Analyzed dependency chain"]
+          actions = [ "Analyzed dependency chain" ]
 
           if dep_ids.any?
             deps = run.tasks.where(id: dep_ids)
@@ -140,12 +140,12 @@ module ArnoldPipeline
             actions << "No dependencies found — may need task restructuring"
           end
 
-          [detail, actions, nil]
+          [ detail, actions, nil ]
         end
 
         private_class_method def self.resolve_task_restructure(task, issue, suggestion)
           original_description = task.description.to_s
-          actions = ["Analyzed task for restructuring"]
+          actions = [ "Analyzed task for restructuring" ]
 
           revised = nil
           if suggestion.present?
@@ -163,11 +163,11 @@ module ArnoldPipeline
             detail = "Task may need restructuring. Please provide a suggestion for what the task description should be."
           end
 
-          [detail, actions, revised]
+          [ detail, actions, revised ]
         end
 
         private_class_method def self.resolve_guidance(task, issue, run, context)
-          actions = ["Gathered context for guidance"]
+          actions = [ "Gathered context for guidance" ]
           parts = []
 
           # Provide spec context
@@ -192,7 +192,7 @@ module ArnoldPipeline
           end
 
           detail = parts.any? ? parts.join("\n") : "No additional context available. Consider breaking the issue into smaller parts."
-          [detail, actions, nil]
+          [ detail, actions, nil ]
         end
 
         private_class_method def self.record_issue(task, issue, suggestion, resolution_type)

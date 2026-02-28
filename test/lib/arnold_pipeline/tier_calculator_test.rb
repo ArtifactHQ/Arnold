@@ -11,8 +11,8 @@ module ArnoldPipeline
 
     test "linear chain A→B→C produces tiers 0,1,2" do
       create_task!(position: 0, depends_on: [])
-      create_task!(position: 1, depends_on: [0])
-      create_task!(position: 2, depends_on: [1])
+      create_task!(position: 1, depends_on: [ 0 ])
+      create_task!(position: 2, depends_on: [ 1 ])
 
       result = TierCalculator.call(@pipeline_run.tasks.reload)
 
@@ -21,9 +21,9 @@ module ArnoldPipeline
 
     test "diamond A→{B,C}→D produces tiers 0,1,1,2" do
       create_task!(position: 0, depends_on: [])
-      create_task!(position: 1, depends_on: [0])
-      create_task!(position: 2, depends_on: [0])
-      create_task!(position: 3, depends_on: [1, 2])
+      create_task!(position: 1, depends_on: [ 0 ])
+      create_task!(position: 2, depends_on: [ 0 ])
+      create_task!(position: 3, depends_on: [ 1, 2 ])
 
       result = TierCalculator.call(@pipeline_run.tasks.reload)
 
@@ -47,10 +47,10 @@ module ArnoldPipeline
       # Add auth (dep: 1) → tier 2
       # Write tests (dep: 2, 3) → tier 3
       create_task!(position: 0, depends_on: [])
-      create_task!(position: 1, depends_on: [0])
-      create_task!(position: 2, depends_on: [1])
-      create_task!(position: 3, depends_on: [1])
-      create_task!(position: 4, depends_on: [2, 3])
+      create_task!(position: 1, depends_on: [ 0 ])
+      create_task!(position: 2, depends_on: [ 1 ])
+      create_task!(position: 3, depends_on: [ 1 ])
+      create_task!(position: 4, depends_on: [ 2, 3 ])
 
       result = TierCalculator.call(@pipeline_run.tasks.reload)
 
@@ -59,7 +59,7 @@ module ArnoldPipeline
 
     test "updates AR task objects tier column" do
       create_task!(position: 0, depends_on: [])
-      create_task!(position: 1, depends_on: [0])
+      create_task!(position: 1, depends_on: [ 0 ])
 
       TierCalculator.call(@pipeline_run.tasks.reload)
 
@@ -69,8 +69,8 @@ module ArnoldPipeline
     end
 
     test "raises CycleError on dependency cycle" do
-      create_task!(position: 0, depends_on: [1])
-      create_task!(position: 1, depends_on: [0])
+      create_task!(position: 0, depends_on: [ 1 ])
+      create_task!(position: 1, depends_on: [ 0 ])
 
       assert_raises(TierCalculator::CycleError) do
         TierCalculator.call(@pipeline_run.tasks.reload)

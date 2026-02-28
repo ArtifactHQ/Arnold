@@ -28,13 +28,13 @@ module ArnoldPipeline
           )
           @task1 = Task.create!(
             pipeline_run: @run, title: "Implement workout logging", position: 0,
-            tier: 0, status: :completed, labels: ["workouts"],
+            tier: 0, status: :completed, labels: [ "workouts" ],
             depends_on: []
           )
           @task2 = Task.create!(
             pipeline_run: @run, title: "Build nutrition tracker", position: 1,
-            tier: 1, status: :in_progress, labels: ["nutrition"],
-            depends_on: [@task1.id.to_s]
+            tier: 1, status: :in_progress, labels: [ "nutrition" ],
+            depends_on: [ @task1.id.to_s ]
           )
         end
 

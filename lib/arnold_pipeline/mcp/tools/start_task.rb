@@ -19,7 +19,7 @@ module ArnoldPipeline
                 description: "The ID of the task to start."
               }
             },
-            required: ["task_id"]
+            required: [ "task_id" ]
           }
         end
 
@@ -160,7 +160,7 @@ module ArnoldPipeline
 
           return "" unless recipe
 
-          parts = ["#{recipe.name}: #{recipe.description}"]
+          parts = [ "#{recipe.name}: #{recipe.description}" ]
 
           # Include relevant sections based on task labels/tier
           if recipe.sections.any?

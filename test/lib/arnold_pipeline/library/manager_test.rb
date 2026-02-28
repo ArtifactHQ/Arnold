@@ -136,7 +136,7 @@ module ArnoldPipeline
         result = @manager.find_recipes("Build a web dashboard with JSON API endpoints")
         primary_name = result[:primary].name
         supporting_names = result[:supporting].map(&:name)
-        all_names = [primary_name] + supporting_names
+        all_names = [ primary_name ] + supporting_names
         assert_includes all_names, "Web App"
         assert_includes all_names, "API Service"
       end

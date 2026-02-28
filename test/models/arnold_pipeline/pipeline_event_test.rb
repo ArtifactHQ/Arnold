@@ -74,7 +74,7 @@ module ArnoldPipeline
       e2 = @run.pipeline_events.create!(event_type: :tasks_broken, stage: "task_breakdown", summary: {})
 
       events = @run.pipeline_events.chronological
-      assert_equal [e1.id, e2.id], events.map(&:id)
+      assert_equal [ e1.id, e2.id ], events.map(&:id)
     end
 
     test "with_payloads scope" do

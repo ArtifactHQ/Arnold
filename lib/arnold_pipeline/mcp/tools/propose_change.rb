@@ -33,7 +33,7 @@ module ArnoldPipeline
                 description: "Pipeline run ID. Defaults to the latest run if not provided."
               }
             },
-            required: ["description"]
+            required: [ "description" ]
           }
         end
 
@@ -171,7 +171,7 @@ module ArnoldPipeline
           # Check which personas are affected by the changed sections
           changed_sections = deltas.map { |d| d["section"] }.compact.uniq
           content_changes = deltas.map { |d|
-            [d["content"], d["after_content"], d["requirement"]].compact.join(" ")
+            [ d["content"], d["after_content"], d["requirement"] ].compact.join(" ")
           }.join(" ").downcase
 
           personas.select { |p|

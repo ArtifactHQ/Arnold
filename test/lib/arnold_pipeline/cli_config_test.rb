@@ -62,7 +62,7 @@ module ArnoldPipeline
       require "arnold_pipeline/cli/setup_wizard"
       ArnoldPipeline::CliModule::SetupWizard.stubs(:api_key_available?).returns(true)
 
-      output = capture_output { Cli.start(["run", "--dry-run", "Build an app"]) }
+      output = capture_output { Cli.start([ "run", "--dry-run", "Build an app" ]) }
       assert_match(/Arnold Preview/, output)
       assert_match(/# App Spec/, output)
       assert_match(/1 tasks, 1 tiers/, output)

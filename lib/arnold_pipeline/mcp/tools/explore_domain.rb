@@ -26,7 +26,7 @@ module ArnoldPipeline
                 description: "Pipeline run ID. Defaults to the latest run if not provided."
               }
             },
-            required: ["domain"]
+            required: [ "domain" ]
           }
         end
 

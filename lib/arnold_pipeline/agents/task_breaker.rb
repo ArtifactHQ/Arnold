@@ -10,11 +10,11 @@ module ArnoldPipeline
       RESPONSE_SCHEMA = {
         name: "task_breakdown_result",
         schema: {
-          type: "object", additionalProperties: false, required: ["tasks"],
+          type: "object", additionalProperties: false, required: [ "tasks" ],
           properties: {
             tasks: { type: "array", items: {
               type: "object", additionalProperties: false,
-              required: ["title", "description", "priority", "labels", "position", "depends_on", "section_ref", "acceptance_criteria"],
+              required: [ "title", "description", "priority", "labels", "position", "depends_on", "section_ref", "acceptance_criteria" ],
               properties: {
                 title: { type: "string" },
                 description: { type: "string" },
@@ -25,7 +25,7 @@ module ArnoldPipeline
                 section_ref: { type: "string" },
                 acceptance_criteria: { type: "array", items: {
                   type: "object", additionalProperties: false,
-                  required: ["type", "description", "params"],
+                  required: [ "type", "description", "params" ],
                   properties: {
                     type: { type: "string", enum: %w[file_exists test_exists model_has route_exists http command_exits] },
                     description: { type: "string" },
@@ -51,7 +51,7 @@ module ArnoldPipeline
         user = Prompts::TaskBreakdown.user_prompt(spec_content:, deltas:)
 
         result = chat_json(
-          messages: [{ role: :user, content: user }],
+          messages: [ { role: :user, content: user } ],
           system: system,
           schema: RESPONSE_SCHEMA
         )

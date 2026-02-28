@@ -30,7 +30,7 @@ module ArnoldPipeline
         # --- Contract shape tests ---
 
         test "create_tasks returns correct shape" do
-          tasks = [{ "title" => "Setup project", "description" => "Initialize the project structure" }]
+          tasks = [ { "title" => "Setup project", "description" => "Initialize the project structure" } ]
           @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
           @provider.stubs(:normalize_worktree)
           @provider.stubs(:capture_diff).returns("")
@@ -48,7 +48,7 @@ module ArnoldPipeline
 
         test "create_tasks title matches input exactly" do
           title = "Implement user authentication with OAuth2"
-          tasks = [{ "title" => title, "description" => "Add OAuth2 flow" }]
+          tasks = [ { "title" => title, "description" => "Add OAuth2 flow" } ]
           @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
           @provider.stubs(:normalize_worktree)
           @provider.stubs(:capture_diff).returns("")
@@ -66,7 +66,7 @@ module ArnoldPipeline
           @provider.stubs(:capture_diff).returns("")
           @provider.stubs(:setup_worktree).returns(@repo_path)
 
-          results = @provider.create_tasks(tasks: [task_a, task_b], pipeline_run: @pipeline_run)
+          results = @provider.create_tasks(tasks: [ task_a, task_b ], pipeline_run: @pipeline_run)
 
           assert_equal "cc-#{@pipeline_run.id}-#{task_a.id}", results[0][:external_id]
           assert_equal "cc-#{@pipeline_run.id}-#{task_b.id}", results[1][:external_id]
@@ -74,7 +74,7 @@ module ArnoldPipeline
         end
 
         test "create_tasks uses random hex for hash-based tasks" do
-          tasks = [{ "title" => "Hash Task", "description" => "No DB ID" }]
+          tasks = [ { "title" => "Hash Task", "description" => "No DB ID" } ]
           @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
           @provider.stubs(:normalize_worktree)
           @provider.stubs(:capture_diff).returns("")
@@ -93,8 +93,8 @@ module ArnoldPipeline
           @provider.stubs(:capture_diff).returns("")
           @provider.stubs(:setup_worktree).returns(@repo_path)
 
-          results1 = @provider.create_tasks(tasks: [task_a], pipeline_run: @pipeline_run)
-          results2 = @provider.create_tasks(tasks: [task_b], pipeline_run: @pipeline_run)
+          results1 = @provider.create_tasks(tasks: [ task_a ], pipeline_run: @pipeline_run)
+          results2 = @provider.create_tasks(tasks: [ task_b ], pipeline_run: @pipeline_run)
 
           refute_equal results1[0][:external_id], results2[0][:external_id],
             "Successive create_tasks calls must produce unique external_ids"
@@ -107,7 +107,7 @@ module ArnoldPipeline
           @provider.stubs(:capture_diff).returns("")
           @provider.stubs(:setup_worktree).returns(@repo_path)
 
-          results = @provider.create_tasks(tasks: [task], pipeline_run: @pipeline_run)
+          results = @provider.create_tasks(tasks: [ task ], pipeline_run: @pipeline_run)
           assert_equal "AR Task", results.first[:title]
         end
 
@@ -162,7 +162,7 @@ module ArnoldPipeline
             "cc-1-1" => { success: true, diff: "", output: "Done" }
           })
 
-          results = @provider.fetch_results(pipeline_run: @pipeline_run, tasks: [task1])
+          results = @provider.fetch_results(pipeline_run: @pipeline_run, tasks: [ task1 ])
           assert_equal 1, results.size
           assert_equal task1.id, results.first[:task_id]
         end
@@ -274,7 +274,7 @@ module ArnoldPipeline
         end
 
         test "build_prompt contains only task content" do
-          prompt = @provider.send(:build_prompt, title: "Setup", description: "Init project", labels: ["backend"], prior_context: nil)
+          prompt = @provider.send(:build_prompt, title: "Setup", description: "Init project", labels: [ "backend" ], prior_context: nil)
           assert_includes prompt, "Setup"
           assert_includes prompt, "Init project"
           assert_includes prompt, "Labels: backend"
@@ -349,7 +349,7 @@ module ArnoldPipeline
         end
 
         test "create_tasks calls normalize_worktree after execution and before capture_diff" do
-          tasks = [{ "title" => "Setup", "description" => "Init project" }]
+          tasks = [ { "title" => "Setup", "description" => "Init project" } ]
           call_sequence = sequence("execution_flow")
 
           @provider.stubs(:setup_worktree).returns(@repo_path)
@@ -361,7 +361,7 @@ module ArnoldPipeline
         end
 
         test "create_tasks skips normalize_worktree when execution fails" do
-          tasks = [{ "title" => "Broken", "description" => "Will fail" }]
+          tasks = [ { "title" => "Broken", "description" => "Will fail" } ]
           @provider.stubs(:setup_worktree).returns(@repo_path)
           @provider.stubs(:execute_claude_code).returns({ success: false, output: "", error: "CLI failed" })
           @provider.stubs(:capture_diff).returns("")
@@ -374,7 +374,7 @@ module ArnoldPipeline
         # --- Empty-diff detection tests ---
 
         test "create_tasks marks successful execution with empty diff as failed" do
-          tasks = [{ "title" => "Setup project", "description" => "Initialize" }]
+          tasks = [ { "title" => "Setup project", "description" => "Initialize" } ]
           @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
           @provider.stubs(:normalize_worktree)
           @provider.stubs(:capture_diff).returns("")
@@ -389,7 +389,7 @@ module ArnoldPipeline
         end
 
         test "fetch_results returns :failed for empty-diff task" do
-          tasks = [{ "title" => "Setup", "description" => "Init" }]
+          tasks = [ { "title" => "Setup", "description" => "Init" } ]
           @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
           @provider.stubs(:normalize_worktree)
           @provider.stubs(:capture_diff).returns("")
@@ -399,12 +399,12 @@ module ArnoldPipeline
           ext_id = created.first[:external_id]
           task = @pipeline_run.tasks.create!(title: "Setup", position: 0, external_id: ext_id)
 
-          results = @provider.fetch_results(pipeline_run: @pipeline_run, tasks: [task])
+          results = @provider.fetch_results(pipeline_run: @pipeline_run, tasks: [ task ])
           assert_equal :failed, results.first[:status]
         end
 
         test "create_tasks preserves success when diff is non-empty" do
-          tasks = [{ "title" => "Setup project", "description" => "Initialize" }]
+          tasks = [ { "title" => "Setup project", "description" => "Initialize" } ]
           @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
           @provider.stubs(:normalize_worktree)
           @provider.stubs(:capture_diff).returns("diff --git a/file.rb b/file.rb\n+hello")
@@ -419,7 +419,7 @@ module ArnoldPipeline
         end
 
         test "create_tasks preserves original failure when CLI fails" do
-          tasks = [{ "title" => "Setup project", "description" => "Initialize" }]
+          tasks = [ { "title" => "Setup project", "description" => "Initialize" } ]
           @provider.stubs(:execute_claude_code).returns({ success: false, output: "", error: "CLI exited with code 1" })
           @provider.stubs(:capture_diff).returns("")
           @provider.stubs(:setup_worktree).returns(@repo_path)
@@ -445,8 +445,8 @@ module ArnoldPipeline
             captured_env = args.first if args.first.is_a?(Hash)
             true
           }.returns(999)
-          Process.stubs(:waitpid2).returns([999, stub(success?: true)])
-          IO.stubs(:pipe).returns([StringIO.new(""), StringIO.new])
+          Process.stubs(:waitpid2).returns([ 999, stub(success?: true) ])
+          IO.stubs(:pipe).returns([ StringIO.new(""), StringIO.new ])
 
           ENV["CLAUDECODE"] = "1"
           @provider.send(:execute_claude_code, prompt: "test", branch: branch, external_id: "cc-1")
@@ -595,7 +595,7 @@ module ArnoldPipeline
         end
 
         test "create_tasks with prior_context includes it in prompt" do
-          tasks = [{ "title" => "Add API", "description" => "REST endpoints" }]
+          tasks = [ { "title" => "Add API", "description" => "REST endpoints" } ]
           context = "## Prior Implementation Context\n\n**Tier 0 completed:** project setup"
 
           prompt_received = nil
@@ -612,7 +612,7 @@ module ArnoldPipeline
         end
 
         test "create_tasks without prior_context uses default message" do
-          tasks = [{ "title" => "Setup", "description" => "Init" }]
+          tasks = [ { "title" => "Setup", "description" => "Init" } ]
 
           prompt_received = nil
           @provider.stubs(:execute_claude_code).with { |**kwargs|
@@ -752,7 +752,7 @@ module ArnoldPipeline
         end
 
         test "create_tasks with single task skips thread pool" do
-          tasks = [{ "title" => "Solo Task", "description" => "Only one" }]
+          tasks = [ { "title" => "Solo Task", "description" => "Only one" } ]
 
           @provider.stubs(:execute_claude_code).returns({ success: true, output: "Done", error: nil })
           @provider.stubs(:normalize_worktree)
@@ -775,7 +775,7 @@ module ArnoldPipeline
           config.claude_code_repo_path = @repo_path
           ClaudeCode.stubs(:claude_cli_available?).returns(true)
 
-          [0, -1, 17, 1.5, "4"].each do |bad_value|
+          [ 0, -1, 17, 1.5, "4" ].each do |bad_value|
             config.claude_code_max_concurrency = bad_value
             error = assert_raises(ArnoldPipeline::ConfigurationError) do
               ClaudeCode.validate_configuration!(config)
@@ -790,7 +790,7 @@ module ArnoldPipeline
           config.claude_code_repo_path = @repo_path
           ClaudeCode.stubs(:claude_cli_available?).returns(true)
 
-          [1, 4, 8, 16, nil].each do |good_value|
+          [ 1, 4, 8, 16, nil ].each do |good_value|
             config.claude_code_max_concurrency = good_value
             assert_nothing_raised { ClaudeCode.validate_configuration!(config) }
           end
@@ -828,7 +828,7 @@ module ArnoldPipeline
         end
 
         test "tool_restriction_flags includes --tools when configured" do
-          ArnoldPipeline.configure { |c| c.claude_code_tools = ["Bash", "Edit", "Read"] }
+          ArnoldPipeline.configure { |c| c.claude_code_tools = [ "Bash", "Edit", "Read" ] }
           flags = @provider.send(:tool_restriction_flags)
           assert_includes flags, "--tools"
           assert_includes flags, "Bash,Edit,Read"
@@ -837,17 +837,17 @@ module ArnoldPipeline
         end
 
         test "tool_restriction_flags includes --allowedTools for each pattern" do
-          ArnoldPipeline.configure { |c| c.claude_code_allowed_tools = ["Bash(git *)", "Read"] }
+          ArnoldPipeline.configure { |c| c.claude_code_allowed_tools = [ "Bash(git *)", "Read" ] }
           flags = @provider.send(:tool_restriction_flags)
-          assert_equal ["--allowedTools", "Bash(git *)", "--allowedTools", "Read"], flags
+          assert_equal [ "--allowedTools", "Bash(git *)", "--allowedTools", "Read" ], flags
         ensure
           ArnoldPipeline.reset_configuration!
         end
 
         test "tool_restriction_flags includes --disallowedTools for each pattern" do
-          ArnoldPipeline.configure { |c| c.claude_code_disallowed_tools = ["WebSearch"] }
+          ArnoldPipeline.configure { |c| c.claude_code_disallowed_tools = [ "WebSearch" ] }
           flags = @provider.send(:tool_restriction_flags)
-          assert_equal ["--disallowedTools", "WebSearch"], flags
+          assert_equal [ "--disallowedTools", "WebSearch" ], flags
         ensure
           ArnoldPipeline.reset_configuration!
         end
@@ -1194,7 +1194,7 @@ module ArnoldPipeline
             }
           })
 
-          tasks = [{ "title" => "Setup", "description" => "Init" }]
+          tasks = [ { "title" => "Setup", "description" => "Init" } ]
           @provider.stubs(:execute_claude_code).returns({ success: true, output: "{}", error: nil })
           @provider.stubs(:normalize_worktree)
           @provider.stubs(:capture_diff).returns("diff --git a/f.rb b/f.rb\n+x")
@@ -1484,7 +1484,7 @@ module ArnoldPipeline
           prompt = @provider.send(:build_conflict_resolution_prompt,
             branch: "branch-b",
             task: task,
-            conflicted_files: ["routes.rb"]
+            conflicted_files: [ "routes.rb" ]
           )
 
           assert_includes prompt, "branch-b"
@@ -1502,7 +1502,7 @@ module ArnoldPipeline
           })
 
           @provider.expects(:merge_branch).with("task-branch", task: task)
-          @provider.merge_results(pipeline_run: @pipeline_run, tasks: [task])
+          @provider.merge_results(pipeline_run: @pipeline_run, tasks: [ task ])
         end
 
         test "fatal git error (exit 128) skips resolution" do
@@ -1546,7 +1546,7 @@ module ArnoldPipeline
           config.claude_code_repo_path = @repo_path
           ClaudeCode.stubs(:claude_cli_available?).returns(true)
 
-          [0, -5, "30"].each do |bad_value|
+          [ 0, -5, "30" ].each do |bad_value|
             config.claude_code_task_timeout = bad_value
             error = assert_raises(ArnoldPipeline::ConfigurationError) do
               ClaudeCode.validate_configuration!(config)
@@ -1561,7 +1561,7 @@ module ArnoldPipeline
           config.claude_code_repo_path = @repo_path
           ClaudeCode.stubs(:claude_cli_available?).returns(true)
 
-          [1, 30, 60, 0.5, nil].each do |good_value|
+          [ 1, 30, 60, 0.5, nil ].each do |good_value|
             config.claude_code_task_timeout = good_value
             assert_nothing_raised { ClaudeCode.validate_configuration!(config) }
           end
@@ -1634,7 +1634,7 @@ module ArnoldPipeline
 
           branch = "test-timeout-branch"
           @provider.stubs(:setup_worktree).returns(@repo_path)
-          @provider.stubs(:spawn_with_timeout).returns(["partial output", nil])
+          @provider.stubs(:spawn_with_timeout).returns([ "partial output", nil ])
           @provider.stubs(:cleanup_worktree)
 
           result = @provider.send(:execute_claude_code, prompt: "test", branch: branch, external_id: "cc-timeout")
@@ -1651,7 +1651,7 @@ module ArnoldPipeline
 
           branch = "test-timeout-cleanup"
           @provider.stubs(:setup_worktree).returns(@repo_path)
-          @provider.stubs(:spawn_with_timeout).returns(["", nil])
+          @provider.stubs(:spawn_with_timeout).returns([ "", nil ])
           @provider.expects(:cleanup_worktree).with(branch)
 
           @provider.send(:execute_claude_code, prompt: "test", branch: branch, external_id: "cc-cleanup")
@@ -1662,9 +1662,9 @@ module ArnoldPipeline
         test "create_tasks stores timeout failure in results" do
           ArnoldPipeline.configure { |c| c.claude_code_task_timeout = 0.01 }
 
-          tasks = [{ "title" => "Slow task", "description" => "Will timeout" }]
+          tasks = [ { "title" => "Slow task", "description" => "Will timeout" } ]
           @provider.stubs(:setup_worktree).returns(@repo_path)
-          @provider.stubs(:spawn_with_timeout).returns(["", nil])
+          @provider.stubs(:spawn_with_timeout).returns([ "", nil ])
           @provider.stubs(:cleanup_worktree)
           @provider.stubs(:capture_diff).returns("")
 
@@ -1679,9 +1679,9 @@ module ArnoldPipeline
         end
 
         test "fetch_results returns :failed for timed-out task" do
-          tasks = [{ "title" => "Timeout task", "description" => "Timed out" }]
+          tasks = [ { "title" => "Timeout task", "description" => "Timed out" } ]
           @provider.stubs(:setup_worktree).returns(@repo_path)
-          @provider.stubs(:spawn_with_timeout).returns(["", nil])
+          @provider.stubs(:spawn_with_timeout).returns([ "", nil ])
           @provider.stubs(:cleanup_worktree)
           @provider.stubs(:capture_diff).returns("")
 
@@ -1689,7 +1689,7 @@ module ArnoldPipeline
           ext_id = created.first[:external_id]
           task = @pipeline_run.tasks.create!(title: "Timeout task", position: 0, external_id: ext_id)
 
-          results = @provider.fetch_results(pipeline_run: @pipeline_run, tasks: [task])
+          results = @provider.fetch_results(pipeline_run: @pipeline_run, tasks: [ task ])
           assert_equal :failed, results.first[:status]
         end
 
@@ -1698,7 +1698,7 @@ module ArnoldPipeline
 
           branch = "test-normal-timeout"
           @provider.stubs(:setup_worktree).returns(@repo_path)
-          @provider.stubs(:spawn_with_timeout).returns(["Done", stub(success?: true)])
+          @provider.stubs(:spawn_with_timeout).returns([ "Done", stub(success?: true) ])
 
           result = @provider.send(:execute_claude_code, prompt: "test", branch: branch, external_id: "cc-ok")
 
@@ -1766,7 +1766,7 @@ module ArnoldPipeline
 
           @provider.expects(:strip_binary_noise!).with(branch).in_sequence(call_order)
           Open3.expects(:capture2e).with("git", "-C", @repo_path, "merge", "--no-ff", "--no-edit", branch)
-            .returns(["", stub(success?: true)]).in_sequence(call_order)
+            .returns([ "", stub(success?: true) ]).in_sequence(call_order)
 
           @provider.send(:merge_branch, branch)
         end
@@ -1826,7 +1826,7 @@ module ArnoldPipeline
             .raises(ClaudeCode::MergeError, "conflict")
           @provider.expects(:merge_branch).with("branch-b", task: task2).in_sequence(call_seq)
 
-          @provider.merge_results(pipeline_run: @pipeline_run, tasks: [task1, task2])
+          @provider.merge_results(pipeline_run: @pipeline_run, tasks: [ task1, task2 ])
 
           # Task 1 should be failed, Task 2 should be untouched
           task1.reload
@@ -1845,7 +1845,7 @@ module ArnoldPipeline
           })
           @provider.stubs(:merge_branch).raises(ClaudeCode::MergeError, "sqlite conflict")
 
-          @provider.merge_results(pipeline_run: @pipeline_run, tasks: [task])
+          @provider.merge_results(pipeline_run: @pipeline_run, tasks: [ task ])
 
           task.reload
           assert_equal "[]", task.result_diff
@@ -1859,7 +1859,7 @@ module ArnoldPipeline
           @provider.instance_variable_set(:@results, { "cc-1-a" => stored })
           @provider.stubs(:merge_branch).raises(ClaudeCode::MergeError, "conflict")
 
-          @provider.merge_results(pipeline_run: @pipeline_run, tasks: [task])
+          @provider.merge_results(pipeline_run: @pipeline_run, tasks: [ task ])
 
           assert stored[:merge_failed]
         end
@@ -1872,7 +1872,7 @@ module ArnoldPipeline
           @provider.stubs(:merge_branch).raises(RuntimeError, "unexpected error")
 
           assert_raises(RuntimeError) do
-            @provider.merge_results(pipeline_run: @pipeline_run, tasks: [task])
+            @provider.merge_results(pipeline_run: @pipeline_run, tasks: [ task ])
           end
         end
       end

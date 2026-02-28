@@ -32,7 +32,7 @@ module ArnoldPipeline
 
     validates :event_type, presence: true
     validates :stage, presence: true, inclusion: { in: VALID_STAGES }
-    validates :summary, exclusion: { in: [nil], message: "can't be blank" }
+    validates :summary, exclusion: { in: [ nil ], message: "can't be blank" }
 
     scope :for_stage, ->(stage) { where(stage: stage) }
     scope :chronological, -> { order(:created_at) }

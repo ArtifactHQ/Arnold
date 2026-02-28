@@ -25,7 +25,7 @@ module ArnoldPipeline
                   "(e.g. 'a dog walking app where walkers find clients nearby')."
               }
             },
-            required: ["description"]
+            required: [ "description" ]
           }
         end
 

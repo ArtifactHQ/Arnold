@@ -27,7 +27,7 @@ module ArnoldPipeline
           description: "Implement user auth",
           position: 0,
           status: :completed,
-          labels: ["authentication"],
+          labels: [ "authentication" ],
           result_diff: "+class User < ApplicationRecord\n+  has_secure_password\n+end"
         )
 
@@ -37,7 +37,7 @@ module ArnoldPipeline
           description: "Create todo management",
           position: 1,
           status: :completed,
-          labels: ["todo"],
+          labels: [ "todo" ],
           result_diff: nil
         )
 
@@ -47,7 +47,7 @@ module ArnoldPipeline
           description: "Create dashboard view",
           position: 2,
           status: :pending,
-          labels: ["dashboard"]
+          labels: [ "dashboard" ]
         )
       end
 
@@ -111,7 +111,7 @@ module ArnoldPipeline
               "description" => "Auth implementation missing password reset",
               "spec_expectation" => "Users can reset their passwords",
               "actual_state" => "No password reset endpoint",
-              "files_examined" => ["app/models/user.rb"],
+              "files_examined" => [ "app/models/user.rb" ],
               "affected_tasks" => [],
               "recommendation" => "update_code"
             }

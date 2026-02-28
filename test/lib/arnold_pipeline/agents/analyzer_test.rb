@@ -43,7 +43,7 @@ module ArnoldPipeline
           "completeness_scores" => { "new_reader_test" => 70, "coding_agent_test" => 65, "change_request_test" => 60 },
           "anti_patterns_found" => [],
           "corrective_data" => {
-            "tasks" => [{ "title" => "Add error handling", "description" => "...", "priority" => 0, "labels" => ["bugfix"], "depends_on" => [] }],
+            "tasks" => [ { "title" => "Add error handling", "description" => "...", "priority" => 0, "labels" => [ "bugfix" ], "depends_on" => [] } ],
             "deltas" => nil
           },
           "requirement_coverage" => nil
@@ -199,12 +199,12 @@ module ArnoldPipeline
         data = {
           "decision" => "iterate_tasks", "confidence" => 70, "reasoning" => "Missing features",
           "completeness_scores" => { "new_reader_test" => 60, "coding_agent_test" => 50, "change_request_test" => 55 },
-          "anti_patterns_found" => ["ORPHANED_REFERENCE: User model referenced but not defined"],
+          "anti_patterns_found" => [ "ORPHANED_REFERENCE: User model referenced but not defined" ],
           "corrective_data" => {
-            "tasks" => [{ "title" => "Fix auth", "description" => "Add login", "priority" => 0, "labels" => ["backend"], "depends_on" => [] }],
+            "tasks" => [ { "title" => "Fix auth", "description" => "Add login", "priority" => 0, "labels" => [ "backend" ], "depends_on" => [] } ],
             "deltas" => nil
           },
-          "requirement_coverage" => [{ "id" => "REQ-AUTH-001", "status" => "partial", "notes" => "Missing OAuth" }]
+          "requirement_coverage" => [ { "id" => "REQ-AUTH-001", "status" => "partial", "notes" => "Missing OAuth" } ]
         }
         assert schemer.valid?(data), "Expected valid, got: #{schemer.validate(data).map(&:to_h)}"
       end
@@ -217,10 +217,10 @@ module ArnoldPipeline
           "anti_patterns_found" => [],
           "corrective_data" => {
             "tasks" => nil,
-            "deltas" => [{
+            "deltas" => [ {
               "operation" => "modified", "section" => "Auth", "requirement" => "Login",
               "content" => nil, "before_content" => "old", "after_content" => "new", "rationale" => "Clarify"
-            }]
+            } ]
           },
           "requirement_coverage" => nil
         }

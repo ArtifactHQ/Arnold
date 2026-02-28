@@ -4,7 +4,12 @@ require "arnold_pipeline/mcp/handler"
 module ArnoldPipeline
   module E2e
     class PluginCompatibilityTest < ActiveSupport::TestCase
-      PLUGIN_PATH = File.expand_path("~/Documents/Projects/artifact/arnold-claude-code-plugin")
+      PLUGIN_PATH = File.expand_path(
+        ENV.fetch("ARNOLD_PLUGIN_PATH", "~/Documents/Projects/artifact/arnold-claude-code-plugin")
+      )
+
+      # Backtick-quoted identifiers in plugin docs that are not Arnold MCP tools
+      NON_TOOL_IDENTIFIERS = %w[open_questions].freeze
 
       setup do
         skip "Plugin repo not found at #{PLUGIN_PATH}" unless File.directory?(PLUGIN_PATH)
@@ -23,7 +28,7 @@ module ArnoldPipeline
         config = JSON.parse(File.read(config_path))
         assert config.key?("arnold"), "Config must have 'arnold' key"
         assert_equal "arnold", config["arnold"]["command"]
-        assert_equal ["mcp"], config["arnold"]["args"]
+        assert_equal [ "mcp" ], config["arnold"]["args"]
       end
 
       test "plugin agent references all tools that Arnold exposes" do
@@ -48,7 +53,9 @@ module ArnoldPipeline
         backtick_names = agent_md.scan(/`(\w+)`/).flatten.uniq
 
         # Filter to names that match arnold tool naming convention (snake_case with underscores)
-        tool_like_names = backtick_names.select { |n| n.include?("_") && n == n.downcase }
+        tool_like_names = backtick_names
+          .select { |n| n.include?("_") && n == n.downcase }
+          .reject { |n| NON_TOOL_IDENTIFIERS.include?(n) }
 
         # Each tool-like name should be a real Arnold tool
         tool_like_names.each do |name|
@@ -81,7 +88,9 @@ module ArnoldPipeline
 
           # Extract backtick-quoted tool-like names
           tool_references = content.scan(/`(\w+)`/).flatten.uniq
-          tool_like = tool_references.select { |n| n.include?("_") && n == n.downcase }
+          tool_like = tool_references
+            .select { |n| n.include?("_") && n == n.downcase }
+            .reject { |n| NON_TOOL_IDENTIFIERS.include?(n) }
 
           tool_like.each do |name|
             assert_includes @actual_tools, name,

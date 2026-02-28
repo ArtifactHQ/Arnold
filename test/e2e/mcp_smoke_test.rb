@@ -14,7 +14,11 @@ module ArnoldPipeline
           logger: Logger.new(File::NULL)
         )
 
-        @server_thread = Thread.new { @server.start }
+        @server_thread = Thread.new do
+          @server.start
+        ensure
+          ActiveRecord::Base.connection_pool.release_connection
+        end
 
         # Send initialize handshake
         send_request(
@@ -29,9 +33,15 @@ module ArnoldPipeline
       end
 
       teardown do
+        @server.stop
+        # Close the write end so server_read.gets returns nil, unblocking the server loop
         @client_write.close rescue nil
-        @server_thread.join(2) rescue nil
-        [@client_read, @server_write, @server_read].each { |io| io.close rescue nil }
+        unless @server_thread.join(5)
+          @server_thread.kill
+          @server_thread.join(1)
+        end
+        [ @client_read, @server_write, @server_read ].each { |io| io.close rescue nil }
+        ActiveRecord::Base.connection_pool.release_connection
         ArnoldPipeline.reset_configuration!
       end
 

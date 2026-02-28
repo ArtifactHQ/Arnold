@@ -8,23 +8,23 @@ module ArnoldPipeline
         dt = DomainType.new(
           code: "GAME",
           name: "Game / Interactive Entertainment",
-          keywords: ["game", "play"],
+          keywords: [ "game", "play" ],
           description: "Entertainment apps",
           primary_value: "Fun, engagement",
-          emphasis: ["Progression systems"],
-          document_focus: ["Win/loss conditions"],
-          watch_for: ["Game balance"],
+          emphasis: [ "Progression systems" ],
+          document_focus: [ "Win/loss conditions" ],
+          watch_for: [ "Game balance" ],
           terminology: { "user" => "player" }
         )
 
         assert_equal "GAME", dt.code
         assert_equal "Game / Interactive Entertainment", dt.name
-        assert_equal ["game", "play"], dt.keywords
+        assert_equal [ "game", "play" ], dt.keywords
         assert_equal "Entertainment apps", dt.description
         assert_equal "Fun, engagement", dt.primary_value
-        assert_equal ["Progression systems"], dt.emphasis
-        assert_equal ["Win/loss conditions"], dt.document_focus
-        assert_equal ["Game balance"], dt.watch_for
+        assert_equal [ "Progression systems" ], dt.emphasis
+        assert_equal [ "Win/loss conditions" ], dt.document_focus
+        assert_equal [ "Game balance" ], dt.watch_for
         assert_equal({ "user" => "player" }, dt.terminology)
       end
 
@@ -32,7 +32,7 @@ module ArnoldPipeline
         dt = DomainType.new(
           code: "GAME",
           name: "Game",
-          keywords: ["game"],
+          keywords: [ "game" ],
           description: "desc",
           primary_value: "fun",
           emphasis: [],

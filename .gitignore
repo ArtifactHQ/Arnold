@@ -9,10 +9,32 @@
 pkg/
 
 # Dummy app runtime files
-test/dummy/log/*.log
+test/dummy/log/
 test/dummy/storage/*.sqlite3
 test/dummy/tmp/
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Environment files — never commit real credentials
+.env
+.env.*
+!.env.example
+
+# Rails master key and credentials keys
+config/master.key
+config/credentials/*.key
+
+# Certificate and private key files
+*.pem
+*.key
+
+# Temporary files
+tmp/
+
+# Test coverage reports
+coverage/
+
+# Bundled dependencies
+vendor/bundle

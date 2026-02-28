@@ -24,9 +24,9 @@ module ArnoldPipeline
             position: 0,
             tier: 0,
             status: :completed,
-            labels: ["backend", "database"],
+            labels: [ "backend", "database" ],
             depends_on: [],
-            result_comments: [{ "body" => "Database schema created successfully" }]
+            result_comments: [ { "body" => "Database schema created successfully" } ]
           )
           @task2 = Task.create!(
             pipeline_run: @run,
@@ -35,8 +35,8 @@ module ArnoldPipeline
             position: 1,
             tier: 1,
             status: :pending,
-            labels: ["backend", "authentication"],
-            depends_on: [@task1.id.to_s]
+            labels: [ "backend", "authentication" ],
+            depends_on: [ @task1.id.to_s ]
           )
         end
 
@@ -187,7 +187,7 @@ module ArnoldPipeline
             position: 2,
             tier: 0,
             status: :pending,
-            labels: ["zzz_nomatch"]
+            labels: [ "zzz_nomatch" ]
           )
 
           result = StartTask.call({ "task_id" => task.id.to_s }, @context)

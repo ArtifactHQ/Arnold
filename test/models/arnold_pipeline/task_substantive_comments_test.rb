@@ -28,37 +28,37 @@ module ArnoldPipeline
 
     test "returns false for 'is working' WIP comment" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("Claude Code is working on this issue.")])
+        result_comments: [ build_comment("Claude Code is working on this issue.") ])
       assert_not task.has_substantive_comments?
     end
 
     test "returns false for 'starting work' WIP comment" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("Starting work on this task now.")])
+        result_comments: [ build_comment("Starting work on this task now.") ])
       assert_not task.has_substantive_comments?
     end
 
     test "returns false for 'looking into' WIP comment" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("Looking into this issue.")])
+        result_comments: [ build_comment("Looking into this issue.") ])
       assert_not task.has_substantive_comments?
     end
 
     test "returns false for 'get back to you' WIP comment" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("I'll analyze this and get back to you.")])
+        result_comments: [ build_comment("I'll analyze this and get back to you.") ])
       assert_not task.has_substantive_comments?
     end
 
     test "returns false for 'in progress' WIP comment" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("This task is in progress.")])
+        result_comments: [ build_comment("This task is in progress.") ])
       assert_not task.has_substantive_comments?
     end
 
     test "returns false for 'picking up' WIP comment" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("Picking up this issue now.")])
+        result_comments: [ build_comment("Picking up this issue now.") ])
       assert_not task.has_substantive_comments?
     end
 
@@ -75,19 +75,19 @@ module ArnoldPipeline
 
     test "returns true for 'finished' completion comment" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("Claude finished @user's task in 3m 47s")])
+        result_comments: [ build_comment("Claude finished @user's task in 3m 47s") ])
       assert task.has_substantive_comments?
     end
 
     test "returns true for 'Create PR' completion comment" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("Done! Create PR here.")])
+        result_comments: [ build_comment("Done! Create PR here.") ])
       assert task.has_substantive_comments?
     end
 
     test "returns true for 'completed' completion comment" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("Task completed successfully.")])
+        result_comments: [ build_comment("Task completed successfully.") ])
       assert task.has_substantive_comments?
     end
 
@@ -95,31 +95,31 @@ module ArnoldPipeline
 
     test "returns true for 'can't' blocker comment" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("I can't scaffold without Gemfile")])
+        result_comments: [ build_comment("I can't scaffold without Gemfile") ])
       assert task.has_substantive_comments?
     end
 
     test "returns true for 'cant' blocker comment" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("I cant do this without dependencies")])
+        result_comments: [ build_comment("I cant do this without dependencies") ])
       assert task.has_substantive_comments?
     end
 
     test "returns true for 'unable to' blocker comment" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("Unable to complete this task.")])
+        result_comments: [ build_comment("Unable to complete this task.") ])
       assert task.has_substantive_comments?
     end
 
     test "returns true for 'failed' blocker comment" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("The build failed with errors.")])
+        result_comments: [ build_comment("The build failed with errors.") ])
       assert task.has_substantive_comments?
     end
 
     test "returns true for 'error' blocker comment" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("Got an error running migrations.")])
+        result_comments: [ build_comment("Got an error running migrations.") ])
       assert task.has_substantive_comments?
     end
 
@@ -127,16 +127,16 @@ module ArnoldPipeline
 
     test "returns false for unknown comment without resolution signal" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("Here are the changes I made to the codebase.")])
+        result_comments: [ build_comment("Here are the changes I made to the codebase.") ])
       assert_not task.has_substantive_comments?
     end
 
     test "returns false for planning/analysis comment" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment(
+        result_comments: [ build_comment(
           "Project Bootstrap Analysis\nTasks:\n- Gather context\n- Create backend\n" \
           "Analysis: I've analyzed the repository structure.\nSetting up the project structure..."
-        )])
+        ) ])
       assert_not task.has_substantive_comments?
     end
 
@@ -155,7 +155,7 @@ module ArnoldPipeline
 
     test "comment with both WIP and completion signals is substantive" do
       task = @run.tasks.create!(title: "Task", position: 0,
-        result_comments: [build_comment("Claude Code is working on this and finished the PR.")])
+        result_comments: [ build_comment("Claude Code is working on this and finished the PR.") ])
       assert task.has_substantive_comments?
     end
   end

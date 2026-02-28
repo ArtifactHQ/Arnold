@@ -175,7 +175,7 @@ module ArnoldPipeline
           agent = Agents::BaseAgent.new(llm: llm, logger: Logger.new(File::NULL))
 
           result = agent.send(:chat_json,
-            messages: [{ role: "user", content: user_context }],
+            messages: [ { role: "user", content: user_context } ],
             system: SYSTEM_PROMPT,
             schema: RESPONSE_SCHEMA
           )

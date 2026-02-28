@@ -11,6 +11,7 @@ group :test do
   gem "mocha", "~> 2.7"
   gem "json_schemer", "~> 2.5"
   gem "mutant-minitest", "~> 0.14"
+  gem "simplecov", require: false
 end
 
 gem "rubocop-rails-omakase", require: false

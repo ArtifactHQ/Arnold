@@ -17,8 +17,8 @@ module ArnoldPipeline
             content: "# Fitness Tracker\n\n## Purpose\nA fitness app.\n\n## Requirements\n- Track workouts",
             version: 1,
             structured_data: {
-              "personas" => [{ "name" => "Athlete" }],
-              "domains" => [{ "name" => "Workouts" }, { "name" => "Nutrition" }]
+              "personas" => [ { "name" => "Athlete" } ],
+              "domains" => [ { "name" => "Workouts" }, { "name" => "Nutrition" } ]
             }
           )
 
@@ -93,7 +93,7 @@ module ArnoldPipeline
         end
 
         test "call returns impact with modified capabilities" do
-          @llm_response["deltas"] = [{
+          @llm_response["deltas"] = [ {
             "operation" => "modified",
             "section" => "Workouts",
             "requirement" => "Track Exercises",
@@ -101,7 +101,7 @@ module ArnoldPipeline
             "before_content" => "Old",
             "after_content" => "New",
             "rationale" => "Updated"
-          }]
+          } ]
           @llm_stub.stubs(:chat_json).returns(@llm_response)
 
           result = ProposeChange.call({ "description" => "Modify tracking" }, @context)
@@ -109,7 +109,7 @@ module ArnoldPipeline
         end
 
         test "call returns impact with removed capabilities" do
-          @llm_response["deltas"] = [{
+          @llm_response["deltas"] = [ {
             "operation" => "removed",
             "section" => "Nutrition",
             "requirement" => "Calorie Counting",
@@ -117,7 +117,7 @@ module ArnoldPipeline
             "before_content" => "",
             "after_content" => "",
             "rationale" => "No longer needed"
-          }]
+          } ]
           @llm_stub.stubs(:chat_json).returns(@llm_response)
 
           result = ProposeChange.call({ "description" => "Remove calories" }, @context)
@@ -127,7 +127,7 @@ module ArnoldPipeline
         end
 
         test "call returns questions for removed capabilities" do
-          @llm_response["deltas"] = [{
+          @llm_response["deltas"] = [ {
             "operation" => "removed",
             "section" => "Nutrition",
             "requirement" => "Calorie Counting",
@@ -135,7 +135,7 @@ module ArnoldPipeline
             "before_content" => "",
             "after_content" => "",
             "rationale" => "Simplification"
-          }]
+          } ]
           @llm_stub.stubs(:chat_json).returns(@llm_response)
 
           result = ProposeChange.call({ "description" => "Remove calories" }, @context)

@@ -85,7 +85,7 @@ module ArnoldPipeline
             return {
               finding_id: finding.id.to_s,
               resolution_applied: "update_spec",
-              actions_taken: ["No deltas generated - finding resolved without spec changes"],
+              actions_taken: [ "No deltas generated - finding resolved without spec changes" ],
               spec_revision: spec.version.to_s,
               tasks_generated: [],
               status: "resolved"
@@ -128,7 +128,7 @@ module ArnoldPipeline
             description: build_corrective_description(finding),
             position: max_position + 1,
             status: :pending,
-            labels: [finding.domain].compact,
+            labels: [ finding.domain ].compact,
             depends_on: finding.affected_tasks || []
           )
 
@@ -137,7 +137,7 @@ module ArnoldPipeline
           {
             finding_id: finding.id.to_s,
             resolution_applied: "update_code",
-            actions_taken: ["Created corrective task ##{task.id}"],
+            actions_taken: [ "Created corrective task ##{task.id}" ],
             spec_revision: nil,
             tasks_generated: [
               {
@@ -156,7 +156,7 @@ module ArnoldPipeline
           {
             finding_id: finding.id.to_s,
             resolution_applied: "accepted",
-            actions_taken: ["Finding accepted - will be excluded from future drift checks for this spec revision"],
+            actions_taken: [ "Finding accepted - will be excluded from future drift checks for this spec revision" ],
             spec_revision: nil,
             tasks_generated: [],
             status: "resolved"
@@ -169,7 +169,7 @@ module ArnoldPipeline
           {
             finding_id: finding.id.to_s,
             resolution_applied: "ignored",
-            actions_taken: ["Finding ignored - may reappear on future drift checks"],
+            actions_taken: [ "Finding ignored - may reappear on future drift checks" ],
             spec_revision: nil,
             tasks_generated: [],
             status: "resolved"
@@ -183,7 +183,7 @@ module ArnoldPipeline
         end
 
         private_class_method def self.build_spec_change_request(finding)
-          parts = ["Drift finding requires spec update:"]
+          parts = [ "Drift finding requires spec update:" ]
           parts << "Type: #{finding.drift_type}"
           parts << "Severity: #{finding.severity}"
           parts << "Description: #{finding.description}"

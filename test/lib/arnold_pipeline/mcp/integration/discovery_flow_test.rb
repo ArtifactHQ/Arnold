@@ -18,7 +18,7 @@ module ArnoldPipeline
               "library_selections" => {
                 "persona" => "Software Architect",
                 "recipe" => "Web App",
-                "supporting_recipes" => ["API Service"],
+                "supporting_recipes" => [ "API Service" ],
                 "domain_type" => "SERVICE"
               },
               "paused_at" => "spec"
@@ -32,15 +32,15 @@ module ArnoldPipeline
               "product_name" => "Dog Walking App",
               "summary" => "A platform connecting dog walkers with dog owners",
               "personas" => [
-                { "name" => "Dog Owner", "description" => "Books walks for their dogs", "capabilities" => ["book walks", "track walker"] },
-                { "name" => "Dog Walker", "description" => "Accepts and fulfills walk requests", "capabilities" => ["accept jobs", "navigate routes"] }
+                { "name" => "Dog Owner", "description" => "Books walks for their dogs", "capabilities" => [ "book walks", "track walker" ] },
+                { "name" => "Dog Walker", "description" => "Accepts and fulfills walk requests", "capabilities" => [ "accept jobs", "navigate routes" ] }
               ],
               "domains" => [
                 { "name" => "Booking", "description" => "Walk scheduling and management" },
                 { "name" => "Messaging", "description" => "In-app communication between owners and walkers" },
                 { "name" => "Payments", "description" => "Payment processing for completed walks" }
               ],
-              "open_questions" => ["Should walkers set their own pricing?"]
+              "open_questions" => [ "Should walkers set their own pricing?" ]
             }
           )
           @rev1 = SpecRevision.create!(
@@ -63,7 +63,7 @@ module ArnoldPipeline
               { "description" => "Book walks", "domain" => "Booking", "status" => "defined" },
               { "description" => "Track walker", "domain" => "Booking", "status" => "defined" }
             ],
-            "pain_points" => ["Finding reliable walkers nearby"]
+            "pain_points" => [ "Finding reliable walkers nearby" ]
           }
 
           @capability_response = {
@@ -71,29 +71,29 @@ module ArnoldPipeline
             "domain" => "Booking",
             "description" => "Schedule on-demand or future walks with available walkers.",
             "user_flow" => "1. Open app\n2. Select walk type\n3. Choose time\n4. Confirm",
-            "personas_involved" => ["Dog Owner", "Dog Walker"],
-            "depends_on" => ["User Authentication"],
-            "enables" => ["Walk Tracking", "Payments"],
-            "open_questions" => ["Can owners book recurring walks?"]
+            "personas_involved" => [ "Dog Owner", "Dog Walker" ],
+            "depends_on" => [ "User Authentication" ],
+            "enables" => [ "Walk Tracking", "Payments" ],
+            "open_questions" => [ "Can owners book recurring walks?" ]
           }
 
           @what_if_response = {
             "interpretation" => "Adding group walks where multiple owners join one session.",
             "implications" => {
-              "new_domains" => ["Group Coordination"],
-              "affected_domains" => [{ "domain" => "Booking", "impact" => "Multi-owner booking needed" }],
+              "new_domains" => [ "Group Coordination" ],
+              "affected_domains" => [ { "domain" => "Booking", "impact" => "Multi-owner booking needed" } ],
               "new_personas" => [],
-              "affected_personas" => [{ "persona" => "Dog Walker", "impact" => "Must handle multiple dogs" }],
+              "affected_personas" => [ { "persona" => "Dog Walker", "impact" => "Must handle multiple dogs" } ],
               "complexity_assessment" => "High",
-              "dependencies" => ["Group payment splitting"]
+              "dependencies" => [ "Group payment splitting" ]
             },
-            "follow_up_questions" => ["What's the max group size?"],
+            "follow_up_questions" => [ "What's the max group size?" ],
             "ready_to_propose" => true
           }
 
           @propose_response = {
             "summary" => "Added GPS tracking for live walk monitoring",
-            "deltas" => [{
+            "deltas" => [ {
               "operation" => "added",
               "section" => "Booking",
               "requirement" => "GPS Tracking",
@@ -101,7 +101,7 @@ module ArnoldPipeline
               "before_content" => "",
               "after_content" => "",
               "rationale" => "Owners want to monitor walks"
-            }]
+            } ]
           }
 
           @llm_stub = stub("llm")

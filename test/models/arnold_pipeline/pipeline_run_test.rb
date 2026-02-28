@@ -47,7 +47,7 @@ module ArnoldPipeline
       run_record.tasks.create!(title: "Task 1", position: 0)
       run_record.iterations.create!(number: 1, decision: "done", confidence: 90)
 
-      assert_difference ["Specification.count", "Task.count", "Iteration.count"], -1 do
+      assert_difference [ "Specification.count", "Task.count", "Iteration.count" ], -1 do
         run_record.destroy!
       end
     end

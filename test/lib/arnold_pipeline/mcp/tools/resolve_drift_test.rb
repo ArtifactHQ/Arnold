@@ -20,7 +20,7 @@ module ArnoldPipeline
             description: "Build authentication",
             position: 0,
             status: :completed,
-            labels: ["authentication"]
+            labels: [ "authentication" ]
           )
 
           @finding = DriftFinding.create!(
@@ -33,7 +33,7 @@ module ArnoldPipeline
             spec_expectation: "Users can reset passwords",
             actual_state: "No password reset endpoint",
             recommendation: "update_code",
-            affected_tasks: [@task.id.to_s]
+            affected_tasks: [ @task.id.to_s ]
           )
         end
 

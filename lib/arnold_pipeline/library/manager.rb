@@ -42,7 +42,7 @@ module ArnoldPipeline
 
         scored = @recipes.values.map do |recipe|
           score = recipe.keywords.count { |kw| input_words.include?(kw.downcase) }
-          [recipe, score]
+          [ recipe, score ]
         end.select { |_, score| score > 0 }
           .sort_by { |_, score| -score }
 
@@ -89,7 +89,7 @@ module ArnoldPipeline
 
       def load_personas
         Dir.glob(File.join(@library_path, "personas", "*.yml")).each do |path|
-          data = YAML.safe_load_file(path, permitted_classes: [Symbol])
+          data = YAML.safe_load_file(path, permitted_classes: [ Symbol ])
           key = File.basename(path, ".yml")
           @personas[key] = Persona.new(
             name: data["name"],
@@ -103,7 +103,7 @@ module ArnoldPipeline
 
       def load_recipes
         Dir.glob(File.join(@library_path, "recipes", "*.yml")).each do |path|
-          data = YAML.safe_load_file(path, permitted_classes: [Symbol])
+          data = YAML.safe_load_file(path, permitted_classes: [ Symbol ])
           key = File.basename(path, ".yml")
           @recipes[key] = Recipe.new(
             name: data["name"],
@@ -119,7 +119,7 @@ module ArnoldPipeline
 
       def load_domain_types
         Dir.glob(File.join(@library_path, "domain_types", "*.yml")).each do |path|
-          data = YAML.safe_load_file(path, permitted_classes: [Symbol])
+          data = YAML.safe_load_file(path, permitted_classes: [ Symbol ])
           key = File.basename(path, ".yml")
           @domain_types[key] = DomainType.new(
             code: data["code"],
@@ -145,7 +145,7 @@ module ArnoldPipeline
 
         scored = items.map do |item|
           score = item.keywords.count { |kw| input_words.include?(kw.downcase) }
-          [item, score]
+          [ item, score ]
         end
 
         best = scored.max_by(&:last)

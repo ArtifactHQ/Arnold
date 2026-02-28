@@ -107,7 +107,7 @@ module ArnoldPipeline
               "spec_expectation" => "Task should produce code artifacts.",
               "actual_state" => "No diff recorded for completed task.",
               "files_examined" => [],
-              "affected_tasks" => [task.id.to_s],
+              "affected_tasks" => [ task.id.to_s ],
               "recommendation" => "review_needed"
             }
           end
@@ -169,7 +169,7 @@ module ArnoldPipeline
         USER
 
         result = chat_json(
-          messages: [{ role: :user, content: user }],
+          messages: [ { role: :user, content: user } ],
           system: system,
           schema: BEHAVIORAL_SCHEMA
         )
@@ -209,7 +209,7 @@ module ArnoldPipeline
         USER
 
         result = chat_json(
-          messages: [{ role: :user, content: user }],
+          messages: [ { role: :user, content: user } ],
           system: system,
           schema: INTENT_SCHEMA
         )

@@ -17,7 +17,7 @@ module ArnoldPipeline
         end
 
         def recoverable_errors
-          [Octokit::Error, Faraday::Error]
+          [ Octokit::Error, Faraday::Error ]
         end
 
         def self.validate_configuration!(config)
@@ -91,7 +91,7 @@ module ArnoldPipeline
             workflow_active, workflow_details = if ArnoldPipeline.configuration.workflow_status_enabled
               check_workflows_active?(issue_number, pulls)
             else
-              [false, "disabled"]
+              [ false, "disabled" ]
             end
 
             {
@@ -169,7 +169,7 @@ module ArnoldPipeline
             active_runs = runs.select { |run| %w[queued in_progress].include?(run.status) }
             if active_runs.any?
               details = active_runs.map { |r| "#{r.name}(#{r.status})" }.join(", ")
-              return [true, "PR ##{pr.number} check runs: #{details}"]
+              return [ true, "PR ##{pr.number} check runs: #{details}" ]
             end
           end
 
@@ -181,13 +181,13 @@ module ArnoldPipeline
             matching = runs.select { |run| run.head_branch&.match?(pattern) && run.head_branch.match?(/#{issue_number}/) }
             if matching.any?
               details = matching.map { |r| "#{r.head_branch}(#{r.status})" }.join(", ")
-              return [true, "branch workflow runs: #{details}"]
+              return [ true, "branch workflow runs: #{details}" ]
             end
           end
 
-          [false, "no active workflows"]
+          [ false, "no active workflows" ]
         rescue Octokit::Error, Faraday::Error => e
-          [false, "error: #{e.message}"]
+          [ false, "error: #{e.message}" ]
         end
 
         def determine_status(pulls, issue_state: "open")

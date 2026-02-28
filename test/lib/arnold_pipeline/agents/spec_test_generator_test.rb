@@ -26,7 +26,7 @@ module ArnoldPipeline
             {
               "path" => "test/spec_integration/req_auth_001_test.rb",
               "content" => "require 'test_helper'\nclass ReqAuth001Test < ActionDispatch::IntegrationTest\nend",
-              "requirement_ids" => ["REQ-AUTH-001"]
+              "requirement_ids" => [ "REQ-AUTH-001" ]
             }
           ]
         }
@@ -45,12 +45,12 @@ module ArnoldPipeline
             {
               "path" => "test/spec_integration/req_auth_001_test.rb",
               "content" => "class ReqAuth001Test; end",
-              "requirement_ids" => ["REQ-AUTH-001"]
+              "requirement_ids" => [ "REQ-AUTH-001" ]
             },
             {
               "path" => "test/spec_integration/req_auth_002_test.rb",
               "content" => "class ReqAuth002Test; end",
-              "requirement_ids" => ["REQ-AUTH-002"]
+              "requirement_ids" => [ "REQ-AUTH-002" ]
             }
           ]
         }
@@ -68,7 +68,7 @@ module ArnoldPipeline
           user_msg.include?("spec/integration/")
         }.returns({
           "test_files" => [
-            { "path" => "spec/integration/req_001_test.rb", "content" => "test", "requirement_ids" => ["REQ-001"] }
+            { "path" => "spec/integration/req_001_test.rb", "content" => "test", "requirement_ids" => [ "REQ-001" ] }
           ]
         })
 
@@ -81,7 +81,7 @@ module ArnoldPipeline
           user_msg.include?("custom/tests/")
         }.returns({
           "test_files" => [
-            { "path" => "custom/tests/test.rb", "content" => "test", "requirement_ids" => ["REQ-001"] }
+            { "path" => "custom/tests/test.rb", "content" => "test", "requirement_ids" => [ "REQ-001" ] }
           ]
         })
 
@@ -106,7 +106,7 @@ module ArnoldPipeline
 
       test "raises on test_file without path" do
         @llm.expects(:chat_json).returns({
-          "test_files" => [{ "content" => "test code", "requirement_ids" => [] }]
+          "test_files" => [ { "content" => "test code", "requirement_ids" => [] } ]
         })
 
         assert_raises(ArnoldPipeline::Error) do
@@ -116,7 +116,7 @@ module ArnoldPipeline
 
       test "raises on test_file with empty content" do
         @llm.expects(:chat_json).returns({
-          "test_files" => [{ "path" => "test.rb", "content" => "  ", "requirement_ids" => [] }]
+          "test_files" => [ { "path" => "test.rb", "content" => "  ", "requirement_ids" => [] } ]
         })
 
         assert_raises(ArnoldPipeline::Error) do
@@ -147,7 +147,7 @@ module ArnoldPipeline
             {
               "path" => "test/spec_integration/req_auth_001_test.rb",
               "content" => "require 'test_helper'\nclass Test < Minitest::Test\nend",
-              "requirement_ids" => ["REQ-AUTH-001"]
+              "requirement_ids" => [ "REQ-AUTH-001" ]
             }
           ]
         }
@@ -162,7 +162,7 @@ module ArnoldPipeline
 
       test "RESPONSE_SCHEMA rejects test_file without required fields" do
         schemer = JSONSchemer.schema(SpecTestGenerator::RESPONSE_SCHEMA[:schema])
-        data = { "test_files" => [{ "path" => "test.rb" }] }
+        data = { "test_files" => [ { "path" => "test.rb" } ] }
         refute schemer.valid?(data)
       end
     end

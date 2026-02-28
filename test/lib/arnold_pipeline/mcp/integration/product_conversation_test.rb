@@ -18,8 +18,8 @@ module ArnoldPipeline
               "product_name" => "Dog Walking App",
               "summary" => "A platform connecting dog walkers with dog owners",
               "personas" => [
-                { "name" => "Dog Owner", "description" => "Books walks for their dogs", "capabilities" => ["book walks", "track walker"] },
-                { "name" => "Dog Walker", "description" => "Accepts and fulfills walk requests", "capabilities" => ["accept jobs", "navigate routes"] }
+                { "name" => "Dog Owner", "description" => "Books walks for their dogs", "capabilities" => [ "book walks", "track walker" ] },
+                { "name" => "Dog Walker", "description" => "Accepts and fulfills walk requests", "capabilities" => [ "accept jobs", "navigate routes" ] }
               ],
               "domains" => [
                 { "name" => "Booking", "description" => "Walk scheduling and management" },
@@ -35,28 +35,28 @@ module ArnoldPipeline
             title: "Setup database schema",
             description: "Create core database tables and schema",
             tier: 0, position: 0, status: :pending,
-            labels: ["backend", "database"]
+            labels: [ "backend", "database" ]
           )
           @task_booking = @run.tasks.create!(
             title: "Implement booking API",
             description: "Build booking endpoints for scheduling walks",
             tier: 1, position: 1, status: :pending,
-            labels: ["backend", "booking"],
-            depends_on: [@task_db.id]
+            labels: [ "backend", "booking" ],
+            depends_on: [ @task_db.id ]
           )
           @task_messaging = @run.tasks.create!(
             title: "Build messaging system",
             description: "Implement in-app chat between users",
             tier: 1, position: 2, status: :pending,
-            labels: ["backend", "messaging"],
-            depends_on: [@task_db.id]
+            labels: [ "backend", "messaging" ],
+            depends_on: [ @task_db.id ]
           )
           @task_payments = @run.tasks.create!(
             title: "Integrate payment processing",
             description: "Handle payments for completed walks",
             tier: 2, position: 3, status: :pending,
-            labels: ["backend", "payments"],
-            depends_on: [@task_booking.id]
+            labels: [ "backend", "payments" ],
+            depends_on: [ @task_booking.id ]
           )
 
           # Stub LLM for propose_change

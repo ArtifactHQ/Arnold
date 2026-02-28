@@ -16,9 +16,9 @@ module ArnoldPipeline
       description = hash["description"] || ""
       params = if hash.key?("params") && hash["params"].is_a?(Hash)
                  hash["params"].transform_keys(&:to_s)
-               else
+      else
                  hash.except("type", "description", "params")
-               end
+      end
       new(type: type, description: description, params: params)
     end
 

@@ -18,7 +18,7 @@ module ArnoldPipeline
       })
 
       @provider = stub("execution_provider")
-      @provider.stubs(:recoverable_errors).returns([Octokit::Error, Faraday::Error])
+      @provider.stubs(:recoverable_errors).returns([ Octokit::Error, Faraday::Error ])
       @provider.stubs(:async?).returns(true)
       @executor.stubs(:provider).returns(@provider)
 
@@ -92,17 +92,17 @@ module ArnoldPipeline
       pipeline_run = PipelineRun.create!(nl_input: "Build an app")
       task = pipeline_run.tasks.create!(title: "Setup DB", position: 0)
 
-      assert_equal "", @engine.format_task_comments([task])
+      assert_equal "", @engine.format_task_comments([ task ])
     end
 
     test "format_task_comments formats comments with source and author" do
       pipeline_run = PipelineRun.create!(nl_input: "Build an app")
       task = pipeline_run.tasks.create!(
         title: "Setup DB", position: 0,
-        result_comments: [{ "source" => "issue", "author" => "copilot", "body" => "Missing Gemfile" }]
+        result_comments: [ { "source" => "issue", "author" => "copilot", "body" => "Missing Gemfile" } ]
       )
 
-      result = @engine.format_task_comments([task])
+      result = @engine.format_task_comments([ task ])
       assert_includes result, "Setup DB"
       assert_includes result, "[issue] copilot: Missing Gemfile"
     end
@@ -227,7 +227,7 @@ module ArnoldPipeline
 
       @tier_gate_check.stubs(:call).raises(RuntimeError, "unexpected gate error")
 
-      result = engine.send(:run_tier_gate!, pipeline_run, 0, [task])
+      result = engine.send(:run_tier_gate!, pipeline_run, 0, [ task ])
 
       assert_nil result
       log_content = log_output.string
@@ -338,7 +338,7 @@ module ArnoldPipeline
       # Gate fails first, then passes on re-check
       gate_fail = {
         "pass" => false,
-        "issues" => ["missing files"],
+        "issues" => [ "missing files" ],
         "corrective_tasks" => [
           { "title" => "Fix A", "description" => "fix a" },
           { "title" => "Fix B", "description" => "fix b" }
@@ -386,7 +386,7 @@ module ArnoldPipeline
         c.github_repo = "owner/repo"
         c.claude_code_repo_path = "/tmp/test-repo"
         c.post_merge_hooks = [
-          { name: "schema", trigger_paths: ["db/migrate/**"], command: "bin/rails db:prepare" }
+          { name: "schema", trigger_paths: [ "db/migrate/**" ], command: "bin/rails db:prepare" }
         ]
       end
 
@@ -395,7 +395,7 @@ module ArnoldPipeline
 
       gate_fail = {
         "pass" => false,
-        "issues" => ["migration conflict"],
+        "issues" => [ "migration conflict" ],
         "corrective_tasks" => [
           { "title" => "Fix migration", "description" => "remove duplicate migration" }
         ],
@@ -437,7 +437,7 @@ module ArnoldPipeline
 
       gate_fail = {
         "pass" => false,
-        "issues" => ["broken build"],
+        "issues" => [ "broken build" ],
         "corrective_tasks" => [
           { "title" => "Fix build", "description" => "fix the build" }
         ],
@@ -478,7 +478,7 @@ module ArnoldPipeline
         true
       }.returns({ "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => [] })
 
-      @engine.send(:run_tier_gate!, pipeline_run, 0, [task])
+      @engine.send(:run_tier_gate!, pipeline_run, 0, [ task ])
 
       assert_includes captured_summaries, "[FAILED - EMPTY DIFF]"
     end
@@ -497,7 +497,7 @@ module ArnoldPipeline
         true
       }.returns({ "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => [] })
 
-      @engine.send(:run_tier_gate!, pipeline_run, 0, [task])
+      @engine.send(:run_tier_gate!, pipeline_run, 0, [ task ])
 
       assert_includes captured_summaries, "**[FAILED]**"
       refute_includes captured_summaries, "EMPTY DIFF"
@@ -517,7 +517,7 @@ module ArnoldPipeline
         true
       }.returns({ "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => [] })
 
-      @engine.send(:run_tier_gate!, pipeline_run, 0, [task])
+      @engine.send(:run_tier_gate!, pipeline_run, 0, [ task ])
 
       refute_includes captured_summaries, "[FAILED"
     end
@@ -545,7 +545,7 @@ module ArnoldPipeline
         true
       }.returns({ "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => [] })
 
-      @engine.send(:run_tier_gate!, pipeline_run, 0, [task])
+      @engine.send(:run_tier_gate!, pipeline_run, 0, [ task ])
 
       assert_not_nil captured_context, "repo_context should be passed to tier gate check"
       assert_includes captured_context, "lib/", "Should include files from the repo"
@@ -572,7 +572,7 @@ module ArnoldPipeline
         true
       }.returns({ "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => [] })
 
-      @engine.send(:run_tier_gate!, pipeline_run, 0, [task])
+      @engine.send(:run_tier_gate!, pipeline_run, 0, [ task ])
 
       assert_nil captured_context, "repo_context should be nil when no repo_path configured"
     end
@@ -624,9 +624,9 @@ module ArnoldPipeline
 
       gate_fail = {
         "pass" => false,
-        "issues" => ["Missing routes file", "No database migration"],
+        "issues" => [ "Missing routes file", "No database migration" ],
         "corrective_tasks" => [
-          { "title" => "Add routes", "description" => "Create config/routes.rb", "labels" => ["routing", "corrective"] }
+          { "title" => "Add routes", "description" => "Create config/routes.rb", "labels" => [ "routing", "corrective" ] }
         ],
         "context_summary" => "context"
       }
@@ -674,10 +674,10 @@ module ArnoldPipeline
         type: "file_exists", description: "Gemfile exists", params: { "path" => "Gemfile" }
       )
       ArnoldPipeline::CriteriaChecker.stubs(:call).returns({
-        verified: [verified_criterion], failed: [], unverified: []
+        verified: [ verified_criterion ], failed: [], unverified: []
       })
 
-      engine.send(:run_criteria_check!, pipeline_run, [task])
+      engine.send(:run_criteria_check!, pipeline_run, [ task ])
 
       log_content = log_output.string
       assert_match(/\[file_exists\] Gemfile exists/, log_content)
@@ -713,10 +713,10 @@ module ArnoldPipeline
       verified = ArnoldPipeline::AcceptanceCriterion.new(type: "file_exists", description: "Gemfile exists", params: {})
       failed = ArnoldPipeline::AcceptanceCriterion.new(type: "route_exists", description: "Health check route", params: {})
       ArnoldPipeline::CriteriaChecker.stubs(:call).returns({
-        verified: [verified], failed: [failed], unverified: []
+        verified: [ verified ], failed: [ failed ], unverified: []
       })
 
-      engine.send(:run_criteria_check!, pipeline_run, [task])
+      engine.send(:run_criteria_check!, pipeline_run, [ task ])
 
       criteria_event = event_recorder.events.find { |e| e[:event_type] == :criteria_check }
       assert_not_nil criteria_event, "Expected a criteria_check event to be recorded"
@@ -753,14 +753,14 @@ module ArnoldPipeline
 
       @tier_gate_check.stubs(:call).returns({
         "pass" => false,
-        "issues" => ["Missing route"],
+        "issues" => [ "Missing route" ],
         "corrective_tasks" => [
           { "title" => "Add route", "description" => "Add GET /up to routes.rb" }
         ],
         "context_summary" => "Issues found."
       })
 
-      engine.send(:run_tier_gate!, pipeline_run, 0, [task])
+      engine.send(:run_tier_gate!, pipeline_run, 0, [ task ])
 
       timed_event = event_recorder.events.find { |e| e[:event_type] == :tier_gate_evaluated }
       assert_not_nil timed_event, "Expected a tier_gate_evaluated event to be recorded"
@@ -768,7 +768,7 @@ module ArnoldPipeline
       summary = timed_event[:summary]
       assert_equal false, summary[:pass]
       assert_equal 1, summary[:corrective_task_count]
-      assert_equal [{ title: "Add route", description: "Add GET /up to routes.rb" }], summary[:corrective_tasks]
+      assert_equal [ { title: "Add route", description: "Add GET /up to routes.rb" } ], summary[:corrective_tasks]
 
       payload = timed_event[:payload]
       assert payload.key?(:task_summaries)
@@ -803,7 +803,7 @@ module ArnoldPipeline
       # Gate returns failure — should NOT block since tier_gate_enabled is false
       @tier_gate_check.stubs(:call).returns({
         "pass" => false,
-        "issues" => ["something wrong"],
+        "issues" => [ "something wrong" ],
         "context_summary" => "Tier 0 context for propagation.",
         "corrective_tasks" => []
       })
@@ -874,7 +874,7 @@ module ArnoldPipeline
       @executor.stubs(:merge_results).returns([])
 
       verified = ArnoldPipeline::AcceptanceCriterion.new(type: "file_exists", description: "Gemfile exists", params: {})
-      ArnoldPipeline::CriteriaChecker.stubs(:call).returns({ verified: [verified], failed: [], unverified: [] })
+      ArnoldPipeline::CriteriaChecker.stubs(:call).returns({ verified: [ verified ], failed: [], unverified: [] })
 
       @tier_gate_check.stubs(:call).returns({
         "pass" => true,
@@ -913,8 +913,8 @@ module ArnoldPipeline
 
       gate_result = {
         "pass" => false,
-        "issues" => ["test failure"],
-        "corrective_tasks" => [{ "title" => "Fix test", "description" => "fix" }],
+        "issues" => [ "test failure" ],
+        "corrective_tasks" => [ { "title" => "Fix test", "description" => "fix" } ],
         "context_summary" => "context"
       }
 
@@ -945,7 +945,7 @@ module ArnoldPipeline
 
       gate_fail = {
         "pass" => false,
-        "issues" => ["Test suite failed: 14 runs, 0 assertions, 0 failures, 14 errors"],
+        "issues" => [ "Test suite failed: 14 runs, 0 assertions, 0 failures, 14 errors" ],
         "corrective_tasks" => []
       }
 
@@ -967,7 +967,7 @@ module ArnoldPipeline
         c.github_repo = "owner/repo"
         c.claude_code_repo_path = "/tmp/test_repo"
         c.post_merge_hooks = [
-          { name: "lint", trigger_paths: ["*.rb"], command: "rubocop" }
+          { name: "lint", trigger_paths: [ "*.rb" ], command: "rubocop" }
         ]
       end
 
@@ -978,7 +978,7 @@ module ArnoldPipeline
       @executor.stubs(:await_results).returns(nil)
       @executor.stubs(:merge_results).returns([])
 
-      ArnoldPipeline::PostMergeHookRunner.stubs(:call).returns([
+      ArnoldPipeline::PostMergeHookRunner.expects(:call).once.returns([
         { name: "lint", triggered: true, success: true, stdout: "ok", stderr: "", exit_code: 0 }
       ])
 
@@ -1023,8 +1023,8 @@ module ArnoldPipeline
       @executor.stubs(:await_results).returns(nil)
       @executor.stubs(:merge_results).returns([])
 
-      ArnoldPipeline::VerificationRunner.stubs(:call).returns({
-        checks: [{ name: "boot", type: :boot, success: true }],
+      ArnoldPipeline::VerificationRunner.expects(:call).once.returns({
+        checks: [ { name: "boot", type: :boot, success: true } ],
         all_passed: true,
         summary: "1 passed, 0 failed: boot=OK"
       })
@@ -1086,7 +1086,7 @@ module ArnoldPipeline
       @executor.stubs(:merge_results).returns([])
 
       verification_results = {
-        checks: [{ name: "boot", type: :boot, success: true }],
+        checks: [ { name: "boot", type: :boot, success: true } ],
         all_passed: true,
         summary: "1 passed, 0 failed: boot=OK"
       }
@@ -1116,7 +1116,7 @@ module ArnoldPipeline
         c.github_repo = "owner/repo"
         c.claude_code_repo_path = "/tmp/test_repo"
         c.post_merge_hooks = [
-          { name: "lint", trigger_paths: ["*.rb"], command: "rubocop" }
+          { name: "lint", trigger_paths: [ "*.rb" ], command: "rubocop" }
         ]
       end
 
@@ -1182,7 +1182,7 @@ module ArnoldPipeline
       @executor.stubs(:merge_results).returns([])
 
       ArnoldPipeline::VerificationRunner.stubs(:call).returns({
-        checks: [{ name: "boot", type: :boot, success: true }],
+        checks: [ { name: "boot", type: :boot, success: true } ],
         all_passed: true,
         summary: "1 passed, 0 failed: boot=OK"
       })
@@ -1202,7 +1202,7 @@ module ArnoldPipeline
         c.github_repo = "owner/repo"
         c.claude_code_repo_path = "/tmp/test_repo"
         c.post_merge_hooks = [
-          { name: "lint", trigger_paths: ["*.rb"], command: "rubocop" }
+          { name: "lint", trigger_paths: [ "*.rb" ], command: "rubocop" }
         ]
       end
 
@@ -1254,7 +1254,7 @@ module ArnoldPipeline
         result_diff: '[{"filename":"Gemfile","patch":"+ gem rails","status":"modified"},{"filename":"app/models/user.rb","patch":"+ class User","status":"added"}]'
       )
 
-      files = @engine.send(:collect_changed_files, [task])
+      files = @engine.send(:collect_changed_files, [ task ])
       assert_includes files, "Gemfile"
       assert_includes files, "app/models/user.rb"
       assert_equal 2, files.size
@@ -1267,7 +1267,7 @@ module ArnoldPipeline
         result_diff: "[]"
       )
 
-      files = @engine.send(:collect_changed_files, [task])
+      files = @engine.send(:collect_changed_files, [ task ])
       assert_equal [], files
     end
 
@@ -1282,7 +1282,7 @@ module ArnoldPipeline
         result_diff: '[{"filename":"Gemfile","patch":"+","status":"modified"},{"filename":"config/routes.rb","patch":"+","status":"added"}]'
       )
 
-      files = @engine.send(:collect_changed_files, [task1, task2])
+      files = @engine.send(:collect_changed_files, [ task1, task2 ])
       assert_equal 2, files.size
       assert_includes files, "Gemfile"
       assert_includes files, "config/routes.rb"
@@ -1293,7 +1293,7 @@ module ArnoldPipeline
     test "build_corrective_description includes gate issues" do
       desc = @engine.send(:build_corrective_description,
         base_description: "Fix the routes",
-        gate_issues: ["Missing root route", "No health check endpoint"],
+        gate_issues: [ "Missing root route", "No health check endpoint" ],
         original_tier_tasks: [],
         acceptance_criteria_summary: nil
       )
@@ -1318,7 +1318,7 @@ module ArnoldPipeline
       desc = @engine.send(:build_corrective_description,
         base_description: "Fix routing",
         gate_issues: [],
-        original_tier_tasks: [task_with_diffs, task_without_diffs],
+        original_tier_tasks: [ task_with_diffs, task_without_diffs ],
         acceptance_criteria_summary: nil
       )
 
@@ -1370,7 +1370,7 @@ module ArnoldPipeline
 
       gate_fail = {
         "pass" => false,
-        "issues" => ["Missing root route redirect"],
+        "issues" => [ "Missing root route redirect" ],
         "corrective_tasks" => [
           { "title" => "Add root route", "description" => "Add root route redirect" }
         ],
@@ -1385,7 +1385,7 @@ module ArnoldPipeline
 
       criteria_summary = "**Failed:**\n- [FAIL] Root route (route_exists)"
 
-      @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [original_task], gate_fail, [],
+      @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [ original_task ], gate_fail, [],
                    acceptance_criteria_summary: criteria_summary)
 
       corrective = pipeline_run.tasks.where(title: "Add root route").first
@@ -1414,7 +1414,7 @@ module ArnoldPipeline
 
       gate_fail = {
         "pass" => false,
-        "issues" => ["missing files"],
+        "issues" => [ "missing files" ],
         "corrective_tasks" => [
           { "title" => "Fix files", "description" => "add missing files" }
         ],
@@ -1461,8 +1461,8 @@ module ArnoldPipeline
 
       gate_result = {
         "pass" => false,
-        "issues" => ["compile error"],
-        "corrective_tasks" => [{ "title" => "Fix compile", "description" => "fix" }],
+        "issues" => [ "compile error" ],
+        "corrective_tasks" => [ { "title" => "Fix compile", "description" => "fix" } ],
         "context_summary" => "context"
       }
       @tier_gate_check.stubs(:call).returns(gate_result)
@@ -1492,7 +1492,7 @@ module ArnoldPipeline
         summary: "1 passed"
       }
 
-      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [ task ],
                             verification_results: verification_results)
 
       assert result["pass"], "Gate should pass when test suite passes"
@@ -1518,7 +1518,7 @@ module ArnoldPipeline
 
       criteria_summary = "**Failed:**\n- [FAIL] Missing route (route_exists)"
 
-      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [ task ],
                             verification_results: verification_results,
                             acceptance_criteria_summary: criteria_summary)
 
@@ -1545,10 +1545,10 @@ module ArnoldPipeline
       }
 
       ArnoldPipeline::CorrectiveTaskGenerator.stubs(:call).returns([
-        { "title" => "Fix user validation", "description" => "Fix the user model", "labels" => ["unit-fix"] }
+        { "title" => "Fix user validation", "description" => "Fix the user model", "labels" => [ "unit-fix" ] }
       ])
 
-      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [ task ],
                             verification_results: verification_results)
 
       refute result["pass"], "Gate should fail when test suite fails"
@@ -1579,9 +1579,9 @@ module ArnoldPipeline
       ArnoldPipeline::CorrectiveTaskGenerator.stubs(:call).with { |test_result:, **|
         captured_test_result = test_result
         true
-      }.returns([{ "title" => "Fix test", "description" => "Fix it", "labels" => ["bugfix"] }])
+      }.returns([ { "title" => "Fix test", "description" => "Fix it", "labels" => [ "bugfix" ] } ])
 
-      @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+      @engine.send(:run_tier_gate!, pipeline_run, 0, [ task ],
                    verification_results: verification_results)
 
       assert_not_nil captured_test_result, "CorrectiveTaskGenerator should be called with a test_result"
@@ -1606,7 +1606,7 @@ module ArnoldPipeline
         summary: "0 passed, 2 failed"
       }
 
-      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [ task ],
                             verification_results: verification_results)
 
       refute result["pass"], "Gate should fail when required check fails"
@@ -1631,7 +1631,7 @@ module ArnoldPipeline
         summary: "0 passed, 2 failed"
       }
 
-      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [ task ],
                             verification_results: verification_results)
 
       boot_task = result["corrective_tasks"].first
@@ -1654,7 +1654,7 @@ module ArnoldPipeline
         "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => []
       })
 
-      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [ task ],
                             verification_results: nil)
 
       assert result["pass"]
@@ -1680,7 +1680,7 @@ module ArnoldPipeline
         "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => []
       })
 
-      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [ task ],
                             verification_results: verification_results)
 
       assert result["pass"]
@@ -1711,7 +1711,7 @@ module ArnoldPipeline
         summary: "1 passed"
       }
 
-      engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+      engine.send(:run_tier_gate!, pipeline_run, 0, [ task ],
                   verification_results: verification_results)
 
       gate_event = event_recorder.events.find { |e| e[:event_type] == :tier_gate_evaluated }
@@ -1744,7 +1744,7 @@ module ArnoldPipeline
 
       ArnoldPipeline::CorrectiveTaskGenerator.stubs(:call).returns([])
 
-      engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+      engine.send(:run_tier_gate!, pipeline_run, 0, [ task ],
                   verification_results: verification_results)
 
       gate_event = event_recorder.events.find { |e| e[:event_type] == :tier_gate_evaluated }
@@ -1775,7 +1775,7 @@ module ArnoldPipeline
         summary: "1 passed"
       }
 
-      result = engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+      result = engine.send(:run_tier_gate!, pipeline_run, 0, [ task ],
                   verification_results: verification_results)
 
       refute result["pass"], "Hollow test suite should fail the gate"
@@ -1812,7 +1812,7 @@ module ArnoldPipeline
         summary: "0 passed, 2 failed"
       }
 
-      engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+      engine.send(:run_tier_gate!, pipeline_run, 0, [ task ],
                   verification_results: verification_results)
 
       gate_event = event_recorder.events.find { |e| e[:event_type] == :tier_gate_evaluated }
@@ -1838,7 +1838,7 @@ module ArnoldPipeline
         "pass" => true, "issues" => [], "context_summary" => "Done.", "corrective_tasks" => []
       })
 
-      engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+      engine.send(:run_tier_gate!, pipeline_run, 0, [ task ],
                   verification_results: nil)
 
       gate_event = event_recorder.events.find { |e| e[:event_type] == :tier_gate_evaluated }
@@ -1867,7 +1867,7 @@ module ArnoldPipeline
 
       ArnoldPipeline::CriteriaChecker.expects(:call).never
 
-      result = @engine.send(:run_criteria_check!, pipeline_run, [task])
+      result = @engine.send(:run_criteria_check!, pipeline_run, [ task ])
       assert_nil result
     end
 
@@ -1890,10 +1890,10 @@ module ArnoldPipeline
 
       verified = ArnoldPipeline::AcceptanceCriterion.new(type: "file_exists", description: "Gemfile exists", params: {})
       ArnoldPipeline::CriteriaChecker.expects(:call).once.returns({
-        verified: [verified], failed: [], unverified: []
+        verified: [ verified ], failed: [], unverified: []
       })
 
-      result = @engine.send(:run_criteria_check!, pipeline_run, [task])
+      result = @engine.send(:run_criteria_check!, pipeline_run, [ task ])
       assert_not_nil result
     end
 
@@ -1912,14 +1912,14 @@ module ArnoldPipeline
 
       ArnoldPipeline.configure do |c|
         c.claude_code_repo_path = "/tmp/test-repo"
-        c.post_merge_hooks = [{ "name" => "test", "trigger_paths" => ["Gemfile"], "command" => "echo ok" }]
+        c.post_merge_hooks = [ { "name" => "test", "trigger_paths" => [ "Gemfile" ], "command" => "echo ok" } ]
       end
 
       ArnoldPipeline::PostMergeHookRunner.stubs(:call).returns([
         { name: "test", triggered: true, success: true, exit_code: 0 }
       ])
 
-      engine.send(:run_post_merge_hooks, [task], 2)
+      engine.send(:run_post_merge_hooks, [ task ], 2)
       event = event_recorder.events.find { |e| e[:event_type] == :post_merge_hooks }
       assert_not_nil event, "Expected a post_merge_hooks event"
       assert_equal 2, event[:tier_number]
@@ -1940,7 +1940,7 @@ module ArnoldPipeline
       )
 
       ArnoldPipeline::VerificationRunner.stubs(:call).returns({
-        checks: [{ name: "boot", type: :boot, success: true }],
+        checks: [ { name: "boot", type: :boot, success: true } ],
         all_passed: true,
         summary: "1 passed, 0 failed: boot=OK"
       })
@@ -1977,10 +1977,10 @@ module ArnoldPipeline
 
       verified = ArnoldPipeline::AcceptanceCriterion.new(type: "file_exists", description: "Gemfile exists", params: {})
       ArnoldPipeline::CriteriaChecker.stubs(:call).returns({
-        verified: [verified], failed: [], unverified: []
+        verified: [ verified ], failed: [], unverified: []
       })
 
-      engine.send(:run_criteria_check!, pipeline_run, [task], 5)
+      engine.send(:run_criteria_check!, pipeline_run, [ task ], 5)
       event = event_recorder.events.find { |e| e[:event_type] == :criteria_check }
       assert_not_nil event, "Expected a criteria_check event"
       assert_equal 5, event[:tier_number]
@@ -2023,11 +2023,11 @@ module ArnoldPipeline
 
       require "arnold_pipeline/agents/spec_test_generator"
       ArnoldPipeline::Agents::SpecTestGenerator.any_instance.stubs(:call).returns({
-        "test_files" => [{ "path" => "test/spec_scenarios/test_basic.rb", "content" => "# test" }]
+        "test_files" => [ { "path" => "test/spec_scenarios/test_basic.rb", "content" => "# test" } ]
       })
       progress_stub = Data.define(:total_tests, :total_passing, :pass_rate, :still_failing, :newly_passing, :regressions)
       ArnoldPipeline::SpecTestProgressTracker.stubs(:call).returns(
-        progress_stub.new(total_tests: 1, total_passing: 0, pass_rate: 0, still_failing: ["test_basic"], newly_passing: [], regressions: [])
+        progress_stub.new(total_tests: 1, total_passing: 0, pass_rate: 0, still_failing: [ "test_basic" ], newly_passing: [], regressions: [])
       )
 
       engine.send(:run_spec_test_generation!, pipeline_run, 0)
@@ -2062,7 +2062,7 @@ module ArnoldPipeline
       ArnoldPipeline::SpecTestProgressTracker.stubs(:call).returns(
         progress_stub.new(
           total_tests: 2, total_passing: 1, pass_rate: 50,
-          still_failing: ["test_a"], newly_passing: ["test_b"], regressions: [],
+          still_failing: [ "test_a" ], newly_passing: [ "test_b" ], regressions: [],
           to_gate_summary: "1/2 passing (50%)"
         )
       )
@@ -2092,7 +2092,7 @@ module ArnoldPipeline
         logger: Logger.new(File::NULL), event_recorder: event_recorder
       )
 
-      tier_tasks = [task1, task2, task3]
+      tier_tasks = [ task1, task2, task3 ]
       resolved = tier_tasks.count { |t| engine.tier_task_resolved?(t) }
       failed = tier_tasks.count(&:failed?)
 
@@ -2161,7 +2161,7 @@ module ArnoldPipeline
       pipeline_run = PipelineRun.create!(nl_input: "Build an app")
       task = pipeline_run.tasks.create!(
         title: "Merge Fail", position: 0, status: :failed, result_diff: "[]",
-        result_comments: [{ "source" => "arnold", "author" => "system", "body" => "Merge failed: Your local changes would be overwritten" }]
+        result_comments: [ { "source" => "arnold", "author" => "system", "body" => "Merge failed: Your local changes would be overwritten" } ]
       )
 
       assert_equal "merge_failed", @engine.send(:task_failure_reason, task)
@@ -2171,7 +2171,7 @@ module ArnoldPipeline
       pipeline_run = PipelineRun.create!(nl_input: "Build an app")
       task = pipeline_run.tasks.create!(
         title: "Empty", position: 0, status: :failed, result_diff: "[]",
-        result_comments: [{ "source" => "arnold", "author" => "system", "body" => "Some other error" }]
+        result_comments: [ { "source" => "arnold", "author" => "system", "body" => "Some other error" } ]
       )
 
       assert_equal "empty_diff", @engine.send(:task_failure_reason, task)
@@ -2181,7 +2181,7 @@ module ArnoldPipeline
       pipeline_run = PipelineRun.create!(nl_input: "Build an app")
       task = pipeline_run.tasks.create!(
         title: "Merge Nil", position: 0, status: :failed, result_diff: nil,
-        result_comments: [{ "source" => "arnold", "author" => "system", "body" => "Merge failed: conflict" }]
+        result_comments: [ { "source" => "arnold", "author" => "system", "body" => "Merge failed: conflict" } ]
       )
 
       assert_equal "merge_failed", @engine.send(:task_failure_reason, task)
@@ -2256,12 +2256,12 @@ module ArnoldPipeline
 
       ArnoldPipeline.configure do |c|
         c.claude_code_repo_path = "/tmp/test-repo"
-        c.verification_checks = [{ "name" => "boot", "command" => "echo ok", "type" => "boot_check" }]
+        c.verification_checks = [ { "name" => "boot", "command" => "echo ok", "type" => "boot_check" } ]
       end
 
       ArnoldPipeline::VerificationRunner.stubs(:call).returns({
         all_passed: true, summary: "All passed",
-        checks: [{ name: "boot", success: true, type: :boot_check }]
+        checks: [ { name: "boot", success: true, type: :boot_check } ]
       })
 
       engine.send(:run_verification_checks)
@@ -2285,14 +2285,14 @@ module ArnoldPipeline
 
       ArnoldPipeline.configure do |c|
         c.claude_code_repo_path = "/tmp/test-repo"
-        c.post_merge_hooks = [{ "name" => "test", "trigger_paths" => ["Gemfile"], "command" => "echo ok" }]
+        c.post_merge_hooks = [ { "name" => "test", "trigger_paths" => [ "Gemfile" ], "command" => "echo ok" } ]
       end
 
       ArnoldPipeline::PostMergeHookRunner.stubs(:call).returns([
         { name: "test", triggered: true, success: true, exit_code: 0 }
       ])
 
-      engine.send(:run_post_merge_hooks, [task])
+      engine.send(:run_post_merge_hooks, [ task ])
 
       event = pipeline_run.pipeline_events.find_by(event_type: :post_merge_hooks)
       assert_not_nil event, "Expected a post_merge_hooks event"
@@ -2306,7 +2306,7 @@ module ArnoldPipeline
       pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :pending)
       task = pipeline_run.tasks.create!(
         title: "Setup", position: 0, tier: 1,
-        acceptance_criteria: [{ "type" => "file_exists", "description" => "Gemfile exists", "params" => { "pattern" => "Gemfile" } }]
+        acceptance_criteria: [ { "type" => "file_exists", "description" => "Gemfile exists", "params" => { "pattern" => "Gemfile" } } ]
       )
 
       event_recorder = PipelineEventRecorder.new(pipeline_run:)
@@ -2323,7 +2323,7 @@ module ArnoldPipeline
 
       ArnoldPipeline::CriteriaChecker.stubs(:call).returns({ verified: [], failed: [], unverified: [] })
 
-      engine.send(:run_criteria_check!, pipeline_run, [task])
+      engine.send(:run_criteria_check!, pipeline_run, [ task ])
 
       event = pipeline_run.pipeline_events.find_by(event_type: :criteria_check)
       assert_not_nil event, "Expected a criteria_check event"
@@ -2339,7 +2339,7 @@ module ArnoldPipeline
       pipeline_run = PipelineRun.create!(nl_input: "Build an app", status: :pending)
       task = pipeline_run.tasks.create!(
         title: "Setup", position: 0, tier: 1,
-        acceptance_criteria: [{ "type" => "file_exists", "description" => "Gemfile exists", "params" => { "pattern" => "Gemfile" } }]
+        acceptance_criteria: [ { "type" => "file_exists", "description" => "Gemfile exists", "params" => { "pattern" => "Gemfile" } } ]
       )
 
       event_recorder = PipelineEventRecorder.new(pipeline_run:)
@@ -2356,7 +2356,7 @@ module ArnoldPipeline
 
       ArnoldPipeline::CriteriaChecker.stubs(:call).returns({ verified: [], failed: [], unverified: [] })
 
-      engine.send(:run_criteria_check!, pipeline_run, [task])
+      engine.send(:run_criteria_check!, pipeline_run, [ task ])
 
       event = pipeline_run.pipeline_events.find_by(event_type: :criteria_check)
       assert_equal "advisory", event.summary["mode"]
@@ -2416,7 +2416,7 @@ module ArnoldPipeline
 
       ArnoldPipeline::CorrectiveTaskGenerator.stubs(:call).raises(RuntimeError, "LLM exploded")
 
-      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+      result = @engine.send(:run_tier_gate!, pipeline_run, 0, [ task ],
                             verification_results: verification_results)
 
       refute result["pass"]
@@ -2542,7 +2542,7 @@ module ArnoldPipeline
 
       result = @engine.send(:build_corrective_description,
         base_description: "Fix the failing tests",
-        gate_issues: ["test failures"],
+        gate_issues: [ "test failures" ],
         original_tier_tasks: [],
         acceptance_criteria_summary: nil,
         verification_output: verification_output
@@ -2556,7 +2556,7 @@ module ArnoldPipeline
     test "build_corrective_description omits verification output when nil" do
       result = @engine.send(:build_corrective_description,
         base_description: "Fix the failing tests",
-        gate_issues: ["test failures"],
+        gate_issues: [ "test failures" ],
         original_tier_tasks: [],
         acceptance_criteria_summary: nil,
         verification_output: nil
@@ -2582,7 +2582,7 @@ module ArnoldPipeline
 
       gate_fail = {
         "pass" => false,
-        "issues" => ["test failures"],
+        "issues" => [ "test failures" ],
         "corrective_tasks" => [
           { "title" => "Fix tests", "description" => "fix the test failures" }
         ],

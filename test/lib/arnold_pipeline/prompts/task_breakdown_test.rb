@@ -59,7 +59,7 @@ module ArnoldPipeline
       end
 
       test "system_prompt includes supporting recipes" do
-        supporting = [@manager.find_recipe("Create a REST API with JSON endpoints")]
+        supporting = [ @manager.find_recipe("Create a REST API with JSON endpoints") ]
         prompt = TaskBreakdown.system_prompt(recipe: @recipe, supporting_recipes: supporting)
         assert_includes prompt, "Supporting recipes"
         assert_includes prompt, "API Service"
@@ -209,7 +209,7 @@ module ArnoldPipeline
       end
 
       test "system_prompt includes delta rationale" do
-        deltas = [{ "operation" => "added", "rationale" => "User requested this" }]
+        deltas = [ { "operation" => "added", "rationale" => "User requested this" } ]
         prompt = TaskBreakdown.system_prompt(deltas: deltas)
         assert_includes prompt, "Rationale: User requested this"
       end

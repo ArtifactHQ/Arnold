@@ -15,7 +15,7 @@ module ArnoldPipeline
               "library_selections" => {
                 "persona" => "Software Architect",
                 "recipe" => "Web App",
-                "supporting_recipes" => ["API Service"],
+                "supporting_recipes" => [ "API Service" ],
                 "domain_type" => "PRODUCTIVITY"
               }
             }
@@ -35,7 +35,7 @@ module ArnoldPipeline
                 { "name" => "Messaging", "description" => "Real-time chat and notifications" },
                 { "name" => "Documents", "description" => "Collaborative document editing" }
               ],
-              "recipes" => [{ "name" => "Web App" }]
+              "recipes" => [ { "name" => "Web App" } ]
             }
           )
 
@@ -43,20 +43,20 @@ module ArnoldPipeline
           @task_setup = @run.tasks.create!(
             title: "Setup project foundation",
             tier: 0, position: 0, status: :completed,
-            labels: ["backend", "setup"],
+            labels: [ "backend", "setup" ],
             depends_on: []
           )
           @task_messaging = @run.tasks.create!(
             title: "Build messaging system",
             tier: 1, position: 1, status: :pending,
-            labels: ["backend", "messaging"],
-            depends_on: [@task_setup.id]
+            labels: [ "backend", "messaging" ],
+            depends_on: [ @task_setup.id ]
           )
           @task_documents = @run.tasks.create!(
             title: "Build document collaboration",
             tier: 1, position: 2, status: :pending,
-            labels: ["backend", "documents"],
-            depends_on: [@task_setup.id]
+            labels: [ "backend", "documents" ],
+            depends_on: [ @task_setup.id ]
           )
 
           # Stub LLM for ask_engineer and explore_architecture
@@ -86,14 +86,14 @@ module ArnoldPipeline
                 {
                   "name" => "Messaging",
                   "components" => "MessagesController, Message model, ChatChannel",
-                  "recipes_used" => ["Web App"],
+                  "recipes_used" => [ "Web App" ],
                   "data_summary" => "Message belongs_to User, belongs_to Conversation",
                   "integrations" => "Uses Action Cable for real-time, shares auth with Documents"
                 },
                 {
                   "name" => "Documents",
                   "components" => "DocumentsController, Document model, CollaborationChannel",
-                  "recipes_used" => ["Web App"],
+                  "recipes_used" => [ "Web App" ],
                   "data_summary" => "Document has_many Versions, belongs_to User",
                   "integrations" => "Uses Turbo Streams for live editing, shares auth with Messaging"
                 }
@@ -218,7 +218,7 @@ module ArnoldPipeline
                 {
                   "name" => "Messaging",
                   "components" => "MessagesController, ChatChannel, Message model",
-                  "recipes_used" => ["Web App"],
+                  "recipes_used" => [ "Web App" ],
                   "data_summary" => "Message belongs_to Conversation belongs_to User",
                   "integrations" => "Action Cable for real-time delivery"
                 }

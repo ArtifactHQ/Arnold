@@ -30,11 +30,11 @@ module ArnoldPipeline
     option :claude_code_max_turns, type: :numeric, desc: "Max turns for Claude Code execution"
     option :claude_code_permission_mode, type: :string, desc: "Claude Code permission mode (default: bypassPermissions)"
     option :stop_after, type: :string, desc: "Stop after stage: spec, tasks, executed"
-    option :preview, type: :boolean, default: false, aliases: ["--dry-run"], desc: "Generate spec and tasks without publishing to execution provider. Note: makes LLM API calls and creates local database records."
+    option :preview, type: :boolean, default: false, aliases: [ "--dry-run" ], desc: "Generate spec and tasks without publishing to execution provider. Note: makes LLM API calls and creates local database records."
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
     def run_pipeline(description)
       if description == "--help" || description == "-h"
-        invoke :help, ["run"]
+        invoke :help, [ "run" ]
         return
       end
       if description.strip.empty?
@@ -130,7 +130,7 @@ module ArnoldPipeline
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
     def resume(id)
       if id == "--help" || id == "-h"
-        invoke :help, ["resume"]
+        invoke :help, [ "resume" ]
         return
       end
       with_error_handling do
@@ -170,10 +170,10 @@ module ArnoldPipeline
     option :dry_run, type: :boolean, default: false, desc: "Show proposed deltas without applying"
     option :json, type: :boolean, default: false, desc: "Output delta details as JSON"
     option :verbose, type: :boolean, default: false, desc: "Show full before/after for modified requirements"
-    option :yes, type: :boolean, default: false, aliases: ["-y"], desc: "Skip confirmation prompt"
+    option :yes, type: :boolean, default: false, aliases: [ "-y" ], desc: "Skip confirmation prompt"
     def iterate(id, change_request)
       if id == "--help" || id == "-h"
-        invoke :help, ["iterate"]
+        invoke :help, [ "iterate" ]
         return
       end
       with_error_handling do

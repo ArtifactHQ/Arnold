@@ -6,7 +6,7 @@ module ArnoldPipeline
     test "enqueues job" do
       run_record = PipelineRun.create!(nl_input: "Build a todo app")
 
-      assert_enqueued_with(job: PipelineJob, args: [run_record.id]) do
+      assert_enqueued_with(job: PipelineJob, args: [ run_record.id ]) do
         PipelineJob.perform_later(run_record.id)
       end
     end

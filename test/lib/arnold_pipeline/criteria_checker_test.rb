@@ -21,7 +21,7 @@ module ArnoldPipeline
     test "file_exists verifies when file matches pattern" do
       FileUtils.touch(File.join(@repo_path, "Gemfile"))
 
-      criteria = [criterion("file_exists", pattern: "Gemfile")]
+      criteria = [ criterion("file_exists", pattern: "Gemfile") ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:verified].size
@@ -29,7 +29,7 @@ module ArnoldPipeline
     end
 
     test "file_exists fails when no file matches pattern" do
-      criteria = [criterion("file_exists", pattern: "Gemfile")]
+      criteria = [ criterion("file_exists", pattern: "Gemfile") ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_empty result[:verified]
@@ -40,14 +40,14 @@ module ArnoldPipeline
       FileUtils.mkdir_p(File.join(@repo_path, "app/models"))
       FileUtils.touch(File.join(@repo_path, "app/models/user.rb"))
 
-      criteria = [criterion("file_exists", pattern: "app/models/*.rb")]
+      criteria = [ criterion("file_exists", pattern: "app/models/*.rb") ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:verified].size
     end
 
     test "file_exists fails without pattern param" do
-      criteria = [AcceptanceCriterion.new(type: "file_exists", description: "missing pattern", params: {})]
+      criteria = [ AcceptanceCriterion.new(type: "file_exists", description: "missing pattern", params: {}) ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:failed].size
@@ -65,14 +65,14 @@ module ArnoldPipeline
         end
       RUBY
 
-      criteria = [criterion("test_exists", pattern: "test/**/*user*")]
+      criteria = [ criterion("test_exists", pattern: "test/**/*user*") ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:verified].size
     end
 
     test "test_exists fails when no test files match" do
-      criteria = [criterion("test_exists", pattern: "test/**/*user*")]
+      criteria = [ criterion("test_exists", pattern: "test/**/*user*") ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:failed].size
@@ -89,7 +89,7 @@ module ArnoldPipeline
       RUBY
 
       # 1 assertion matches the file; min_assertions = 5 should fail
-      criteria = [criterion("test_exists", pattern: "test/*user*", min_assertions: 5)]
+      criteria = [ criterion("test_exists", pattern: "test/*user*", min_assertions: 5) ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:failed].size
@@ -112,7 +112,7 @@ module ArnoldPipeline
         end
       RUBY
 
-      criteria = [criterion("test_exists", pattern: "test/*user*", min_assertions: 3)]
+      criteria = [ criterion("test_exists", pattern: "test/*user*", min_assertions: 3) ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:verified].size
@@ -132,7 +132,7 @@ module ArnoldPipeline
         end
       RUBY
 
-      criteria = [criterion("model_has", model: "User", columns: %w[email name])]
+      criteria = [ criterion("model_has", model: "User", columns: %w[email name]) ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:verified].size
@@ -149,7 +149,7 @@ module ArnoldPipeline
         end
       RUBY
 
-      criteria = [criterion("model_has", model: "User", columns: %w[email phone])]
+      criteria = [ criterion("model_has", model: "User", columns: %w[email phone]) ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:failed].size
@@ -173,7 +173,7 @@ module ArnoldPipeline
         end
       RUBY
 
-      criteria = [criterion("model_has", model: "User", columns: [], associations: %w[has_many belongs_to])]
+      criteria = [ criterion("model_has", model: "User", columns: [], associations: %w[has_many belongs_to]) ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:verified].size
@@ -196,14 +196,14 @@ module ArnoldPipeline
         end
       RUBY
 
-      criteria = [criterion("model_has", model: "User", columns: [], associations: %w[has_one])]
+      criteria = [ criterion("model_has", model: "User", columns: [], associations: %w[has_one]) ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:failed].size
     end
 
     test "model_has fails without model param" do
-      criteria = [AcceptanceCriterion.new(type: "model_has", description: "test", params: {})]
+      criteria = [ AcceptanceCriterion.new(type: "model_has", description: "test", params: {}) ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:failed].size
@@ -213,7 +213,7 @@ module ArnoldPipeline
       FileUtils.mkdir_p(File.join(@repo_path, "db"))
       File.write(File.join(@repo_path, "db/schema.rb"), "")
 
-      criteria = [criterion("model_has", model: "User")]
+      criteria = [ criterion("model_has", model: "User") ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:verified].size
@@ -230,7 +230,7 @@ module ArnoldPipeline
         end
       RUBY
 
-      criteria = [criterion("route_exists", method: "POST", path: "/api/sessions")]
+      criteria = [ criterion("route_exists", method: "POST", path: "/api/sessions") ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:verified].size
@@ -244,14 +244,14 @@ module ArnoldPipeline
         end
       RUBY
 
-      criteria = [criterion("route_exists", method: "GET", path: "/users")]
+      criteria = [ criterion("route_exists", method: "GET", path: "/users") ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:verified].size
     end
 
     test "route_exists fails when routes file missing" do
-      criteria = [criterion("route_exists", method: "GET", path: "/users")]
+      criteria = [ criterion("route_exists", method: "GET", path: "/users") ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:failed].size
@@ -261,7 +261,7 @@ module ArnoldPipeline
       FileUtils.mkdir_p(File.join(@repo_path, "config"))
       File.write(File.join(@repo_path, "config/routes.rb"), "Rails.application.routes.draw do; end")
 
-      criteria = [AcceptanceCriterion.new(type: "route_exists", description: "test", params: { "method" => "GET" })]
+      criteria = [ AcceptanceCriterion.new(type: "route_exists", description: "test", params: { "method" => "GET" }) ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:failed].size
@@ -270,7 +270,7 @@ module ArnoldPipeline
     # --- runtime types go to unverified ---
 
     test "http criteria go to unverified" do
-      criteria = [criterion("http", method: "GET", path: "/", expected_status: 200)]
+      criteria = [ criterion("http", method: "GET", path: "/", expected_status: 200) ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:unverified].size
@@ -279,7 +279,7 @@ module ArnoldPipeline
     end
 
     test "command_exits criteria go to unverified" do
-      criteria = [criterion("command_exits", command: "bin/setup", expected_exit_code: 0)]
+      criteria = [ criterion("command_exits", command: "bin/setup", expected_exit_code: 0) ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:unverified].size
@@ -311,7 +311,7 @@ module ArnoldPipeline
     end
 
     test "unknown type goes to unverified" do
-      criteria = [AcceptanceCriterion.new(type: "custom_check", description: "test", params: {})]
+      criteria = [ AcceptanceCriterion.new(type: "custom_check", description: "test", params: {}) ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:unverified].size
@@ -322,11 +322,11 @@ module ArnoldPipeline
     test "file_exists works with DB-format criteria (nested params hash)" do
       FileUtils.touch(File.join(@repo_path, "Gemfile"))
 
-      criteria = [AcceptanceCriterion.from_hash(
+      criteria = [ AcceptanceCriterion.from_hash(
         "type" => "file_exists",
         "description" => "Gemfile exists",
         "params" => { "pattern" => "Gemfile" }
-      )]
+      ) ]
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)
 
       assert_equal 1, result[:verified].size
@@ -388,7 +388,7 @@ module ArnoldPipeline
 
       db_format = [
         { "type" => "model_has", "description" => "User has email",
-          "params" => { "model" => "User", "columns" => ["email"] } }
+          "params" => { "model" => "User", "columns" => [ "email" ] } }
       ]
       criteria = AcceptanceCriterion.from_array(db_format)
       result = CriteriaChecker.call(criteria: criteria, repo_path: @repo_path)

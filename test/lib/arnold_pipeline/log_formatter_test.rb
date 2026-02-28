@@ -91,7 +91,7 @@ module ArnoldPipeline
     test "tier_execution_started creates a tier header block" do
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 0,
-        summary: { "tier_number" => 0, "task_count" => 2, "task_titles" => ["Setup DB", "Add routes"] }
+        summary: { "tier_number" => 0, "task_count" => 2, "task_titles" => [ "Setup DB", "Add routes" ] }
       )
       @run.pipeline_events.create!(
         event_type: :tier_execution_completed, stage: "execution", tier_number: 0,
@@ -110,7 +110,7 @@ module ArnoldPipeline
     test "tier_execution_completed with failures shows red failure count" do
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 1,
-        summary: { "tier_number" => 1, "task_count" => 3, "task_titles" => ["A", "B", "C"] }
+        summary: { "tier_number" => 1, "task_count" => 3, "task_titles" => [ "A", "B", "C" ] }
       )
       @run.pipeline_events.create!(
         event_type: :tier_execution_completed, stage: "execution", tier_number: 1,
@@ -126,7 +126,7 @@ module ArnoldPipeline
     test "post_merge_hooks shows triggered count" do
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 0,
-        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => ["X"] }
+        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => [ "X" ] }
       )
       @run.pipeline_events.create!(
         event_type: :post_merge_hooks, stage: "execution", tier_number: 0,
@@ -140,7 +140,7 @@ module ArnoldPipeline
     test "post_merge_hooks shows dim when none triggered" do
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 0,
-        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => ["X"] }
+        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => [ "X" ] }
       )
       @run.pipeline_events.create!(
         event_type: :post_merge_hooks, stage: "execution", tier_number: 0,
@@ -154,7 +154,7 @@ module ArnoldPipeline
     test "verification_checks PASS renders pass badge" do
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 0,
-        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => ["X"] }
+        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => [ "X" ] }
       )
       @run.pipeline_events.create!(
         event_type: :verification_checks, stage: "execution", tier_number: 0,
@@ -169,7 +169,7 @@ module ArnoldPipeline
     test "verification_checks FAIL renders fail badge" do
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 0,
-        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => ["X"] }
+        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => [ "X" ] }
       )
       @run.pipeline_events.create!(
         event_type: :verification_checks, stage: "execution", tier_number: 0,
@@ -183,7 +183,7 @@ module ArnoldPipeline
     test "tier_gate_evaluated PASS shows pass badge with decision source" do
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 0,
-        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => ["X"] }
+        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => [ "X" ] }
       )
       @run.pipeline_events.create!(
         event_type: :tier_gate_evaluated, stage: "tier_gate", tier_number: 0,
@@ -198,14 +198,14 @@ module ArnoldPipeline
     test "tier_gate_evaluated FAIL shows fail badge with issues" do
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 0,
-        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => ["X"] }
+        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => [ "X" ] }
       )
       @run.pipeline_events.create!(
         event_type: :tier_gate_evaluated, stage: "tier_gate", tier_number: 0,
         summary: {
           "pass" => false,
           "decision_source" => "verification_tests_failed",
-          "issues" => ["Test suite failed: 67 runs, 1 failure"]
+          "issues" => [ "Test suite failed: 67 runs, 1 failure" ]
         }
       )
       formatter = LogFormatter.new(@run.pipeline_events.chronological, pipeline_run: @run, color: false)
@@ -217,7 +217,7 @@ module ArnoldPipeline
     test "criteria_check advisory shows unmet count" do
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 0,
-        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => ["X"] }
+        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => [ "X" ] }
       )
       @run.pipeline_events.create!(
         event_type: :criteria_check, stage: "tier_gate", tier_number: 0,
@@ -232,11 +232,11 @@ module ArnoldPipeline
     test "repo_context_scanned shows file count" do
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 0,
-        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => ["X"] }
+        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => [ "X" ] }
       )
       @run.pipeline_events.create!(
         event_type: :repo_context_scanned, stage: "tier_gate", tier_number: 0,
-        summary: { "file_count" => 42, "directories" => ["/app"] }
+        summary: { "file_count" => 42, "directories" => [ "/app" ] }
       )
       formatter = LogFormatter.new(@run.pipeline_events.chronological, pipeline_run: @run, color: false)
       output = formatter.render
@@ -246,7 +246,7 @@ module ArnoldPipeline
     test "horizontal rule separates tier blocks" do
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 0,
-        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => ["A"] }
+        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => [ "A" ] }
       )
       @run.pipeline_events.create!(
         event_type: :tier_execution_completed, stage: "execution", tier_number: 0,
@@ -254,7 +254,7 @@ module ArnoldPipeline
       )
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 1,
-        summary: { "tier_number" => 1, "task_count" => 1, "task_titles" => ["B"] }
+        summary: { "tier_number" => 1, "task_count" => 1, "task_titles" => [ "B" ] }
       )
       @run.pipeline_events.create!(
         event_type: :tier_execution_completed, stage: "execution", tier_number: 1,
@@ -383,7 +383,7 @@ module ArnoldPipeline
     test "verbose mode shows per-task outcomes for tier_execution_completed" do
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 0,
-        summary: { "tier_number" => 0, "task_count" => 2, "task_titles" => ["Setup DB", "Add API"] }
+        summary: { "tier_number" => 0, "task_count" => 2, "task_titles" => [ "Setup DB", "Add API" ] }
       )
       @run.pipeline_events.create!(
         event_type: :tier_execution_completed, stage: "execution", tier_number: 0,
@@ -404,7 +404,7 @@ module ArnoldPipeline
     test "verbose mode shows per-criterion results" do
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 0,
-        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => ["X"] }
+        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => [ "X" ] }
       )
       @run.pipeline_events.create!(
         event_type: :criteria_check, stage: "tier_gate", tier_number: 0,
@@ -425,12 +425,12 @@ module ArnoldPipeline
     test "verbose mode shows corrective tasks for failed gate" do
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 0,
-        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => ["X"] }
+        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => [ "X" ] }
       )
       @run.pipeline_events.create!(
         event_type: :tier_gate_evaluated, stage: "tier_gate", tier_number: 0,
         summary: {
-          "pass" => false, "issues" => ["Missing route"],
+          "pass" => false, "issues" => [ "Missing route" ],
           "corrective_tasks" => [
             { "title" => "Add route", "description" => "Add GET /up" }
           ]
@@ -445,7 +445,7 @@ module ArnoldPipeline
     test "non-verbose mode hides per-task outcomes" do
       @run.pipeline_events.create!(
         event_type: :tier_execution_started, stage: "execution", tier_number: 0,
-        summary: { "tier_number" => 0, "task_count" => 2, "task_titles" => ["Setup DB", "Add API"] }
+        summary: { "tier_number" => 0, "task_count" => 2, "task_titles" => [ "Setup DB", "Add API" ] }
       )
       @run.pipeline_events.create!(
         event_type: :tier_execution_completed, stage: "execution", tier_number: 0,
@@ -478,7 +478,7 @@ module ArnoldPipeline
 
       # Tier 0
       @run.pipeline_events.create!(event_type: :tier_execution_started, stage: "execution", tier_number: 0,
-        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => ["Project bootstrap"] })
+        summary: { "tier_number" => 0, "task_count" => 1, "task_titles" => [ "Project bootstrap" ] })
       @run.pipeline_events.create!(event_type: :tier_execution_completed, stage: "execution", tier_number: 0,
         summary: { "tier_number" => 0, "resolved_count" => 1, "failed_count" => 0 })
       @run.pipeline_events.create!(event_type: :post_merge_hooks, stage: "execution", tier_number: 0,

@@ -35,7 +35,7 @@ module ArnoldPipeline
               body: { number: 42, html_url: "https://github.com/owner/repo/issues/42" }.to_json
             )
 
-          tasks = [{ "title" => "Setup DB", "description" => "Create schema", "labels" => ["backend"] }]
+          tasks = [ { "title" => "Setup DB", "description" => "Create schema", "labels" => [ "backend" ] } ]
           results = @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
 
           assert_equal 1, results.size
@@ -56,9 +56,9 @@ module ArnoldPipeline
             end
 
           tasks = [
-            { "title" => "Setup DB", "description" => "Create schema", "labels" => ["backend"], "position" => 0, "depends_on" => [] },
-            { "title" => "Build API", "description" => "Create endpoints", "labels" => ["backend"], "position" => 1, "depends_on" => [0] },
-            { "title" => "Add auth", "description" => "Secure endpoints", "labels" => ["backend"], "position" => 2, "depends_on" => [0, 1] }
+            { "title" => "Setup DB", "description" => "Create schema", "labels" => [ "backend" ], "position" => 0, "depends_on" => [] },
+            { "title" => "Build API", "description" => "Create endpoints", "labels" => [ "backend" ], "position" => 1, "depends_on" => [ 0 ] },
+            { "title" => "Add auth", "description" => "Secure endpoints", "labels" => [ "backend" ], "position" => 2, "depends_on" => [ 0, 1 ] }
           ]
 
           results = @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
@@ -97,7 +97,7 @@ module ArnoldPipeline
               body: { number: 1, html_url: "https://github.com/owner/repo/issues/1" }.to_json
             )
 
-          tasks = [{ "title" => "Setup DB", "description" => "Create schema", "labels" => ["backend"], "position" => 0, "depends_on" => [] }]
+          tasks = [ { "title" => "Setup DB", "description" => "Create schema", "labels" => [ "backend" ], "position" => 0, "depends_on" => [] } ]
           provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
 
           assert_requested(:post, "https://api.github.com/repos/owner/repo/issues") { |req|
@@ -114,7 +114,7 @@ module ArnoldPipeline
               body: { number: 1, html_url: "https://github.com/owner/repo/issues/1" }.to_json
             )
 
-          tasks = [{ "title" => "Setup DB", "description" => "Create schema", "labels" => ["backend"], "position" => 0, "depends_on" => [] }]
+          tasks = [ { "title" => "Setup DB", "description" => "Create schema", "labels" => [ "backend" ], "position" => 0, "depends_on" => [] } ]
           @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
 
           assert_requested(:post, "https://api.github.com/repos/owner/repo/issues") { |req|
@@ -131,7 +131,7 @@ module ArnoldPipeline
               body: { number: 1, html_url: "https://github.com/owner/repo/issues/1" }.to_json
             )
 
-          tasks = [{ "title" => "Build API", "description" => "Create endpoints", "labels" => ["backend"], "position" => 0, "depends_on" => [] }]
+          tasks = [ { "title" => "Build API", "description" => "Create endpoints", "labels" => [ "backend" ], "position" => 0, "depends_on" => [] } ]
           prior_context = "## Prior Implementation Context\n\n**Tier 0 completed:** Set up Rails project."
 
           @provider.create_tasks(tasks:, pipeline_run: @pipeline_run, prior_context:)
@@ -151,7 +151,7 @@ module ArnoldPipeline
               body: { number: 1, html_url: "https://github.com/owner/repo/issues/1" }.to_json
             )
 
-          tasks = [{ "title" => "Setup DB", "description" => "Create schema", "labels" => ["backend"], "position" => 0, "depends_on" => [] }]
+          tasks = [ { "title" => "Setup DB", "description" => "Create schema", "labels" => [ "backend" ], "position" => 0, "depends_on" => [] } ]
 
           @provider.create_tasks(tasks:, pipeline_run: @pipeline_run)
 
@@ -175,7 +175,7 @@ module ArnoldPipeline
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
-              body: [{ user: { login: "copilot" }, body: "I can't do this without a Gemfile", created_at: "2025-02-06T00:00:00Z" }].to_json
+              body: [ { user: { login: "copilot" }, body: "I can't do this without a Gemfile", created_at: "2025-02-06T00:00:00Z" } ].to_json
             )
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls")
@@ -279,21 +279,21 @@ module ArnoldPipeline
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
-              body: [{ number: 10, title: "Fix #42", body: "Closes #42", state: "open", merged_at: nil }].to_json
+              body: [ { number: 10, title: "Fix #42", body: "Closes #42", state: "open", merged_at: nil } ].to_json
             )
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/files").with(query: { per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
-              body: [{ filename: "app.rb", patch: "+code", status: "added" }].to_json
+              body: [ { filename: "app.rb", patch: "+code", status: "added" } ].to_json
             )
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/comments").with(query: { per_page: "100" })
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
-              body: [{ user: { login: "reviewer" }, body: "Looks good", created_at: "2025-02-06T01:00:00Z" }].to_json
+              body: [ { user: { login: "reviewer" }, body: "Looks good", created_at: "2025-02-06T01:00:00Z" } ].to_json
             )
 
           results = @provider.fetch_results(pipeline_run: @pipeline_run)
@@ -331,7 +331,7 @@ module ArnoldPipeline
             )
 
           # Only fetch results for task1
-          results = @provider.fetch_results(pipeline_run: @pipeline_run, tasks: [task1])
+          results = @provider.fetch_results(pipeline_run: @pipeline_run, tasks: [ task1 ])
 
           assert_equal 1, results.size
           assert_equal task1.id, results.first[:task_id]
@@ -346,7 +346,7 @@ module ArnoldPipeline
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
-              body: [{ number: 10, title: "Fix #42", body: "Closes #42", state: "open", merged_at: nil }].to_json
+              body: [ { number: 10, title: "Fix #42", body: "Closes #42", state: "open", merged_at: nil } ].to_json
             )
 
           stub_request(:put, "https://api.github.com/repos/owner/repo/pulls/10/merge")
@@ -357,7 +357,7 @@ module ArnoldPipeline
             )
 
           # Only merge for task1
-          results = @provider.merge_results(pipeline_run: @pipeline_run, tasks: [task1])
+          results = @provider.merge_results(pipeline_run: @pipeline_run, tasks: [ task1 ])
 
           assert_equal 1, results.size
           assert_equal task1.id, results.first[:task_id]
@@ -389,10 +389,10 @@ module ArnoldPipeline
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
-              body: [{
+              body: [ {
                 number: 10, title: "Fix #42", body: "Closes #42", state: "open", merged_at: nil,
                 head: { sha: "abc123" }
-              }].to_json
+              } ].to_json
             )
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/files").with(query: { per_page: "100" })
@@ -405,7 +405,7 @@ module ArnoldPipeline
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
-              body: { check_runs: [{ name: "CI", status: "in_progress", conclusion: nil }] }.to_json
+              body: { check_runs: [ { name: "CI", status: "in_progress", conclusion: nil } ] }.to_json
             )
 
           results = @provider.fetch_results(pipeline_run: @pipeline_run)
@@ -440,10 +440,10 @@ module ArnoldPipeline
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
-              body: [{
+              body: [ {
                 number: 10, title: "Fix #42", body: "Closes #42", state: "open", merged_at: nil,
                 head: { sha: "abc123" }
-              }].to_json
+              } ].to_json
             )
 
           stub_request(:get, "https://api.github.com/repos/owner/repo/pulls/10/files").with(query: { per_page: "100" })
@@ -456,7 +456,7 @@ module ArnoldPipeline
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
-              body: { check_runs: [{ name: "CI", status: "completed", conclusion: "success" }] }.to_json
+              body: { check_runs: [ { name: "CI", status: "completed", conclusion: "success" } ] }.to_json
             )
 
           # No active workflow runs by branch either
@@ -513,7 +513,7 @@ module ArnoldPipeline
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
-              body: { workflow_runs: [{ head_branch: "claude/issue-42-setup-db" }] }.to_json
+              body: { workflow_runs: [ { head_branch: "claude/issue-42-setup-db" } ] }.to_json
             )
 
           results = @provider.fetch_results(pipeline_run: @pipeline_run)

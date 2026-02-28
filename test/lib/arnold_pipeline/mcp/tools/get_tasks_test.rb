@@ -18,9 +18,9 @@ module ArnoldPipeline
             position: 0,
             tier: 0,
             status: :completed,
-            labels: ["backend", "database"],
+            labels: [ "backend", "database" ],
             depends_on: [],
-            acceptance_criteria: ["Schema created", "Migrations run"]
+            acceptance_criteria: [ "Schema created", "Migrations run" ]
           )
           @task2 = Task.create!(
             pipeline_run: @run,
@@ -29,9 +29,9 @@ module ArnoldPipeline
             position: 1,
             tier: 1,
             status: :pending,
-            labels: ["backend", "api"],
-            depends_on: [@task1.id.to_s],
-            acceptance_criteria: ["CRUD endpoints working"]
+            labels: [ "backend", "api" ],
+            depends_on: [ @task1.id.to_s ],
+            acceptance_criteria: [ "CRUD endpoints working" ]
           )
         end
 
@@ -66,7 +66,7 @@ module ArnoldPipeline
         test "call returns tasks ordered by position" do
           result = GetTasks.call({}, @context)
           titles = result[:tasks].map { |t| t[:title] }
-          assert_equal ["Setup database", "Build API"], titles
+          assert_equal [ "Setup database", "Build API" ], titles
         end
 
         test "call filters by tier" do
@@ -112,9 +112,9 @@ module ArnoldPipeline
           assert_equal "Create the database schema", task[:description]
           assert_equal 0, task[:tier]
           assert_equal "completed", task[:status]
-          assert_equal ["backend", "database"], task[:labels]
+          assert_equal [ "backend", "database" ], task[:labels]
           assert_equal [], task[:dependencies]
-          assert_equal ["Schema created", "Migrations run"], task[:acceptance_criteria]
+          assert_equal [ "Schema created", "Migrations run" ], task[:acceptance_criteria]
           assert_kind_of String, task[:domain]
           assert_kind_of String, task[:persona_context]
         end
@@ -122,7 +122,7 @@ module ArnoldPipeline
         test "call includes dependencies from depends_on" do
           result = GetTasks.call({}, @context)
           api_task = result[:tasks].find { |t| t[:title] == "Build API" }
-          assert_equal [@task1.id.to_s], api_task[:dependencies]
+          assert_equal [ @task1.id.to_s ], api_task[:dependencies]
         end
 
         test "call returns error when no pipeline run found" do
