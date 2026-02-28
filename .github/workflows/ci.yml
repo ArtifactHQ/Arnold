@@ -55,8 +55,8 @@ jobs:
 
       - name: Configure git identity
         run: |
-          git config user.email "ci@arnold-pipeline.test"
-          git config user.name "CI"
+          git config --global user.email "ci@arnold-pipeline.test"
+          git config --global user.name "CI"
 
       - name: Run tests
         env:
