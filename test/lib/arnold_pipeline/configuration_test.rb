@@ -47,18 +47,21 @@ module ArnoldPipeline
     end
 
     test "validate! raises on missing llm_api_key" do
-      original_key = ENV[Configuration::PROVIDER_DEFAULTS.dig(@config.llm_provider, :env_key).to_s]
-      ENV.delete(Configuration::PROVIDER_DEFAULTS.dig(@config.llm_provider, :env_key).to_s)
+      original_anthropic = ENV["ANTHROPIC_API_KEY"]
+      original_openai = ENV["OPENAI_API_KEY"]
+      ENV.delete("ANTHROPIC_API_KEY")
+      ENV.delete("OPENAI_API_KEY")
 
-      @config.llm_api_key = nil
-      @config.github_token = "ghp_test"
-      @config.github_repo = "owner/repo"
+      config = Configuration.new
+      config.llm_api_key = nil
+      config.github_token = "ghp_test"
+      config.github_repo = "owner/repo"
 
-      error = assert_raises(ConfigurationError) { @config.validate! }
+      error = assert_raises(ConfigurationError) { config.validate! }
       assert_match(/LLM API key is required/, error.message)
     ensure
-      env_key = Configuration::PROVIDER_DEFAULTS.dig(@config.llm_provider, :env_key).to_s
-      original_key ? ENV[env_key] = original_key : ENV.delete(env_key)
+      original_anthropic ? ENV["ANTHROPIC_API_KEY"] = original_anthropic : ENV.delete("ANTHROPIC_API_KEY")
+      original_openai ? ENV["OPENAI_API_KEY"] = original_openai : ENV.delete("OPENAI_API_KEY")
     end
 
     test "validate! raises on empty llm_api_key" do

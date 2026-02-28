@@ -3,6 +3,7 @@ require "yaml"
 require "json"
 require "logger"
 require "fileutils"
+require_relative "version"
 require_relative "log_formatter"
 
 module ArnoldPipeline
@@ -411,6 +412,17 @@ module ArnoldPipeline
       else
         say content
       end
+    end
+
+    desc "mcp", "Start the MCP (Model Context Protocol) server over stdio"
+    option :config, type: :string, desc: "Path to YAML config file"
+    def mcp
+      setup_standalone!
+      load_config!(options) if options[:config]
+      require "arnold_pipeline/mcp/server"
+
+      server = Mcp::Server.new
+      server.start
     end
 
     desc "version", "Show the version"

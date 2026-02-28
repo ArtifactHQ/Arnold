@@ -10,7 +10,8 @@ module ArnoldPipeline
 
       test "loads all personas" do
         personas = @manager.all_personas
-        assert_equal 5, personas.size
+        expected_personas = Dir[File.join(ArnoldPipeline::Engine.root, "library", "personas", "*.yml")]
+        assert_equal expected_personas.size, personas.size
         names = personas.map(&:name)
         assert_includes names, "Software Architect"
         assert_includes names, "Domain Expert"

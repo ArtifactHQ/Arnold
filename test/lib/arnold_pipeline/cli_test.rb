@@ -105,6 +105,12 @@ module ArnoldPipeline
       assert_match(/arnold_pipeline #{ArnoldPipeline::VERSION}/, output)
     end
 
+    test "version works without full engine loaded (standalone entrypoint)" do
+      output = `ruby -I #{File.expand_path("../../../lib", __dir__)} -e 'require "arnold_pipeline/cli"; ArnoldPipeline::Cli.start(["version"])' 2>&1`
+      assert_equal 0, $?.exitstatus, "Standalone version failed: #{output}"
+      assert_match(/arnold_pipeline \d+\.\d+\.\d+/, output)
+    end
+
     test "exit_on_failure? returns true" do
       assert Cli.exit_on_failure?
     end
