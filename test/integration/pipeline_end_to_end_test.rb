@@ -69,7 +69,7 @@ module ArnoldPipeline
 
     def stub_anthropic_api!
       spec_response = {
-        content: [{ type: "text", text: spec_llm_response }],
+        content: [ { type: "text", text: spec_llm_response } ],
         role: "assistant"
       }
 
@@ -89,7 +89,7 @@ module ArnoldPipeline
             else
               analysis_done_structured_response
             end
-            { content: [{ type: "tool_use", id: "toolu_#{rand(1000)}", name: tool_name, input: input }], role: "assistant" }
+            { content: [ { type: "tool_use", id: "toolu_#{rand(1000)}", name: tool_name, input: input } ], role: "assistant" }
           else
             spec_response
           end
@@ -101,7 +101,7 @@ module ArnoldPipeline
     def stub_anthropic_with_sequential_analysis!
       WebMock.reset!
 
-      spec_response = { content: [{ type: "text", text: spec_llm_response }], role: "assistant" }
+      spec_response = { content: [ { type: "text", text: spec_llm_response } ], role: "assistant" }
 
       @analysis_call_count = 0
       stub_request(:post, "https://api.anthropic.com/v1/messages")
@@ -124,7 +124,7 @@ module ArnoldPipeline
                 analysis_done_structured_response
               end
             end
-            { content: [{ type: "tool_use", id: "toolu_#{rand(1000)}", name: tool_name, input: input }], role: "assistant" }
+            { content: [ { type: "tool_use", id: "toolu_#{rand(1000)}", name: tool_name, input: input } ], role: "assistant" }
           else
             spec_response
           end
@@ -205,13 +205,13 @@ module ArnoldPipeline
     def task_structured_response
       {
         "tasks" => [
-          { "title" => "Setup Rails project", "description" => "Initialize Rails 8 project with PostgreSQL", "priority" => 0, "labels" => ["setup"], "position" => 0, "depends_on" => [], "section_ref" => "Setup" },
-          { "title" => "Create User model", "description" => "Generate User model with authentication", "priority" => 0, "labels" => ["backend", "database"], "position" => 1, "depends_on" => [0], "section_ref" => "Models" },
-          { "title" => "Create Todo model", "description" => "Generate Todo model with associations", "priority" => 0, "labels" => ["backend", "database"], "position" => 2, "depends_on" => [1], "section_ref" => "Models" },
-          { "title" => "Build authentication", "description" => "Implement signup/login/logout", "priority" => 1, "labels" => ["backend", "frontend"], "position" => 3, "depends_on" => [1], "section_ref" => "Authentication" },
-          { "title" => "Build Todo CRUD", "description" => "Implement create/read/update/delete for todos", "priority" => 1, "labels" => ["backend", "frontend"], "position" => 4, "depends_on" => [2, 3], "section_ref" => "CRUD" },
-          { "title" => "Add real-time updates", "description" => "Implement Turbo Streams for live updates", "priority" => 2, "labels" => ["frontend"], "position" => 5, "depends_on" => [4], "section_ref" => "Real-time" },
-          { "title" => "Write tests", "description" => "System and unit tests", "priority" => 2, "labels" => ["testing"], "position" => 6, "depends_on" => [4, 5], "section_ref" => "Testing" }
+          { "title" => "Setup Rails project", "description" => "Initialize Rails 8 project with PostgreSQL", "priority" => 0, "labels" => [ "setup" ], "position" => 0, "depends_on" => [], "section_ref" => "Setup" },
+          { "title" => "Create User model", "description" => "Generate User model with authentication", "priority" => 0, "labels" => [ "backend", "database" ], "position" => 1, "depends_on" => [ 0 ], "section_ref" => "Models" },
+          { "title" => "Create Todo model", "description" => "Generate Todo model with associations", "priority" => 0, "labels" => [ "backend", "database" ], "position" => 2, "depends_on" => [ 1 ], "section_ref" => "Models" },
+          { "title" => "Build authentication", "description" => "Implement signup/login/logout", "priority" => 1, "labels" => [ "backend", "frontend" ], "position" => 3, "depends_on" => [ 1 ], "section_ref" => "Authentication" },
+          { "title" => "Build Todo CRUD", "description" => "Implement create/read/update/delete for todos", "priority" => 1, "labels" => [ "backend", "frontend" ], "position" => 4, "depends_on" => [ 2, 3 ], "section_ref" => "CRUD" },
+          { "title" => "Add real-time updates", "description" => "Implement Turbo Streams for live updates", "priority" => 2, "labels" => [ "frontend" ], "position" => 5, "depends_on" => [ 4 ], "section_ref" => "Real-time" },
+          { "title" => "Write tests", "description" => "System and unit tests", "priority" => 2, "labels" => [ "testing" ], "position" => 6, "depends_on" => [ 4, 5 ], "section_ref" => "Testing" }
         ]
       }
     end
@@ -237,11 +237,11 @@ module ArnoldPipeline
         "anti_patterns_found" => [],
         "corrective_data" => {
           "tasks" => [
-            { "title" => "Fix auth error handling", "description" => "Add proper error messages", "priority" => 0, "labels" => ["backend"], "depends_on" => [] },
-            { "title" => "Add input validation", "description" => "Validate todo inputs", "priority" => 0, "labels" => ["backend"], "depends_on" => [] },
-            { "title" => "Fix test coverage", "description" => "Add missing test cases", "priority" => 1, "labels" => ["testing"], "depends_on" => [] },
-            { "title" => "Update error pages", "description" => "Custom error pages", "priority" => 1, "labels" => ["frontend"], "depends_on" => [] },
-            { "title" => "Integration tests", "description" => "End-to-end flow tests", "priority" => 2, "labels" => ["testing"], "depends_on" => [] }
+            { "title" => "Fix auth error handling", "description" => "Add proper error messages", "priority" => 0, "labels" => [ "backend" ], "depends_on" => [] },
+            { "title" => "Add input validation", "description" => "Validate todo inputs", "priority" => 0, "labels" => [ "backend" ], "depends_on" => [] },
+            { "title" => "Fix test coverage", "description" => "Add missing test cases", "priority" => 1, "labels" => [ "testing" ], "depends_on" => [] },
+            { "title" => "Update error pages", "description" => "Custom error pages", "priority" => 1, "labels" => [ "frontend" ], "depends_on" => [] },
+            { "title" => "Integration tests", "description" => "End-to-end flow tests", "priority" => 2, "labels" => [ "testing" ], "depends_on" => [] }
           ],
           "deltas" => nil
         },

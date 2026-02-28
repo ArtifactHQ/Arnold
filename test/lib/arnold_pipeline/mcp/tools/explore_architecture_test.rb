@@ -16,7 +16,7 @@ module ArnoldPipeline
               "library_selections" => {
                 "persona" => "Software Architect",
                 "recipe" => "Web App",
-                "supporting_recipes" => ["API Service"],
+                "supporting_recipes" => [ "API Service" ],
                 "domain_type" => "PRODUCTIVITY"
               }
             }
@@ -31,7 +31,7 @@ module ArnoldPipeline
                 { "name" => "Tasks", "components" => "Task CRUD, lists", "data_summary" => "Task model", "integrations" => "Uses Auth" },
                 { "name" => "Auth", "components" => "Login, registration", "data_summary" => "User model", "integrations" => "Used by Tasks" }
               ],
-              "recipes" => [{ "name" => "Web App" }]
+              "recipes" => [ { "name" => "Web App" } ]
             }
           )
         end
@@ -66,14 +66,14 @@ module ArnoldPipeline
                 {
                   "name" => "Tasks",
                   "components" => "TasksController, Task model",
-                  "recipes_used" => ["Web App"],
+                  "recipes_used" => [ "Web App" ],
                   "data_summary" => "Task belongs_to User",
                   "integrations" => "Depends on Auth for user context"
                 },
                 {
                   "name" => "Auth",
                   "components" => "SessionsController, User model",
-                  "recipes_used" => ["Web App"],
+                  "recipes_used" => [ "Web App" ],
                   "data_summary" => "User has_many Tasks",
                   "integrations" => "Provides current_user to all domains"
                 }
@@ -101,7 +101,7 @@ module ArnoldPipeline
                 {
                   "name" => "Tasks",
                   "components" => "TasksController",
-                  "recipes_used" => ["Web App"],
+                  "recipes_used" => [ "Web App" ],
                   "data_summary" => "Task model",
                   "integrations" => "Auth"
                 }
@@ -237,13 +237,13 @@ module ArnoldPipeline
             "architecture" => {
               "stack" => "Rails 8+",
               "rationale" => "Modern Ruby framework",
-              "domains" => [{
+              "domains" => [ {
                 "name" => "Core",
                 "components" => "Models, Controllers",
-                "recipes_used" => ["Web App"],
+                "recipes_used" => [ "Web App" ],
                 "data_summary" => "Standard CRUD",
                 "integrations" => "None"
-              }]
+              } ]
             }
           }
 

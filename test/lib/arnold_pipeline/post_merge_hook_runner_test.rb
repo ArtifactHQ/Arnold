@@ -25,14 +25,14 @@ module ArnoldPipeline
     test "runs hooks that match changed files" do
       hook = PostMergeHook.new(
         name: "bundler",
-        trigger_paths: ["Gemfile"],
+        trigger_paths: [ "Gemfile" ],
         command: "echo hook_ran"
       )
 
       results = PostMergeHookRunner.call(
         repo_path: @tmpdir,
-        changed_files: ["Gemfile"],
-        hooks: [hook]
+        changed_files: [ "Gemfile" ],
+        hooks: [ hook ]
       )
 
       assert_equal 1, results.size
@@ -47,14 +47,14 @@ module ArnoldPipeline
     test "skips hooks that don't match changed files" do
       hook = PostMergeHook.new(
         name: "bundler",
-        trigger_paths: ["Gemfile"],
+        trigger_paths: [ "Gemfile" ],
         command: "echo should_not_run"
       )
 
       results = PostMergeHookRunner.call(
         repo_path: @tmpdir,
-        changed_files: ["app/models/user.rb"],
-        hooks: [hook]
+        changed_files: [ "app/models/user.rb" ],
+        hooks: [ hook ]
       )
 
       result = results.first
@@ -74,16 +74,16 @@ module ArnoldPipeline
 
       hook = PostMergeHook.new(
         name: "generate",
-        trigger_paths: ["*.rb"],
+        trigger_paths: [ "*.rb" ],
         command: "./generate.sh",
-        commit_paths: ["derived.txt"],
+        commit_paths: [ "derived.txt" ],
         commit_message: "chore: update derived file"
       )
 
       results = PostMergeHookRunner.call(
         repo_path: @tmpdir,
-        changed_files: ["app.rb"],
-        hooks: [hook]
+        changed_files: [ "app.rb" ],
+        hooks: [ hook ]
       )
 
       assert results.first[:success]
@@ -100,9 +100,9 @@ module ArnoldPipeline
     test "does not commit when command succeeds but no staged changes" do
       hook = PostMergeHook.new(
         name: "noop",
-        trigger_paths: ["*.rb"],
+        trigger_paths: [ "*.rb" ],
         command: "echo noop",
-        commit_paths: ["nonexistent.txt"]
+        commit_paths: [ "nonexistent.txt" ]
       )
 
       # Get commit count before
@@ -110,8 +110,8 @@ module ArnoldPipeline
 
       PostMergeHookRunner.call(
         repo_path: @tmpdir,
-        changed_files: ["app.rb"],
-        hooks: [hook]
+        changed_files: [ "app.rb" ],
+        hooks: [ hook ]
       )
 
       # Commit count should be the same
@@ -122,14 +122,14 @@ module ArnoldPipeline
     test "captures stdout/stderr on failure" do
       hook = PostMergeHook.new(
         name: "failing",
-        trigger_paths: ["*.rb"],
+        trigger_paths: [ "*.rb" ],
         command: "echo 'error output' >&2 && exit 1"
       )
 
       results = PostMergeHookRunner.call(
         repo_path: @tmpdir,
-        changed_files: ["app.rb"],
-        hooks: [hook]
+        changed_files: [ "app.rb" ],
+        hooks: [ hook ]
       )
 
       result = results.first
@@ -142,14 +142,14 @@ module ArnoldPipeline
     test "returns success: false on non-zero exit" do
       hook = PostMergeHook.new(
         name: "bad_exit",
-        trigger_paths: ["*.rb"],
+        trigger_paths: [ "*.rb" ],
         command: "exit 42"
       )
 
       results = PostMergeHookRunner.call(
         repo_path: @tmpdir,
-        changed_files: ["app.rb"],
-        hooks: [hook]
+        changed_files: [ "app.rb" ],
+        hooks: [ hook ]
       )
 
       result = results.first
@@ -160,7 +160,7 @@ module ArnoldPipeline
     test "rescues exceptions and returns error result" do
       hook = PostMergeHook.new(
         name: "broken",
-        trigger_paths: ["*.rb"],
+        trigger_paths: [ "*.rb" ],
         command: "echo test"
       )
 
@@ -169,8 +169,8 @@ module ArnoldPipeline
 
       results = PostMergeHookRunner.call(
         repo_path: @tmpdir,
-        changed_files: ["app.rb"],
-        hooks: [hook]
+        changed_files: [ "app.rb" ],
+        hooks: [ hook ]
       )
 
       result = results.first
@@ -183,24 +183,24 @@ module ArnoldPipeline
     test "runs multiple hooks in order" do
       hook1 = PostMergeHook.new(
         name: "first",
-        trigger_paths: ["*.rb"],
+        trigger_paths: [ "*.rb" ],
         command: "echo first"
       )
       hook2 = PostMergeHook.new(
         name: "second",
-        trigger_paths: ["*.rb"],
+        trigger_paths: [ "*.rb" ],
         command: "echo second"
       )
       hook3 = PostMergeHook.new(
         name: "skipped",
-        trigger_paths: ["*.py"],
+        trigger_paths: [ "*.py" ],
         command: "echo skipped"
       )
 
       results = PostMergeHookRunner.call(
         repo_path: @tmpdir,
-        changed_files: ["app.rb"],
-        hooks: [hook1, hook2, hook3]
+        changed_files: [ "app.rb" ],
+        hooks: [ hook1, hook2, hook3 ]
       )
 
       assert_equal 3, results.size
@@ -220,14 +220,14 @@ module ArnoldPipeline
       long_output = "x" * 3000
       hook = PostMergeHook.new(
         name: "verbose",
-        trigger_paths: ["*.rb"],
+        trigger_paths: [ "*.rb" ],
         command: "printf '#{long_output}'"
       )
 
       results = PostMergeHookRunner.call(
         repo_path: @tmpdir,
-        changed_files: ["app.rb"],
-        hooks: [hook]
+        changed_files: [ "app.rb" ],
+        hooks: [ hook ]
       )
 
       result = results.first
@@ -244,16 +244,16 @@ module ArnoldPipeline
 
       hook = PostMergeHook.new(
         name: "generate",
-        trigger_paths: ["*.rb"],
+        trigger_paths: [ "*.rb" ],
         command: "./generate.sh",
-        commit_paths: ["listed.txt"],
+        commit_paths: [ "listed.txt" ],
         commit_message: "chore: update listed file"
       )
 
       results = PostMergeHookRunner.call(
         repo_path: @tmpdir,
-        changed_files: ["app.rb"],
-        hooks: [hook]
+        changed_files: [ "app.rb" ],
+        hooks: [ hook ]
       )
 
       assert results.first[:success]
@@ -275,14 +275,14 @@ module ArnoldPipeline
 
       hook = PostMergeHook.new(
         name: "generate",
-        trigger_paths: ["*.rb"],
+        trigger_paths: [ "*.rb" ],
         command: "./generate.sh"
       )
 
       results = PostMergeHookRunner.call(
         repo_path: @tmpdir,
-        changed_files: ["app.rb"],
-        hooks: [hook]
+        changed_files: [ "app.rb" ],
+        hooks: [ hook ]
       )
 
       assert results.first[:success]
@@ -301,14 +301,14 @@ module ArnoldPipeline
 
       hook = PostMergeHook.new(
         name: "generate",
-        trigger_paths: ["*.rb"],
+        trigger_paths: [ "*.rb" ],
         command: "./generate.sh"
       )
 
       results = PostMergeHookRunner.call(
         repo_path: @tmpdir,
-        changed_files: ["app.rb"],
-        hooks: [hook]
+        changed_files: [ "app.rb" ],
+        hooks: [ hook ]
       )
 
       assert results.first[:success]
@@ -321,7 +321,7 @@ module ArnoldPipeline
     test "no auto-commit when hook leaves no new dirty files" do
       hook = PostMergeHook.new(
         name: "clean",
-        trigger_paths: ["*.rb"],
+        trigger_paths: [ "*.rb" ],
         command: "echo clean"
       )
 
@@ -329,8 +329,8 @@ module ArnoldPipeline
 
       results = PostMergeHookRunner.call(
         repo_path: @tmpdir,
-        changed_files: ["app.rb"],
-        hooks: [hook]
+        changed_files: [ "app.rb" ],
+        hooks: [ hook ]
       )
 
       after_log, = Open3.capture3("git", "rev-list", "--count", "HEAD", chdir: @tmpdir)

@@ -58,7 +58,7 @@ module ArnoldPipeline
       end
 
       test "no section has an unrecognized phase value" do
-        recognized_phases = [nil, "pipeline", "post_pipeline"]
+        recognized_phases = [ nil, "pipeline", "post_pipeline" ]
 
         @recipes.each do |recipe|
           recipe.sections.each do |section|

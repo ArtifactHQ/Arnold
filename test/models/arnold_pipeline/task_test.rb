@@ -81,7 +81,7 @@ module ArnoldPipeline
         title: "Setup DB", position: 0, external_id: "42",
         workflow_active: true,
         result_diff: '[{"filename":"schema.rb"}]',
-        result_comments: [{ "source" => "issue", "author" => "copilot", "body" => "Can't do this" }]
+        result_comments: [ { "source" => "issue", "author" => "copilot", "body" => "Can't do this" } ]
       )
       assert_equal "Setup DB (#42): workflow_active, has_diffs, resolution_comments", task.resolution_summary
     end
@@ -94,7 +94,7 @@ module ArnoldPipeline
     test "resolution_summary shows non_resolution_comments for planning comments" do
       task = @run.tasks.create!(
         title: "Setup DB", position: 0, external_id: "42",
-        result_comments: [{ "source" => "issue", "author" => "copilot", "body" => "Analyzing the repository structure..." }]
+        result_comments: [ { "source" => "issue", "author" => "copilot", "body" => "Analyzing the repository structure..." } ]
       )
       assert_equal "Setup DB (#42): non_resolution_comments", task.resolution_summary
     end
@@ -102,7 +102,7 @@ module ArnoldPipeline
     test "resolution_summary shows wip_comments_only for WIP comments" do
       task = @run.tasks.create!(
         title: "Setup DB", position: 0, external_id: "42",
-        result_comments: [{ "source" => "issue", "author" => "copilot", "body" => "Claude Code is working on this issue." }]
+        result_comments: [ { "source" => "issue", "author" => "copilot", "body" => "Claude Code is working on this issue." } ]
       )
       assert_equal "Setup DB (#42): wip_comments_only", task.resolution_summary
     end

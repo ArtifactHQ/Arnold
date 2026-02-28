@@ -29,12 +29,12 @@ module ArnoldPipeline
 
     def check_static(criterion, result)
       passed = case criterion.type
-               when "file_exists" then check_file_exists(criterion)
-               when "test_exists" then check_test_exists(criterion)
-               when "model_has" then check_model_has(criterion)
-               when "route_exists" then check_route_exists(criterion)
-               else false
-               end
+      when "file_exists" then check_file_exists(criterion)
+      when "test_exists" then check_test_exists(criterion)
+      when "model_has" then check_model_has(criterion)
+      when "route_exists" then check_route_exists(criterion)
+      else false
+      end
 
       if passed
         result[:verified] << criterion

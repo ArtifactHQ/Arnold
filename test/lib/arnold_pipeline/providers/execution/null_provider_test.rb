@@ -19,6 +19,10 @@ module ArnoldPipeline
           @pipeline_run = ArnoldPipeline::PipelineRun.create!(nl_input: "Build an app")
         end
 
+        def setup_fetch_results_for_metadata_test
+          @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "null-0")
+        end
+
         test "async? returns false" do
           refute @provider.async?
         end

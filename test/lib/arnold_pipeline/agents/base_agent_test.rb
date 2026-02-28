@@ -24,7 +24,7 @@ module ArnoldPipeline
 
       test "extracts JSON from untagged code fence" do
         text = "Result:\n```\n[1, 2, 3]\n```"
-        assert_equal([1, 2, 3], @agent.parse_json(text))
+        assert_equal([ 1, 2, 3 ], @agent.parse_json(text))
       end
 
       test "picks largest fence when multiple exist" do
@@ -74,12 +74,12 @@ module ArnoldPipeline
 
       test "extracts array from surrounding prose" do
         text = 'Results: [{"a": 1}, {"b": 2}] end.'
-        assert_equal([{ "a" => 1 }, { "b" => 2 }], @agent.parse_json(text))
+        assert_equal([ { "a" => 1 }, { "b" => 2 } ], @agent.parse_json(text))
       end
 
       test "handles nested braces and brackets" do
         text = 'Output: {"nested": {"deep": [1, [2, 3]]}} done'
-        expected = { "nested" => { "deep" => [1, [2, 3]] } }
+        expected = { "nested" => { "deep" => [ 1, [ 2, 3 ] ] } }
         assert_equal(expected, @agent.parse_json(text))
       end
 
@@ -102,7 +102,7 @@ module ArnoldPipeline
 
       test "handles trailing comma in array" do
         text = "[1, 2, 3,]"
-        assert_equal([1, 2, 3], @agent.parse_json(text))
+        assert_equal([ 1, 2, 3 ], @agent.parse_json(text))
       end
 
       # -- Integration --
@@ -163,7 +163,7 @@ module ArnoldPipeline
 
         @llm.stubs(:chat).returns("response text")
 
-        agent.send(:chat, messages: [{ role: :user, content: "Hello world" }], system: "You are helpful")
+        agent.send(:chat, messages: [ { role: :user, content: "Hello world" } ], system: "You are helpful")
 
         log_content = log_output.string
         assert_match(/\[prompt:system\] You are helpful/, log_content)
@@ -179,7 +179,7 @@ module ArnoldPipeline
         schema = { name: "test", schema: { type: "object" } }
         @llm.stubs(:chat_json).returns({ "key" => "value" })
 
-        agent.chat_json(messages: [{ role: :user, content: "Analyze this" }], system: "Be precise", schema: schema)
+        agent.chat_json(messages: [ { role: :user, content: "Analyze this" } ], system: "Be precise", schema: schema)
 
         log_content = log_output.string
         assert_match(/\[prompt:system\] Be precise/, log_content)
@@ -195,7 +195,7 @@ module ArnoldPipeline
 
         @llm.stubs(:chat).returns("ok")
 
-        agent.send(:chat, messages: [{ role: :user, content: "Hi" }])
+        agent.send(:chat, messages: [ { role: :user, content: "Hi" } ])
 
         log_content = log_output.string
         assert_no_match(/\[prompt:system\]/, log_content)
@@ -253,13 +253,13 @@ module ArnoldPipeline
         schema = { name: "test", schema: { type: "object" } }
         expected = { "key" => "value" }
         @llm.expects(:chat_json).with(
-          messages: [{ role: :user, content: "Hi" }],
+          messages: [ { role: :user, content: "Hi" } ],
           system: nil,
           schema: schema
         ).returns(expected)
 
         result = @agent.chat_json(
-          messages: [{ role: :user, content: "Hi" }],
+          messages: [ { role: :user, content: "Hi" } ],
           schema: schema
         )
         assert_equal expected, result

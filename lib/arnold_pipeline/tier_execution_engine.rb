@@ -312,7 +312,7 @@ module ArnoldPipeline
         result = build_failed_gate_result(
           tier_num: tier_num,
           issues: failed_required.map { |c| "Required check '#{c[:name]}' failed" },
-          corrective_tasks: [build_boot_fix_task(verification_results)],
+          corrective_tasks: [ build_boot_fix_task(verification_results) ],
           context_summary: "Tier #{tier_num}: required verification checks failed — #{failed_required.map { |c| c[:name] }.join(', ')}"
         )
         log_gate_result(tier_num, result)
@@ -331,19 +331,19 @@ module ArnoldPipeline
       if test_result.hollow
         # Zero test runs — tests not loading. Treat as gate failure with warning.
         logger.warn { "[Arnold] Test suite exited with 0 runs — hollow pass detected" }
-        issues = ["Test suite passed with 0 runs, 0 assertions — tests may not be loading or discovered"]
+        issues = [ "Test suite passed with 0 runs, 0 assertions — tests may not be loading or discovered" ]
         context_summary = build_fail_context_summary(verification_results, acceptance_criteria_summary)
         result = build_failed_gate_result(
           tier_num: tier_num, issues: issues,
-          corrective_tasks: [{
+          corrective_tasks: [ {
             "title" => "Fix test suite: 0 tests loaded",
             "description" => "The test suite exited successfully but ran 0 tests with 0 assertions. " \
               "This means tests are not being loaded or discovered. Check that:\n" \
               "- Test files exist and follow naming conventions\n" \
               "- Test helper/config loads the correct paths\n" \
               "- There are no silent load errors hiding test classes",
-            "labels" => ["test-fix", "critical"]
-          }],
+            "labels" => [ "test-fix", "critical" ]
+          } ],
           context_summary: context_summary
         )
         log_gate_result(tier_num, result)
@@ -420,11 +420,11 @@ module ArnoldPipeline
     rescue => e
       logger.warn { "[Arnold] CorrectiveTaskGenerator failed (fallback to generic task): #{e.class}: #{e.message}" }
       truncated_summary = test_result.summary.to_s[0, 500]
-      [{
+      [ {
         "title" => "Fix test failures",
         "description" => "Test suite failed. Summary: #{truncated_summary}",
-        "labels" => ["bugfix"]
-      }]
+        "labels" => [ "bugfix" ]
+      } ]
     end
 
     def build_passed_gate_result(tier_num:, context_summary:)
@@ -446,7 +446,7 @@ module ArnoldPipeline
     end
 
     def build_pass_context_summary(verification_results, criteria_summary)
-      lines = ["Verification checks all passed."]
+      lines = [ "Verification checks all passed." ]
       check_names = verification_results[:checks].map { |c| "#{c[:name]}=#{c[:success] ? 'OK' : 'FAIL'}" }
       lines << "Checks: #{check_names.join(', ')}"
       if criteria_summary.present?
@@ -457,7 +457,7 @@ module ArnoldPipeline
     end
 
     def build_fail_context_summary(verification_results, criteria_summary)
-      lines = ["Verification checks found failures."]
+      lines = [ "Verification checks found failures." ]
       check_names = verification_results[:checks].map { |c| "#{c[:name]}=#{c[:success] ? 'OK' : 'FAIL'}" }
       lines << "Checks: #{check_names.join(', ')}"
       if criteria_summary.present?
@@ -470,7 +470,7 @@ module ArnoldPipeline
     def build_boot_fix_task(verification_results)
       failed_checks = verification_results[:checks].select { |c| c[:required] && !c[:success] }
       details = failed_checks.map do |c|
-        output = [c[:stdout], c[:stderr]].compact.reject(&:empty?).join("\n")
+        output = [ c[:stdout], c[:stderr] ].compact.reject(&:empty?).join("\n")
         truncated = output[0, 1000]
         "Check '#{c[:name]}' failed (exit code: #{c[:exit_code]}):\n#{truncated}"
       end.join("\n\n")
@@ -478,12 +478,12 @@ module ArnoldPipeline
       {
         "title" => "Fix application boot failure",
         "description" => "Required verification checks failed. The application cannot boot.\n\n#{details}",
-        "labels" => ["boot-fix", "critical"]
+        "labels" => [ "boot-fix", "critical" ]
       }
     end
 
     def extract_failure_summary(test_result)
-      return ["Test suite failed: #{test_result.summary}"] if test_result.failures.empty?
+      return [ "Test suite failed: #{test_result.summary}" ] if test_result.failures.empty?
 
       test_result.failures.map do |f|
         location = f[:location] ? " (#{f[:location]})" : ""
@@ -579,7 +579,7 @@ module ArnoldPipeline
         # Include the current tier's context_summary so corrective tasks know what was already built
         current_tier_summary = gate_result["context_summary"]
         corrective_context = if current_tier_summary.present?
-          accumulated_context + [{ "tier" => tier_num, "summary" => current_tier_summary }]
+          accumulated_context + [ { "tier" => tier_num, "summary" => current_tier_summary } ]
         else
           accumulated_context
         end
@@ -589,19 +589,19 @@ module ArnoldPipeline
         pipeline_run.update!(status: :executing)
 
         created_tasks.each do |task|
-          executor.call(tasks: [task], pipeline_run:, prior_context:)
+          executor.call(tasks: [ task ], pipeline_run:, prior_context:)
 
           if executor.provider.async?
             pipeline_run.update!(status: :awaiting_results)
-            executor.await_results(pipeline_run:, tasks: [task])
+            executor.await_results(pipeline_run:, tasks: [ task ])
           else
             task.reload
-            executor.fetch_results(pipeline_run:, tasks: [task])
+            executor.fetch_results(pipeline_run:, tasks: [ task ])
           end
 
-          merge_tier_results!(pipeline_run, [task])
+          merge_tier_results!(pipeline_run, [ task ])
           task.reload
-          run_post_merge_hooks([task], tier_num)
+          run_post_merge_hooks([ task ], tier_num)
         end
 
         # Re-run empirical checks and gate check
@@ -1025,7 +1025,7 @@ module ArnoldPipeline
       return nil if failed_checks.blank?
 
       sections = failed_checks.map do |c|
-        output = [c[:stdout], c[:stderr]].compact.reject(&:empty?).join("\n")
+        output = [ c[:stdout], c[:stderr] ].compact.reject(&:empty?).join("\n")
         next if output.strip.empty?
 
         truncated = output.length > 3000 ? output[-3000..] : output
@@ -1038,7 +1038,7 @@ module ArnoldPipeline
     end
 
     def build_corrective_description(base_description:, gate_issues: [], original_tier_tasks: [], acceptance_criteria_summary: nil, verification_output: nil)
-      sections = [base_description]
+      sections = [ base_description ]
 
       if gate_issues.present?
         issue_lines = gate_issues.each_with_index.map { |issue, i| "#{i + 1}. #{issue}" }

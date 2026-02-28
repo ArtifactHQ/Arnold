@@ -32,9 +32,9 @@ module ArnoldPipeline
             "domain" => "Booking",
             "description" => "Allows dog owners to schedule on-demand or future walks with available walkers.",
             "user_flow" => "1. Owner opens app\n2. Selects walk type\n3. Chooses time\n4. Confirms booking\n5. Receives walker match",
-            "personas_involved" => ["Dog Owner", "Dog Walker"],
-            "depends_on" => ["User Authentication", "Walker Availability"],
-            "enables" => ["Walk Tracking", "Payment Processing"],
+            "personas_involved" => [ "Dog Owner", "Dog Walker" ],
+            "depends_on" => [ "User Authentication", "Walker Availability" ],
+            "enables" => [ "Walk Tracking", "Payment Processing" ],
             "open_questions" => [
               "Can owners book recurring walks?",
               "How far in advance can walks be scheduled?"

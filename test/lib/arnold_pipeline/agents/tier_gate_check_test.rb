@@ -34,10 +34,10 @@ module ArnoldPipeline
       test "returns pass=false result with corrective_tasks" do
         result = {
           "pass" => false,
-          "issues" => ["Missing database.yml configuration"],
+          "issues" => [ "Missing database.yml configuration" ],
           "context_summary" => "Attempted database setup but config is missing.",
           "corrective_tasks" => [
-            { "title" => "Fix database config", "description" => "Add database.yml", "labels" => ["bugfix"] }
+            { "title" => "Fix database config", "description" => "Add database.yml", "labels" => [ "bugfix" ] }
           ]
         }
         @llm.expects(:chat_json).returns(result)
@@ -97,9 +97,9 @@ module ArnoldPipeline
       test "raises on corrective_task without title" do
         result = {
           "pass" => false,
-          "issues" => ["broken"],
+          "issues" => [ "broken" ],
           "context_summary" => "Something was built.",
-          "corrective_tasks" => [{ "description" => "Fix it" }]
+          "corrective_tasks" => [ { "description" => "Fix it" } ]
         }
         @llm.expects(:chat_json).returns(result)
 
@@ -190,7 +190,7 @@ module ArnoldPipeline
           verification_results: {
             all_passed: true,
             summary: "1 passed, 0 failed: boot=OK",
-            checks: [{ name: "boot", type: :boot, success: true, stdout: "", stderr: "" }]
+            checks: [ { name: "boot", type: :boot, success: true, stdout: "", stderr: "" } ]
           }
         )
       end
@@ -228,10 +228,10 @@ module ArnoldPipeline
       test "RESPONSE_SCHEMA validates a failing gate result with corrective tasks" do
         schemer = JSONSchemer.schema(TierGateCheck::RESPONSE_SCHEMA[:schema])
         data = {
-          "pass" => false, "issues" => ["Build broken"],
+          "pass" => false, "issues" => [ "Build broken" ],
           "context_summary" => "Database setup failed.",
           "corrective_tasks" => [
-            { "title" => "Fix DB", "description" => "Reconfigure", "labels" => ["bugfix"] }
+            { "title" => "Fix DB", "description" => "Reconfigure", "labels" => [ "bugfix" ] }
           ]
         }
         assert schemer.valid?(data), "Expected valid, got: #{schemer.validate(data).map(&:to_h)}"

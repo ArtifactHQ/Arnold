@@ -74,7 +74,7 @@ module ArnoldPipeline
       return parsed if parsed
 
       # Legacy format: raw unified diff text
-      [{ filename: "(raw diff)", patch: diff_text, status: "unknown" }]
+      [ { filename: "(raw diff)", patch: diff_text, status: "unknown" } ]
     end
 
     def try_parse_json(text)
@@ -122,7 +122,7 @@ module ArnoldPipeline
     def prioritize(files)
       files.sort_by do |f|
         low = LOW_PRIORITY_PATTERNS.any? { |p| f[:filename].include?(p) } ? 1 : 0
-        [low, f[:filename]]
+        [ low, f[:filename] ]
       end
     end
 

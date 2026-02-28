@@ -289,7 +289,7 @@ module ArnoldPipeline
       recipe = all_recipes.find { |r| r.type == recipe_type }
       supporting = supporting_types.filter_map { |t| all_recipes.find { |r| r.type == t } }
 
-      [recipe, supporting]
+      [ recipe, supporting ]
     end
 
     # Sanitize corrective task dependencies before persisting.

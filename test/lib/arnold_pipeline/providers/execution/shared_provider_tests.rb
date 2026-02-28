@@ -27,7 +27,7 @@ module ArnoldPipeline
         end
 
         def test_async_returns_boolean
-          assert_includes [true, false], provider_instance.async?
+          assert_includes [ true, false ], provider_instance.async?
         end
 
         def test_fetch_results_execution_metadata_shape

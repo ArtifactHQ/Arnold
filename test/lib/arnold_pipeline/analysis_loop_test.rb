@@ -101,7 +101,7 @@ module ArnoldPipeline
       pipeline_run = create_pipeline_run_with_spec_and_tasks!
 
       corrective = {
-        "tasks" => [{ "title" => "Fix", "description" => "Fix it", "position" => 0 }]
+        "tasks" => [ { "title" => "Fix", "description" => "Fix it", "position" => 0 } ]
       }
 
       @analyzer.stubs(:call).returns(analysis_result("iterate_tasks", 75, corrective))
@@ -156,9 +156,9 @@ module ArnoldPipeline
     test "iterate_spec passes recipe context to task_breaker" do
       pipeline_run = create_pipeline_run_with_spec_and_tasks!(
         structured_data: {
-          "features" => ["auth"],
+          "features" => [ "auth" ],
           "recipe_type" => "web_app",
-          "supporting_recipe_types" => ["api_service"]
+          "supporting_recipe_types" => [ "api_service" ]
         }
       )
 
@@ -219,7 +219,7 @@ module ArnoldPipeline
       ArnoldPipeline.configuration.analysis_done_threshold = 85
 
       corrective = {
-        "tasks" => [{ "title" => "Fix", "description" => "Fix it", "position" => 0 }]
+        "tasks" => [ { "title" => "Fix", "description" => "Fix it", "position" => 0 } ]
       }
       @analyzer.stubs(:call).returns(analysis_result("iterate_tasks", 80, corrective))
 
@@ -254,7 +254,7 @@ module ArnoldPipeline
       ArnoldPipeline.configuration.analysis_done_threshold = nil
 
       corrective = {
-        "tasks" => [{ "title" => "Fix", "description" => "Fix it", "position" => 0 }]
+        "tasks" => [ { "title" => "Fix", "description" => "Fix it", "position" => 0 } ]
       }
       @analyzer.stubs(:call).returns(analysis_result("iterate_tasks", 99, corrective))
 
@@ -430,7 +430,7 @@ module ArnoldPipeline
       pipeline_run.specification.update!(version: 3)
 
       corrective = {
-        "tasks" => [{ "title" => "Fix", "description" => "Fix it", "position" => 0 }]
+        "tasks" => [ { "title" => "Fix", "description" => "Fix it", "position" => 0 } ]
       }
 
       call_count = sequence("analysis_calls")
@@ -504,8 +504,8 @@ module ArnoldPipeline
       corrective = {
         "tasks" => [
           { "title" => "Setup DB", "description" => "Create schema", "position" => 0, "depends_on" => [] },
-          { "title" => "Add auth", "description" => "Auth system", "position" => 1, "depends_on" => [0, 1] },
-          { "title" => "Add API", "description" => "API endpoints", "position" => 2, "depends_on" => [0, 2] }
+          { "title" => "Add auth", "description" => "Auth system", "position" => 1, "depends_on" => [ 0, 1 ] },
+          { "title" => "Add API", "description" => "API endpoints", "position" => 2, "depends_on" => [ 0, 2 ] }
         ]
       }
 
@@ -520,8 +520,8 @@ module ArnoldPipeline
       assert_equal "completed", pipeline_run.reload.status
       tasks = pipeline_run.tasks.reload.order(:position)
       # Self-refs stripped: task 1 keeps dep on 0 but not on 1; task 2 keeps dep on 0 but not on 2
-      assert_equal [0], tasks[1].depends_on
-      assert_equal [0], tasks[2].depends_on
+      assert_equal [ 0 ], tasks[1].depends_on
+      assert_equal [ 0 ], tasks[2].depends_on
     end
 
     test "handle_iterate_tasks strips mutual cycle dependencies" do
@@ -529,8 +529,8 @@ module ArnoldPipeline
 
       corrective = {
         "tasks" => [
-          { "title" => "Task A", "description" => "First", "position" => 0, "depends_on" => [1] },
-          { "title" => "Task B", "description" => "Second", "position" => 1, "depends_on" => [0] }
+          { "title" => "Task A", "description" => "First", "position" => 0, "depends_on" => [ 1 ] },
+          { "title" => "Task B", "description" => "Second", "position" => 1, "depends_on" => [ 0 ] }
         ]
       }
 
@@ -555,8 +555,8 @@ module ArnoldPipeline
       corrective = {
         "tasks" => [
           { "title" => "Setup DB", "description" => "Create schema", "position" => 0, "depends_on" => [] },
-          { "title" => "Add models", "description" => "Define models", "position" => 1, "depends_on" => [0] },
-          { "title" => "Add API", "description" => "API endpoints", "position" => 2, "depends_on" => [0, 1] }
+          { "title" => "Add models", "description" => "Define models", "position" => 1, "depends_on" => [ 0 ] },
+          { "title" => "Add API", "description" => "API endpoints", "position" => 2, "depends_on" => [ 0, 1 ] }
         ]
       }
 
@@ -572,8 +572,8 @@ module ArnoldPipeline
       tasks = pipeline_run.tasks.reload.order(:position)
       # Valid deps preserved
       assert_equal [], tasks[0].depends_on
-      assert_equal [0], tasks[1].depends_on
-      assert_equal [0, 1], tasks[2].depends_on
+      assert_equal [ 0 ], tasks[1].depends_on
+      assert_equal [ 0, 1 ], tasks[2].depends_on
     end
 
     private
@@ -593,8 +593,8 @@ module ArnoldPipeline
 
     def sample_tasks
       [
-        { "title" => "Setup database", "description" => "Create schema", "priority" => 0, "labels" => ["database"], "position" => 0, "depends_on" => [] },
-        { "title" => "Create models", "description" => "Define models", "priority" => 0, "labels" => ["backend"], "position" => 1, "depends_on" => [0] }
+        { "title" => "Setup database", "description" => "Create schema", "priority" => 0, "labels" => [ "database" ], "position" => 0, "depends_on" => [] },
+        { "title" => "Create models", "description" => "Define models", "priority" => 0, "labels" => [ "backend" ], "position" => 1, "depends_on" => [ 0 ] }
       ]
     end
 

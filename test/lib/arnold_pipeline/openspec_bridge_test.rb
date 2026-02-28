@@ -212,7 +212,7 @@ module ArnoldPipeline
         spec = stub(content: "## Purpose\nTest.\n\n## Requirements\n### Requirement: Login\nShall.\n\n#### Scenario: S\n- GIVEN x\n- WHEN y\n- THEN z")
         bridge.write_spec!(spec)
 
-        deltas = [{ "operation" => "added", "section" => "Auth", "content" => "### Requirement: New\nShall.\n\n#### Scenario: S\n- GIVEN x\n- WHEN y\n- THEN z" }]
+        deltas = [ { "operation" => "added", "section" => "Auth", "content" => "### Requirement: New\nShall.\n\n#### Scenario: S\n- GIVEN x\n- WHEN y\n- THEN z" } ]
 
         result = bridge.write_delta_and_merge!(change_name: "test", deltas: deltas)
         assert_nil result

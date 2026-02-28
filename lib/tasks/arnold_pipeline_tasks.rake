@@ -10,7 +10,7 @@ namespace :mutant do
   end
 
   desc "Run mutation testing on a specific class"
-  task :class, [:name] do |_t, args|
+  task :class, [ :name ] do |_t, args|
     abort "Usage: rake mutant:class[ArnoldPipeline::ClassName]" unless args[:name]
     sh "bundle exec mutant run --use minitest '#{args[:name]}'"
   end

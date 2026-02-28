@@ -79,7 +79,7 @@ module ArnoldPipeline
       # so we track failures explicitly and compute passing count)
       {
         total: total,
-        passing_count: [passing, 0].max,
+        passing_count: [ passing, 0 ].max,
         failed_names: test_result.failures.map { |f| f[:name] }
       }
     end

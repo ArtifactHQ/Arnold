@@ -17,7 +17,7 @@ module ArnoldPipeline
       end
 
       test "generates spec with content and structured data" do
-        json_data = { "features" => ["auth", "dashboard"], "tech_stack" => { "backend" => "Rails" } }
+        json_data = { "features" => [ "auth", "dashboard" ], "tech_stack" => { "backend" => "Rails" } }
         llm_response = "# App Spec\n\nSome content\n\n```json\n#{JSON.generate(json_data)}\n```"
 
         @llm.expects(:chat).returns(llm_response)

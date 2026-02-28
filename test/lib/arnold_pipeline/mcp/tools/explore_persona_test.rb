@@ -20,12 +20,12 @@ module ArnoldPipeline
                 {
                   "name" => "Dog Owner",
                   "description" => "Books walks for their dogs",
-                  "capabilities" => ["book walks", "track walker", "rate walks"]
+                  "capabilities" => [ "book walks", "track walker", "rate walks" ]
                 },
                 {
                   "name" => "Dog Walker",
                   "description" => "Accepts and fulfills walk requests",
-                  "capabilities" => ["accept jobs", "navigate routes"]
+                  "capabilities" => [ "accept jobs", "navigate routes" ]
                 }
               ],
               "domains" => [

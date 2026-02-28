@@ -10,7 +10,7 @@ module ArnoldPipeline
 
     test "has sensible defaults" do
       assert_includes Configuration::VALID_LLM_PROVIDERS, @config.llm_provider
-      assert_includes ["claude-sonnet-4-6", "gpt-4o"], @config.llm_model
+      assert_includes [ "claude-sonnet-4-6", "gpt-4o" ], @config.llm_model
       assert_equal :github, @config.execution_provider
       assert_equal 3, @config.max_iterations
       assert_nil @config.github_issue_mention
@@ -154,7 +154,7 @@ module ArnoldPipeline
       ArnoldPipeline.configure { |c| c.llm_model = "custom-model" }
       ArnoldPipeline.reset_configuration!
 
-      assert_includes ["claude-sonnet-4-6", "gpt-4o"], ArnoldPipeline.configuration.llm_model
+      assert_includes [ "claude-sonnet-4-6", "gpt-4o" ], ArnoldPipeline.configuration.llm_model
     end
 
     test "validate! raises on invalid polling_interval" do
@@ -391,7 +391,7 @@ module ArnoldPipeline
       @config.github_token = "ghp_test"
       @config.github_repo = "owner/repo"
 
-      [0, -5, "30"].each do |bad|
+      [ 0, -5, "30" ].each do |bad|
         @config.claude_code_max_budget_usd = bad
         error = assert_raises(ConfigurationError, "Expected ConfigurationError for #{bad.inspect}") { @config.validate! }
         assert_match(/claude_code_max_budget_usd must be nil or a positive number/, error.message)
@@ -403,7 +403,7 @@ module ArnoldPipeline
       @config.github_token = "ghp_test"
       @config.github_repo = "owner/repo"
 
-      [nil, 1.0, 5, 0.5].each do |good|
+      [ nil, 1.0, 5, 0.5 ].each do |good|
         @config.claude_code_max_budget_usd = good
         assert @config.validate!, "Expected validate! to pass for #{good.inspect}"
       end
@@ -417,7 +417,7 @@ module ArnoldPipeline
       %i[claude_code_tools claude_code_allowed_tools claude_code_disallowed_tools].each do |attr|
         @config.send(:"#{attr}=", "not_an_array")
         assert_raises(ConfigurationError) { @config.validate! }
-        @config.send(:"#{attr}=", [123])
+        @config.send(:"#{attr}=", [ 123 ])
         assert_raises(ConfigurationError) { @config.validate! }
         @config.send(:"#{attr}=", nil)
       end
@@ -428,8 +428,8 @@ module ArnoldPipeline
       @config.github_token = "ghp_test"
       @config.github_repo = "owner/repo"
 
-      @config.claude_code_tools = ["Bash", "Edit"]
-      @config.claude_code_allowed_tools = ["Bash(git *)"]
+      @config.claude_code_tools = [ "Bash", "Edit" ]
+      @config.claude_code_allowed_tools = [ "Bash(git *)" ]
       @config.claude_code_disallowed_tools = nil
       assert @config.validate!
     end

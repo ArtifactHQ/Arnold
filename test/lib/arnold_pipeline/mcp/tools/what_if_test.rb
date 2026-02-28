@@ -32,17 +32,17 @@ module ArnoldPipeline
           @llm_response = {
             "interpretation" => "Adding group walks would allow multiple dog owners to join a single walking session.",
             "implications" => {
-              "new_domains" => ["Group Coordination"],
+              "new_domains" => [ "Group Coordination" ],
               "affected_domains" => [
                 { "domain" => "Booking", "impact" => "Would need multi-owner booking support" }
               ],
-              "new_personas" => ["Group Organizer"],
+              "new_personas" => [ "Group Organizer" ],
               "affected_personas" => [
                 { "persona" => "Dog Owner", "impact" => "Can now join group sessions" },
                 { "persona" => "Dog Walker", "impact" => "Must manage multiple dogs simultaneously" }
               ],
               "complexity_assessment" => "High — requires coordination, scheduling conflicts, and group payment splitting",
-              "dependencies" => ["Real-time availability matching", "Group payment processing"]
+              "dependencies" => [ "Real-time availability matching", "Group payment processing" ]
             },
             "follow_up_questions" => [
               "What's the maximum group size?",

@@ -34,7 +34,7 @@ module ArnoldPipeline
             model: @model,
             max_tokens: DEFAULT_MAX_TOKENS,
             messages: normalize_messages(messages),
-            tools: [{ name: tool_name, input_schema: schema[:schema] }],
+            tools: [ { name: tool_name, input_schema: schema[:schema] } ],
             tool_choice: { type: "tool", name: tool_name }
           }
           params[:system] = system if system

@@ -30,7 +30,7 @@ module ArnoldPipeline
 
         def async? = false
 
-        def recoverable_errors = [MergeError]
+        def recoverable_errors = [ MergeError ]
 
         def self.validate_configuration!(config)
           path = config.claude_code_repo_path
@@ -124,7 +124,7 @@ module ArnoldPipeline
             comments = if !stored[:success] && parsed[:result]
               body = "Task failed: #{parsed[:result]}"
               body = body[0..3000] + "\n\n(truncated)" if body.length > 3000
-              [{ "source" => "claude_code", "author" => "claude", "body" => body }]
+              [ { "source" => "claude_code", "author" => "claude", "body" => body } ]
             else
               []
             end
@@ -167,7 +167,7 @@ module ArnoldPipeline
               task.update!(
                 status: :failed,
                 result_diff: "[]",
-                result_comments: [{ "source" => "arnold", "author" => "system", "body" => "Merge failed: #{e.message}" }]
+                result_comments: [ { "source" => "arnold", "author" => "system", "body" => "Merge failed: #{e.message}" } ]
               )
             end
           end
@@ -271,7 +271,7 @@ module ArnoldPipeline
           work_items.each { |item| queue << item }
 
           output = Array.new(work_items.size)
-          num_workers = [max_concurrency, work_items.size].min
+          num_workers = [ max_concurrency, work_items.size ].min
 
           workers = num_workers.times.map do
             Thread.new do
@@ -307,7 +307,7 @@ module ArnoldPipeline
             pgroup: true,
             in: "/dev/null",
             out: stdout_w,
-            err: [:child, :out]
+            err: [ :child, :out ]
           )
           stdout_w.close
 
@@ -338,7 +338,7 @@ module ArnoldPipeline
             stdout_r.read
           end
 
-          timed_out ? [output, nil] : [output, status]
+          timed_out ? [ output, nil ] : [ output, status ]
         ensure
           stdout_r&.close unless stdout_r&.closed?
           stdout_w&.close unless stdout_w&.closed?
@@ -353,7 +353,7 @@ module ArnoldPipeline
           loop do
             remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
             break if remaining <= 0
-            break unless IO.select([io], nil, nil, [remaining, 1].min)
+            break unless IO.select([ io ], nil, nil, [ remaining, 1 ].min)
             chunk = io.read_nonblock(65536, exception: false)
             break if chunk.nil? || chunk == :wait_readable
             output << chunk
@@ -421,13 +421,13 @@ module ArnoldPipeline
         def tool_restriction_flags
           flags = []
           if (tools = ArnoldPipeline.configuration.claude_code_tools)
-            flags += ["--tools", Array(tools).join(",")]
+            flags += [ "--tools", Array(tools).join(",") ]
           end
           if (allowed = ArnoldPipeline.configuration.claude_code_allowed_tools)
-            Array(allowed).each { |t| flags += ["--allowedTools", t] }
+            Array(allowed).each { |t| flags += [ "--allowedTools", t ] }
           end
           if (disallowed = ArnoldPipeline.configuration.claude_code_disallowed_tools)
-            Array(disallowed).each { |t| flags += ["--disallowedTools", t] }
+            Array(disallowed).each { |t| flags += [ "--disallowedTools", t ] }
           end
           flags
         end
@@ -439,8 +439,8 @@ module ArnoldPipeline
             "--permission-mode", permission_mode,
             "--append-system-prompt", system_prompt
           ]
-          cmd_parts += ["--max-turns", max_turns.to_s] if max_turns
-          cmd_parts += ["--max-budget-usd", max_budget_usd.to_s] if max_budget_usd
+          cmd_parts += [ "--max-turns", max_turns.to_s ] if max_turns
+          cmd_parts += [ "--max-budget-usd", max_budget_usd.to_s ] if max_budget_usd
           cmd_parts += tool_restriction_flags
           cmd_parts << prompt
           cmd_parts.shelljoin
@@ -717,7 +717,7 @@ module ArnoldPipeline
               # Extract filename from "diff --git a/path b/path"
               match = line.match(%r{diff --git a/.+ b/(.+)})
               current_file = match ? match[1].strip : "unknown"
-              current_patch_lines = [line]
+              current_patch_lines = [ line ]
             elsif current_file
               current_patch_lines << line
             end

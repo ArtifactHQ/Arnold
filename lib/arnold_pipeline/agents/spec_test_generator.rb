@@ -9,13 +9,13 @@ module ArnoldPipeline
         name: "spec_test_generation_result",
         schema: {
           type: "object", additionalProperties: false,
-          required: ["test_files"],
+          required: [ "test_files" ],
           properties: {
             test_files: {
               type: "array",
               items: {
                 type: "object", additionalProperties: false,
-                required: ["path", "content", "requirement_ids"],
+                required: [ "path", "content", "requirement_ids" ],
                 properties: {
                   path: { type: "string" },
                   content: { type: "string" },
@@ -37,7 +37,7 @@ module ArnoldPipeline
         user = Prompts::SpecTestGeneration.user_prompt(spec_content:, test_directory:)
 
         result = chat_json(
-          messages: [{ role: :user, content: user }],
+          messages: [ { role: :user, content: user } ],
           system: system,
           schema: RESPONSE_SCHEMA
         )

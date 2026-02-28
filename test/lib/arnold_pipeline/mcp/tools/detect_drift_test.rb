@@ -20,7 +20,7 @@ module ArnoldPipeline
             description: "Build authentication",
             position: 0,
             status: :completed,
-            labels: ["authentication"],
+            labels: [ "authentication" ],
             result_diff: "+class User < ApplicationRecord\n+end"
           )
 
@@ -30,7 +30,7 @@ module ArnoldPipeline
             description: "Create todo model",
             position: 1,
             status: :completed,
-            labels: ["todos"],
+            labels: [ "todos" ],
             result_diff: nil
           )
 
@@ -167,7 +167,7 @@ module ArnoldPipeline
             title: "Other task",
             position: 0,
             status: :completed,
-            labels: ["other"],
+            labels: [ "other" ],
             result_diff: "+code"
           )
 

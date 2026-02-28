@@ -29,14 +29,14 @@ module ArnoldPipeline
             title: "Setup database schema",
             description: "Create tables for users, tasks, categories",
             tier: 0, position: 0, status: :pending,
-            labels: ["backend", "database"],
+            labels: [ "backend", "database" ],
             depends_on: []
           )
           @t0_models = @run.tasks.create!(
             title: "Create ActiveRecord models",
             description: "Define User, Task, and Category models",
             tier: 0, position: 1, status: :pending,
-            labels: ["backend", "models"],
+            labels: [ "backend", "models" ],
             depends_on: []
           )
 
@@ -45,15 +45,15 @@ module ArnoldPipeline
             title: "Build task API endpoints",
             description: "REST API for task CRUD",
             tier: 1, position: 2, status: :pending,
-            labels: ["backend", "api"],
-            depends_on: [@t0_setup_db.id, @t0_models.id]
+            labels: [ "backend", "api" ],
+            depends_on: [ @t0_setup_db.id, @t0_models.id ]
           )
           @t1_auth = @run.tasks.create!(
             title: "Implement authentication",
             description: "Login and signup flows",
             tier: 1, position: 3, status: :pending,
-            labels: ["backend", "auth"],
-            depends_on: [@t0_models.id]
+            labels: [ "backend", "auth" ],
+            depends_on: [ @t0_models.id ]
           )
 
           # Tier 2 task (depends on tier 1)
@@ -61,8 +61,8 @@ module ArnoldPipeline
             title: "Build task management UI",
             description: "Frontend views for task management",
             tier: 2, position: 4, status: :pending,
-            labels: ["frontend", "tasks"],
-            depends_on: [@t1_api.id, @t1_auth.id]
+            labels: [ "frontend", "tasks" ],
+            depends_on: [ @t1_api.id, @t1_auth.id ]
           )
         end
 
@@ -105,7 +105,7 @@ module ArnoldPipeline
           complete_result1 = call_and_parse("complete_task", {
             "task_id" => @t0_setup_db.id.to_s,
             "summary" => "Created database schema with users, tasks, and categories tables",
-            "files_changed" => ["db/migrate/001_create_users.rb", "db/migrate/002_create_tasks.rb"]
+            "files_changed" => [ "db/migrate/001_create_users.rb", "db/migrate/002_create_tasks.rb" ]
           })
 
           assert_equal "completed", complete_result1["status"]
@@ -117,7 +117,7 @@ module ArnoldPipeline
           complete_result2 = call_and_parse("complete_task", {
             "task_id" => @t0_models.id.to_s,
             "summary" => "Created User, Task, Category models with associations",
-            "files_changed" => ["app/models/user.rb", "app/models/task.rb", "app/models/category.rb"]
+            "files_changed" => [ "app/models/user.rb", "app/models/task.rb", "app/models/category.rb" ]
           })
 
           assert_equal "completed", complete_result2["status"]
@@ -132,7 +132,7 @@ module ArnoldPipeline
           })
 
           assert_equal 0, validate_result["tier"]
-          assert_includes ["pass", "conditional"], validate_result["verdict"],
+          assert_includes [ "pass", "conditional" ], validate_result["verdict"],
             "Tier 0 should pass or be conditional (all tasks completed)"
 
           # Next tier info should be populated
@@ -156,7 +156,7 @@ module ArnoldPipeline
           call_and_parse("complete_task", {
             "task_id" => @t0_setup_db.id.to_s,
             "summary" => "Done",
-            "files_changed" => ["db/schema.rb"]
+            "files_changed" => [ "db/schema.rb" ]
           })
           @t0_setup_db.reload
           assert_equal "completed", @t0_setup_db.status
@@ -177,7 +177,7 @@ module ArnoldPipeline
           result = call_and_parse("complete_task", {
             "task_id" => @t0_setup_db.id.to_s,
             "summary" => "Quickly done",
-            "files_changed" => ["db/schema.rb"]
+            "files_changed" => [ "db/schema.rb" ]
           })
 
           assert_equal "completed", result["status"]
@@ -190,8 +190,8 @@ module ArnoldPipeline
         test "tier validation fails when not all tasks are complete" do
           # Complete only one of two tier 0 tasks
           @t0_setup_db.update!(status: :completed,
-            result_comments: [{ "body" => "Done" }],
-            execution_metadata: { "files_changed" => ["db/schema.rb"] })
+            result_comments: [ { "body" => "Done" } ],
+            execution_metadata: { "files_changed" => [ "db/schema.rb" ] })
 
           validate_result = call_and_parse("validate_tier", {
             "run_id" => @run.id.to_s,
@@ -207,11 +207,11 @@ module ArnoldPipeline
 
         test "tier validation passes when all tasks complete with result data" do
           # Complete all tier 0 tasks with result data
-          [@t0_setup_db, @t0_models].each do |task|
+          [ @t0_setup_db, @t0_models ].each do |task|
             task.update!(
               status: :completed,
-              result_comments: [{ "body" => "Completed successfully" }],
-              execution_metadata: { "files_changed" => ["some_file.rb"] }
+              result_comments: [ { "body" => "Completed successfully" } ],
+              execution_metadata: { "files_changed" => [ "some_file.rb" ] }
             )
           end
 
@@ -227,7 +227,7 @@ module ArnoldPipeline
 
         test "tier validation returns conditional when tasks lack result data" do
           # Complete all tier 0 tasks but without result data
-          [@t0_setup_db, @t0_models].each do |task|
+          [ @t0_setup_db, @t0_models ].each do |task|
             task.update!(status: :completed, result_comments: [], execution_metadata: {})
           end
 
@@ -299,20 +299,20 @@ module ArnoldPipeline
 
         test "tier 1 validation checks cross-tier dependencies" do
           # Complete tier 0
-          [@t0_setup_db, @t0_models].each do |task|
+          [ @t0_setup_db, @t0_models ].each do |task|
             task.update!(
               status: :completed,
-              result_comments: [{ "body" => "Done" }],
-              execution_metadata: { "files_changed" => ["file.rb"] }
+              result_comments: [ { "body" => "Done" } ],
+              execution_metadata: { "files_changed" => [ "file.rb" ] }
             )
           end
 
           # Complete tier 1
-          [@t1_api, @t1_auth].each do |task|
+          [ @t1_api, @t1_auth ].each do |task|
             task.update!(
               status: :completed,
-              result_comments: [{ "body" => "Done" }],
-              execution_metadata: { "files_changed" => ["file.rb"] }
+              result_comments: [ { "body" => "Done" } ],
+              execution_metadata: { "files_changed" => [ "file.rb" ] }
             )
           end
 
@@ -334,11 +334,11 @@ module ArnoldPipeline
           @t0_models.update!(status: :completed)
 
           # Complete tier 1 (hypothetically started without deps)
-          [@t1_api, @t1_auth].each do |task|
+          [ @t1_api, @t1_auth ].each do |task|
             task.update!(
               status: :completed,
-              result_comments: [{ "body" => "Done" }],
-              execution_metadata: { "files_changed" => ["file.rb"] }
+              result_comments: [ { "body" => "Done" } ],
+              execution_metadata: { "files_changed" => [ "file.rb" ] }
             )
           end
 
@@ -384,13 +384,13 @@ module ArnoldPipeline
           call_and_parse("complete_task", {
             "task_id" => @t0_setup_db.id.to_s,
             "summary" => "Created database migrations",
-            "files_changed" => ["db/migrate/001.rb", "db/schema.rb"],
+            "files_changed" => [ "db/migrate/001.rb", "db/schema.rb" ],
             "notes" => "Used Rails generators"
           })
 
           @t0_setup_db.reload
           exec_meta = @t0_setup_db.execution_metadata
-          assert_equal ["db/migrate/001.rb", "db/schema.rb"], exec_meta["files_changed"]
+          assert_equal [ "db/migrate/001.rb", "db/schema.rb" ], exec_meta["files_changed"]
           assert_equal "Created database migrations", exec_meta["completion_summary"]
 
           # Notes should be in result_comments

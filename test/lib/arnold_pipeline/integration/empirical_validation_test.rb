@@ -23,7 +23,7 @@ module ArnoldPipeline
       })
 
       @provider = stub("execution_provider")
-      @provider.stubs(:recoverable_errors).returns([Octokit::Error, Faraday::Error])
+      @provider.stubs(:recoverable_errors).returns([ Octokit::Error, Faraday::Error ])
       @provider.stubs(:async?).returns(true)
       @executor.stubs(:provider).returns(@provider)
 
@@ -79,8 +79,8 @@ module ArnoldPipeline
       config.llm_api_key = "test"
       config.github_token = "test"
       config.github_repo = "owner/repo"
-      config.post_merge_hooks = [{ name: "lint", trigger_paths: ["*.rb"], command: "rubocop" }]
-      config.verification_checks = [{ name: "boot", command: "bin/rails runner 'true'", type: :boot }]
+      config.post_merge_hooks = [ { name: "lint", trigger_paths: [ "*.rb" ], command: "rubocop" } ]
+      config.verification_checks = [ { name: "boot", command: "bin/rails runner 'true'", type: :boot } ]
 
       assert config.validate!
     end
@@ -104,7 +104,7 @@ module ArnoldPipeline
       event = pipeline_run.pipeline_events.create!(
         event_type: :post_merge_hooks,
         stage: "execution",
-        summary: { hook_count: 1, results: [{ name: "lint", success: true }] }
+        summary: { hook_count: 1, results: [ { name: "lint", success: true } ] }
       )
 
       assert event.post_merge_hooks?
@@ -165,7 +165,7 @@ module ArnoldPipeline
       results = {
         all_passed: true,
         summary: "1 passed, 0 failed: boot=OK",
-        checks: [{ name: "boot", type: :boot, success: true, stdout: "", stderr: "" }]
+        checks: [ { name: "boot", type: :boot, success: true, stdout: "", stderr: "" } ]
       }
       prompt = ArnoldPipeline::Prompts::TierGate.user_prompt(
         tier_number: 0,
@@ -192,7 +192,7 @@ module ArnoldPipeline
       results = {
         all_passed: true,
         summary: "1 passed, 0 failed: boot=OK",
-        checks: [{ name: "boot", type: :boot, success: true, stdout: "", stderr: "" }]
+        checks: [ { name: "boot", type: :boot, success: true, stdout: "", stderr: "" } ]
       }
       prompt = ArnoldPipeline::Prompts::TierGate.user_prompt(
         tier_number: 0,
@@ -236,7 +236,7 @@ module ArnoldPipeline
       )
 
       verification_results = { all_passed: true, summary: "ok", checks: [] }
-      @engine.send(:run_tier_gate!, pipeline_run, 0, [task],
+      @engine.send(:run_tier_gate!, pipeline_run, 0, [ task ],
                    acceptance_criteria_summary: "criteria", verification_results: verification_results)
 
       assert_not_nil captured_kwargs
@@ -269,12 +269,12 @@ module ArnoldPipeline
       unverified_criterion = AcceptanceCriterion.new(type: "http", description: "API responds", params: { "method" => "GET", "path" => "/api/health" })
 
       CriteriaChecker.stubs(:call).returns({
-        verified: [verified_criterion],
+        verified: [ verified_criterion ],
         failed: [],
-        unverified: [unverified_criterion]
+        unverified: [ unverified_criterion ]
       })
 
-      result = @engine.send(:run_criteria_check!, pipeline_run, [task])
+      result = @engine.send(:run_criteria_check!, pipeline_run, [ task ])
 
       assert_not_nil result
       assert_includes result, "[PASS] Schema file exists"
@@ -290,7 +290,7 @@ module ArnoldPipeline
         acceptance_criteria: []
       )
 
-      result = @engine.send(:run_criteria_check!, pipeline_run, [task])
+      result = @engine.send(:run_criteria_check!, pipeline_run, [ task ])
       assert_nil result
     end
 
@@ -310,7 +310,7 @@ module ArnoldPipeline
         ]
       )
 
-      result = @engine.send(:run_criteria_check!, pipeline_run, [task])
+      result = @engine.send(:run_criteria_check!, pipeline_run, [ task ])
       assert_nil result
     end
 
@@ -320,7 +320,7 @@ module ArnoldPipeline
       pipeline_run = PipelineRun.create!(nl_input: "Build an app")
       task = pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
 
-      result = @engine.send(:run_post_merge_hooks, [task])
+      result = @engine.send(:run_post_merge_hooks, [ task ])
       assert_equal [], result
     end
 
@@ -330,13 +330,13 @@ module ArnoldPipeline
         c.github_token = "test"
         c.github_repo = "owner/repo"
         c.claude_code_repo_path = nil
-        c.post_merge_hooks = [{ name: "lint", trigger_paths: ["*.rb"], command: "rubocop" }]
+        c.post_merge_hooks = [ { name: "lint", trigger_paths: [ "*.rb" ], command: "rubocop" } ]
       end
 
       pipeline_run = PipelineRun.create!(nl_input: "Build an app")
       task = pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
 
-      result = @engine.send(:run_post_merge_hooks, [task])
+      result = @engine.send(:run_post_merge_hooks, [ task ])
       assert_equal [], result
     end
 
@@ -353,7 +353,7 @@ module ArnoldPipeline
         c.github_token = "test"
         c.github_repo = "owner/repo"
         c.claude_code_repo_path = nil
-        c.verification_checks = [{ name: "boot", command: "bin/rails runner 'true'" }]
+        c.verification_checks = [ { name: "boot", command: "bin/rails runner 'true'" } ]
       end
 
       result = @engine.send(:run_verification_checks)
@@ -368,9 +368,9 @@ module ArnoldPipeline
       unverified = AcceptanceCriterion.new(type: "http", description: "GET /health returns 200", params: {})
 
       result = @engine.send(:format_criteria_summary, {
-        verified: [verified],
-        failed: [failed],
-        unverified: [unverified]
+        verified: [ verified ],
+        failed: [ failed ],
+        unverified: [ unverified ]
       })
 
       assert_includes result, "[PASS] Gemfile exists (file_exists)"

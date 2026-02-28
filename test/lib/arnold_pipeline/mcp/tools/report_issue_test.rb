@@ -24,7 +24,7 @@ module ArnoldPipeline
             position: 0,
             tier: 0,
             status: :completed,
-            labels: ["backend"],
+            labels: [ "backend" ],
             depends_on: []
           )
           @task2 = Task.create!(
@@ -34,8 +34,8 @@ module ArnoldPipeline
             position: 1,
             tier: 1,
             status: :in_progress,
-            labels: ["backend", "authentication"],
-            depends_on: [@task1.id.to_s]
+            labels: [ "backend", "authentication" ],
+            depends_on: [ @task1.id.to_s ]
           )
         end
 
@@ -123,7 +123,7 @@ module ArnoldPipeline
         end
 
         test "call appends to existing result_comments" do
-          @task2.update!(result_comments: [{ "body" => "Previous comment" }])
+          @task2.update!(result_comments: [ { "body" => "Previous comment" } ])
 
           ReportIssue.call({
             "task_id" => @task2.id.to_s,

@@ -18,11 +18,11 @@ module ArnoldPipeline
               status: 200,
               headers: { "Content-Type" => "application/json" },
               body: {
-                choices: [{ message: { role: "assistant", content: "Hello from GPT" } }]
+                choices: [ { message: { role: "assistant", content: "Hello from GPT" } } ]
               }.to_json
             )
 
-          result = @provider.chat(messages: [{ role: :user, content: "Hello" }])
+          result = @provider.chat(messages: [ { role: :user, content: "Hello" } ])
           assert_equal "Hello from GPT", result
         end
 
@@ -36,12 +36,12 @@ module ArnoldPipeline
               status: 200,
               headers: { "Content-Type" => "application/json" },
               body: {
-                choices: [{ message: { role: "assistant", content: "OK" } }]
+                choices: [ { message: { role: "assistant", content: "OK" } } ]
               }.to_json
             )
 
           result = @provider.chat(
-            messages: [{ role: :user, content: "Hi" }],
+            messages: [ { role: :user, content: "Hi" } ],
             system: "You are helpful"
           )
           assert_equal "OK", result
@@ -52,10 +52,10 @@ module ArnoldPipeline
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
-              body: { choices: [{ message: { role: "assistant", content: nil } }] }.to_json
+              body: { choices: [ { message: { role: "assistant", content: nil } } ] }.to_json
             )
 
-          result = @provider.chat(messages: [{ role: :user, content: "Hi" }])
+          result = @provider.chat(messages: [ { role: :user, content: "Hi" } ])
           assert_equal "", result
         end
 
@@ -82,7 +82,7 @@ module ArnoldPipeline
             )
 
           assert_raises(Faraday::BadRequestError) do
-            provider.chat(messages: [{ role: :user, content: "Hi" }])
+            provider.chat(messages: [ { role: :user, content: "Hi" } ])
           end
 
           assert_match(/OpenAI API 400: invalid request/, log_output.string)
@@ -94,12 +94,12 @@ module ArnoldPipeline
               status: 200,
               headers: { "Content-Type" => "application/json" },
               body: {
-                choices: [{ message: { role: "assistant", content: "Truncated..." }, finish_reason: "length" }]
+                choices: [ { message: { role: "assistant", content: "Truncated..." }, finish_reason: "length" } ]
               }.to_json
             )
 
           error = assert_raises(ArnoldPipeline::Error) do
-            @provider.chat(messages: [{ role: :user, content: "Generate a long spec" }])
+            @provider.chat(messages: [ { role: :user, content: "Generate a long spec" } ])
           end
           assert_match(/Response truncated/, error.message)
           assert_match(/finish_reason: length/, error.message)
@@ -121,12 +121,12 @@ module ArnoldPipeline
               status: 200,
               headers: { "Content-Type" => "application/json" },
               body: {
-                choices: [{ message: { role: "assistant", content: '{"key": "value"}' } }]
+                choices: [ { message: { role: "assistant", content: '{"key": "value"}' } } ]
               }.to_json
             )
 
           result = @provider.chat_json(
-            messages: [{ role: :user, content: "Hello" }],
+            messages: [ { role: :user, content: "Hello" } ],
             schema: schema
           )
           assert_instance_of Hash, result
@@ -141,12 +141,12 @@ module ArnoldPipeline
               status: 200,
               headers: { "Content-Type" => "application/json" },
               body: {
-                choices: [{ message: { role: "assistant", content: nil } }]
+                choices: [ { message: { role: "assistant", content: nil } } ]
               }.to_json
             )
 
           error = assert_raises(ArnoldPipeline::Error) do
-            @provider.chat_json(messages: [{ role: :user, content: "Hi" }], schema: schema)
+            @provider.chat_json(messages: [ { role: :user, content: "Hi" } ], schema: schema)
           end
           assert_match(/No content in structured output/, error.message)
         end

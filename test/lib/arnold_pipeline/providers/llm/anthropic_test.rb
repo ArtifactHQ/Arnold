@@ -18,12 +18,12 @@ module ArnoldPipeline
               status: 200,
               headers: { "Content-Type" => "application/json" },
               body: {
-                content: [{ type: "text", text: "Hello from Claude" }],
+                content: [ { type: "text", text: "Hello from Claude" } ],
                 role: "assistant"
               }.to_json
             )
 
-          result = @provider.chat(messages: [{ role: :user, content: "Hello" }])
+          result = @provider.chat(messages: [ { role: :user, content: "Hello" } ])
           assert_equal "Hello from Claude", result
         end
 
@@ -33,11 +33,11 @@ module ArnoldPipeline
             .to_return(
               status: 200,
               headers: { "Content-Type" => "application/json" },
-              body: { content: [{ type: "text", text: "OK" }] }.to_json
+              body: { content: [ { type: "text", text: "OK" } ] }.to_json
             )
 
           result = @provider.chat(
-            messages: [{ role: :user, content: "Hi" }],
+            messages: [ { role: :user, content: "Hi" } ],
             system: "You are helpful"
           )
           assert_equal "OK", result
@@ -51,7 +51,7 @@ module ArnoldPipeline
               body: { content: [] }.to_json
             )
 
-          result = @provider.chat(messages: [{ role: :user, content: "Hi" }])
+          result = @provider.chat(messages: [ { role: :user, content: "Hi" } ])
           assert_equal "", result
         end
 
@@ -68,7 +68,7 @@ module ArnoldPipeline
             )
 
           assert_raises(Faraday::BadRequestError) do
-            provider.chat(messages: [{ role: :user, content: "Hi" }])
+            provider.chat(messages: [ { role: :user, content: "Hi" } ])
           end
 
           assert_match(/Anthropic API 400: prompt is too long/, log_output.string)
@@ -97,7 +97,7 @@ module ArnoldPipeline
             )
 
           assert_raises(Faraday::ClientError) do
-            provider.chat(messages: [{ role: :user, content: "Hi" }])
+            provider.chat(messages: [ { role: :user, content: "Hi" } ])
           end
 
           assert_match(/Anthropic API 429: rate limit exceeded/, log_output.string)
@@ -109,14 +109,14 @@ module ArnoldPipeline
               status: 200,
               headers: { "Content-Type" => "application/json" },
               body: {
-                content: [{ type: "text", text: "Truncated content..." }],
+                content: [ { type: "text", text: "Truncated content..." } ],
                 stop_reason: "max_tokens",
                 usage: { output_tokens: 16_384 }
               }.to_json
             )
 
           error = assert_raises(ArnoldPipeline::Error) do
-            @provider.chat(messages: [{ role: :user, content: "Generate a long spec" }])
+            @provider.chat(messages: [ { role: :user, content: "Generate a long spec" } ])
           end
           assert_match(/Response truncated/, error.message)
           assert_match(/16384/, error.message)
@@ -137,13 +137,13 @@ module ArnoldPipeline
               status: 200,
               headers: { "Content-Type" => "application/json" },
               body: {
-                content: [{ type: "tool_use", id: "toolu_123", name: "test_tool", input: { "key" => "value" } }],
+                content: [ { type: "tool_use", id: "toolu_123", name: "test_tool", input: { "key" => "value" } } ],
                 role: "assistant"
               }.to_json
             )
 
           result = @provider.chat_json(
-            messages: [{ role: :user, content: "Hello" }],
+            messages: [ { role: :user, content: "Hello" } ],
             schema: schema
           )
           assert_instance_of Hash, result
@@ -158,13 +158,13 @@ module ArnoldPipeline
               status: 200,
               headers: { "Content-Type" => "application/json" },
               body: {
-                content: [{ type: "text", text: "No tool use here" }],
+                content: [ { type: "text", text: "No tool use here" } ],
                 role: "assistant"
               }.to_json
             )
 
           error = assert_raises(ArnoldPipeline::Error) do
-            @provider.chat_json(messages: [{ role: :user, content: "Hi" }], schema: schema)
+            @provider.chat_json(messages: [ { role: :user, content: "Hi" } ], schema: schema)
           end
           assert_match(/No tool_use block/, error.message)
         end

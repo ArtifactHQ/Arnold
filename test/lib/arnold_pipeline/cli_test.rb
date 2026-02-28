@@ -9,7 +9,7 @@ module ArnoldPipeline
       PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
       PipelineRun.create!(nl_input: "Build an API", status: :pending)
 
-      output = capture_output { Cli.start(["list"]) }
+      output = capture_output { Cli.start([ "list" ]) }
 
       assert_match(/Pipeline Runs:/, output)
       assert_match(/Build a todo app/, output)
@@ -17,7 +17,7 @@ module ArnoldPipeline
     end
 
     test "list shows message when no runs" do
-      output = capture_output { Cli.start(["list"]) }
+      output = capture_output { Cli.start([ "list" ]) }
       assert_match(/No pipeline runs found/, output)
     end
 
@@ -26,7 +26,7 @@ module ArnoldPipeline
       run_record.create_specification!(content: "# Spec", version: 1)
       run_record.iterations.create!(number: 1, decision: "done", confidence: 95)
 
-      output = capture_output { Cli.start(["status", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "status", run_record.id.to_s ]) }
 
       assert_match(/Pipeline Run ##{run_record.id}/, output)
       assert_match(/completed/, output)
@@ -36,7 +36,7 @@ module ArnoldPipeline
 
     test "status with non-existent ID exits with error" do
       assert_raises(SystemExit) do
-        capture_output_and_errors { Cli.start(["status", "99999"]) }
+        capture_output_and_errors { Cli.start([ "status", "99999" ]) }
       end
     end
 
@@ -44,7 +44,7 @@ module ArnoldPipeline
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
       run_record.create_specification!(content: "# Todo App Spec\n\nFeatures here.", version: 2)
 
-      output = capture_output { Cli.start(["spec", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "spec", run_record.id.to_s ]) }
 
       assert_match(/# Todo App Spec/, output)
       assert_match(/Features here/, output)
@@ -54,14 +54,14 @@ module ArnoldPipeline
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
       run_record.create_specification!(
         content: "# Spec",
-        structured_data: { "features" => ["auth", "todos"] },
+        structured_data: { "features" => [ "auth", "todos" ] },
         version: 1
       )
 
-      output = capture_output { Cli.start(["spec", run_record.id.to_s, "--json"]) }
+      output = capture_output { Cli.start([ "spec", run_record.id.to_s, "--json" ]) }
 
       parsed = JSON.parse(output)
-      assert_equal ["auth", "todos"], parsed["features"]
+      assert_equal [ "auth", "todos" ], parsed["features"]
     end
 
     test "spec writes to file with --output flag" do
@@ -74,7 +74,7 @@ module ArnoldPipeline
       original_stderr = $stderr
       $stderr = StringIO.new
       begin
-        capture_output { Cli.start(["spec", run_record.id.to_s, "--output", outfile]) }
+        capture_output { Cli.start([ "spec", run_record.id.to_s, "--output", outfile ]) }
         stderr_output = $stderr.string
       ensure
         $stderr = original_stderr
@@ -88,7 +88,7 @@ module ArnoldPipeline
 
     test "spec with non-existent ID exits with error" do
       assert_raises(SystemExit) do
-        capture_output_and_errors { Cli.start(["spec", "99999"]) }
+        capture_output_and_errors { Cli.start([ "spec", "99999" ]) }
       end
     end
 
@@ -96,12 +96,12 @@ module ArnoldPipeline
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :pending)
 
       assert_raises(SystemExit) do
-        capture_output_and_errors { Cli.start(["spec", run_record.id.to_s]) }
+        capture_output_and_errors { Cli.start([ "spec", run_record.id.to_s ]) }
       end
     end
 
     test "version shows version string" do
-      output = capture_output { Cli.start(["version"]) }
+      output = capture_output { Cli.start([ "version" ]) }
       assert_match(/arnold_pipeline #{ArnoldPipeline::VERSION}/, output)
     end
 
@@ -116,12 +116,12 @@ module ArnoldPipeline
     end
 
     test "--version flag shows version string" do
-      output = capture_output { Cli.start(["--version"]) }
+      output = capture_output { Cli.start([ "--version" ]) }
       assert_match(/arnold_pipeline #{ArnoldPipeline::VERSION}/, output)
     end
 
     test "-v flag shows version string" do
-      output = capture_output { Cli.start(["-v"]) }
+      output = capture_output { Cli.start([ "-v" ]) }
       assert_match(/arnold_pipeline #{ArnoldPipeline::VERSION}/, output)
     end
 
@@ -133,7 +133,7 @@ module ArnoldPipeline
 
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
 
-      output = capture_output { Cli.start(["run", "Build a todo app"]) }
+      output = capture_output { Cli.start([ "run", "Build a todo app" ]) }
       assert_match(/Starting pipeline for: Build a todo app/, output)
       assert_match(/Pipeline completed!/, output)
       assert_match(/Run ID: #{mock_run.id}/, output)
@@ -146,13 +146,13 @@ module ArnoldPipeline
 
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
 
-      output = capture_output { Cli.start(["run", "Build an app", "--stop-after", "spec"]) }
+      output = capture_output { Cli.start([ "run", "Build an app", "--stop-after", "spec" ]) }
       assert_match(/Starting pipeline/, output)
     end
 
     test "run --stop-after with invalid value exits with error" do
       assert_raises(SystemExit) do
-        capture_output_and_errors { Cli.start(["run", "test", "--stop-after", "invalid"]) }
+        capture_output_and_errors { Cli.start([ "run", "test", "--stop-after", "invalid" ]) }
       end
     end
 
@@ -163,7 +163,7 @@ module ArnoldPipeline
 
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
 
-      output = capture_output { Cli.start(["resume", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "resume", run_record.id.to_s ]) }
       assert_match(/Resuming pipeline run/, output)
     end
 
@@ -174,13 +174,13 @@ module ArnoldPipeline
 
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
 
-      output = capture_output { Cli.start(["resume", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "resume", run_record.id.to_s ]) }
       assert_match(/Resuming pipeline run/, output)
     end
 
     test "resume with non-existent ID exits with error" do
       assert_raises(SystemExit) do
-        capture_output_and_errors { Cli.start(["resume", "99999"]) }
+        capture_output_and_errors { Cli.start([ "resume", "99999" ]) }
       end
     end
 
@@ -188,7 +188,7 @@ module ArnoldPipeline
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
 
       assert_raises(SystemExit) do
-        capture_output_and_errors { Cli.start(["resume", run_record.id.to_s]) }
+        capture_output_and_errors { Cli.start([ "resume", run_record.id.to_s ]) }
       end
     end
 
@@ -199,19 +199,19 @@ module ArnoldPipeline
 
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
 
-      output = capture_output { Cli.start(["resume", run_record.id.to_s, "--stop-after", "tasks"]) }
+      output = capture_output { Cli.start([ "resume", run_record.id.to_s, "--stop-after", "tasks" ]) }
       assert_match(/Resuming pipeline run/, output)
     end
 
     test "run shows friendly message for ConfigurationError" do
       ArnoldPipeline::Orchestrator.stubs(:new).raises(ArnoldPipeline::ConfigurationError, "LLM API key is required")
 
-      stderr_output = capture_stderr_through_exit { Cli.start(["run", "Build an app"]) }
+      stderr_output = capture_stderr_through_exit { Cli.start([ "run", "Build an app" ]) }
       assert_match(/Configuration error:.*LLM API key is required/, stderr_output)
     end
 
     test "run shows friendly message for missing config file" do
-      stderr_output = capture_stderr_through_exit { Cli.start(["run", "Build an app", "--config", "/nonexistent/config.yml"]) }
+      stderr_output = capture_stderr_through_exit { Cli.start([ "run", "Build an app", "--config", "/nonexistent/config.yml" ]) }
       assert_match(/File not found/, stderr_output)
     end
 
@@ -219,7 +219,7 @@ module ArnoldPipeline
       bad_yaml = File.join(Dir.tmpdir, "arnold_bad_yaml_#{SecureRandom.hex(4)}.yml")
       File.write(bad_yaml, "invalid: yaml: [broken")
 
-      stderr_output = capture_stderr_through_exit { Cli.start(["run", "Build an app", "--config", bad_yaml]) }
+      stderr_output = capture_stderr_through_exit { Cli.start([ "run", "Build an app", "--config", bad_yaml ]) }
       assert_match(/Invalid YAML in config file/, stderr_output)
     ensure
       File.delete(bad_yaml) if bad_yaml && File.exist?(bad_yaml)
@@ -228,14 +228,14 @@ module ArnoldPipeline
     test "run with unexpected error shows clean message" do
       ArnoldPipeline::Orchestrator.stubs(:new).raises(RuntimeError, "something went wrong")
 
-      stderr_output = capture_stderr_through_exit { Cli.start(["run", "Build an app"]) }
+      stderr_output = capture_stderr_through_exit { Cli.start([ "run", "Build an app" ]) }
       assert_match(/Error:.*something went wrong/, stderr_output)
     end
 
     test "run with unexpected error and --verbose shows backtrace" do
       ArnoldPipeline::Orchestrator.stubs(:new).raises(RuntimeError, "something went wrong")
 
-      stderr_output = capture_stderr_through_exit { Cli.start(["run", "Build an app", "--verbose"]) }
+      stderr_output = capture_stderr_through_exit { Cli.start([ "run", "Build an app", "--verbose" ]) }
       assert_match(/Error:.*something went wrong/, stderr_output)
       assert_match(/\.rb/, stderr_output) # backtrace includes file references
     end
@@ -244,7 +244,7 @@ module ArnoldPipeline
       run_record = PipelineRun.create!(nl_input: "Build an app", status: :paused)
       ArnoldPipeline::Orchestrator.stubs(:new).raises(ArnoldPipeline::ConfigurationError, "GitHub token is required")
 
-      stderr_output = capture_stderr_through_exit { Cli.start(["resume", run_record.id.to_s]) }
+      stderr_output = capture_stderr_through_exit { Cli.start([ "resume", run_record.id.to_s ]) }
       assert_match(/Configuration error:.*GitHub token is required/, stderr_output)
     end
 
@@ -252,7 +252,7 @@ module ArnoldPipeline
       PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
       PipelineRun.create!(nl_input: "Build an API", status: :pending)
 
-      output = capture_output { Cli.start(["list", "--json"]) }
+      output = capture_output { Cli.start([ "list", "--json" ]) }
 
       parsed = JSON.parse(output)
       assert_kind_of Array, parsed
@@ -264,7 +264,7 @@ module ArnoldPipeline
     end
 
     test "list --json with no runs outputs empty array" do
-      output = capture_output { Cli.start(["list", "--json"]) }
+      output = capture_output { Cli.start([ "list", "--json" ]) }
 
       parsed = JSON.parse(output)
       assert_equal [], parsed
@@ -274,7 +274,7 @@ module ArnoldPipeline
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
       run_record.create_specification!(content: "# Spec", version: 2)
 
-      output = capture_output { Cli.start(["status", run_record.id.to_s, "--json"]) }
+      output = capture_output { Cli.start([ "status", run_record.id.to_s, "--json" ]) }
 
       parsed = JSON.parse(output)
       assert_equal run_record.id, parsed["id"]
@@ -288,12 +288,12 @@ module ArnoldPipeline
     end
 
     test "run --help shows usage without crashing" do
-      output = capture_output { Cli.start(["run", "--help"]) }
+      output = capture_output { Cli.start([ "run", "--help" ]) }
       assert_match(/DESCRIPTION/, output)
     end
 
     test "resume --help shows usage without crashing" do
-      output = capture_output { Cli.start(["resume", "--help"]) }
+      output = capture_output { Cli.start([ "resume", "--help" ]) }
       assert_match(/ID/, output)
     end
 
@@ -311,7 +311,7 @@ module ArnoldPipeline
       require "arnold_pipeline/cli/setup_wizard"
       ArnoldPipeline::CliModule::SetupWizard.stubs(:api_key_available?).returns(true)
 
-      output = capture_output { Cli.start(["run", "--dry-run", "Build a recipe app"]) }
+      output = capture_output { Cli.start([ "run", "--dry-run", "Build a recipe app" ]) }
 
       assert_match(/Arnold Preview/, output)
       assert_match(/# Recipe App Spec/, output)
@@ -334,7 +334,7 @@ module ArnoldPipeline
       require "arnold_pipeline/cli/setup_wizard"
       ArnoldPipeline::CliModule::SetupWizard.stubs(:api_key_available?).returns(true)
 
-      output = capture_output { Cli.start(["run", "--preview", "--execution-provider", "claude_code", "Build an app"]) }
+      output = capture_output { Cli.start([ "run", "--preview", "--execution-provider", "claude_code", "Build an app" ]) }
       assert_equal :null, ArnoldPipeline.configuration.execution_provider
       assert_match(/Arnold Preview/, output)
     ensure
@@ -348,7 +348,7 @@ module ArnoldPipeline
 
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
 
-      capture_output { Cli.start(["resume", run_record.id.to_s, "--execution-provider", "claude_code", "--repo", "owner/repo"]) }
+      capture_output { Cli.start([ "resume", run_record.id.to_s, "--execution-provider", "claude_code", "--repo", "owner/repo" ]) }
       assert_equal :claude_code, ArnoldPipeline.configuration.execution_provider
       assert_equal "owner/repo", ArnoldPipeline.configuration.github_repo
     ensure
@@ -357,27 +357,27 @@ module ArnoldPipeline
 
     test "run with empty description exits with error" do
       assert_raises(SystemExit) do
-        capture_output_and_errors { Cli.start(["run", ""]) }
+        capture_output_and_errors { Cli.start([ "run", "" ]) }
       end
     end
 
     test "run with whitespace-only description exits with error" do
       assert_raises(SystemExit) do
-        capture_output_and_errors { Cli.start(["run", "   "]) }
+        capture_output_and_errors { Cli.start([ "run", "   " ]) }
       end
     end
 
     test "run with empty description shows error message on stderr" do
-      stderr_output = capture_stderr_through_exit { Cli.start(["run", ""]) }
+      stderr_output = capture_stderr_through_exit { Cli.start([ "run", "" ]) }
       assert_match(/Description cannot be empty/, stderr_output)
     end
 
     test "tasks outputs task list" do
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
-      run_record.tasks.create!(title: "Setup project", description: "Initialize the project", tier: 0, position: 0, priority: 1, status: :pending, labels: ["setup"], depends_on: [])
-      run_record.tasks.create!(title: "Add models", description: "Create data models", tier: 1, position: 1, priority: 2, status: :pending, labels: ["backend"], depends_on: [0])
+      run_record.tasks.create!(title: "Setup project", description: "Initialize the project", tier: 0, position: 0, priority: 1, status: :pending, labels: [ "setup" ], depends_on: [])
+      run_record.tasks.create!(title: "Add models", description: "Create data models", tier: 1, position: 1, priority: 2, status: :pending, labels: [ "backend" ], depends_on: [ 0 ])
 
-      output = capture_output { Cli.start(["tasks", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "tasks", run_record.id.to_s ]) }
 
       assert_match(/\[0\] Setup project/, output)
       assert_match(/\[1\] Add models/, output)
@@ -390,10 +390,10 @@ module ArnoldPipeline
 
     test "tasks --json outputs valid JSON array" do
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
-      run_record.tasks.create!(title: "Setup project", description: "Initialize", tier: 0, position: 0, priority: 1, status: :pending, labels: ["setup"], depends_on: [])
-      run_record.tasks.create!(title: "Add models", description: "Models", tier: 1, position: 1, priority: 2, status: :pending, labels: [], depends_on: [0])
+      run_record.tasks.create!(title: "Setup project", description: "Initialize", tier: 0, position: 0, priority: 1, status: :pending, labels: [ "setup" ], depends_on: [])
+      run_record.tasks.create!(title: "Add models", description: "Models", tier: 1, position: 1, priority: 2, status: :pending, labels: [], depends_on: [ 0 ])
 
-      output = capture_output { Cli.start(["tasks", run_record.id.to_s, "--json"]) }
+      output = capture_output { Cli.start([ "tasks", run_record.id.to_s, "--json" ]) }
 
       parsed = JSON.parse(output)
       assert_kind_of Array, parsed
@@ -403,7 +403,7 @@ module ArnoldPipeline
       assert_equal 0, first["tier"]
       assert_equal 0, first["position"]
       assert_equal 1, first["priority"]
-      assert_equal ["setup"], first["labels"]
+      assert_equal [ "setup" ], first["labels"]
       assert first.key?("depends_on")
       assert first.key?("external_id")
       assert first.key?("external_url")
@@ -419,7 +419,7 @@ module ArnoldPipeline
       original_stderr = $stderr
       $stderr = StringIO.new
       begin
-        capture_output { Cli.start(["tasks", run_record.id.to_s, "--output", outfile]) }
+        capture_output { Cli.start([ "tasks", run_record.id.to_s, "--output", outfile ]) }
         stderr_output = $stderr.string
       ensure
         $stderr = original_stderr
@@ -433,7 +433,7 @@ module ArnoldPipeline
 
     test "tasks with non-existent ID exits with error" do
       assert_raises(SystemExit) do
-        capture_output_and_errors { Cli.start(["tasks", "99999"]) }
+        capture_output_and_errors { Cli.start([ "tasks", "99999" ]) }
       end
     end
 
@@ -441,7 +441,7 @@ module ArnoldPipeline
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :pending)
 
       assert_raises(SystemExit) do
-        capture_output_and_errors { Cli.start(["tasks", run_record.id.to_s]) }
+        capture_output_and_errors { Cli.start([ "tasks", run_record.id.to_s ]) }
       end
     end
 
@@ -449,7 +449,7 @@ module ArnoldPipeline
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
       run_record.create_specification!(content: "# Spec v1", version: 1)
 
-      output = capture_output { Cli.start(["spec", run_record.id.to_s, "--history"]) }
+      output = capture_output { Cli.start([ "spec", run_record.id.to_s, "--history" ]) }
 
       assert_match(/Spec Lineage for Run ##{run_record.id}/, output)
       assert_match(/##{run_record.id}.*\[completed\].*v1/, output)
@@ -469,10 +469,10 @@ module ArnoldPipeline
       spec2 = child.create_specification!(content: "# Spec v2", version: 2)
       spec2.spec_revisions.create!(
         version: 2, content: "# Spec v2", change_source: "user_iterate",
-        delta_summary: ["ADDED: Auth > Login"]
+        delta_summary: [ "ADDED: Auth > Login" ]
       )
 
-      output = capture_output { Cli.start(["spec", child.id.to_s, "--history"]) }
+      output = capture_output { Cli.start([ "spec", child.id.to_s, "--history" ]) }
 
       assert_match(/Spec Lineage for Run ##{child.id}/, output)
       assert_match(/##{root.id}.*\[completed\].*v1/, output)
@@ -500,7 +500,7 @@ module ArnoldPipeline
       )
       child2.create_specification!(content: "# v3", version: 3)
 
-      output = capture_output { Cli.start(["spec", child2.id.to_s, "--history"]) }
+      output = capture_output { Cli.start([ "spec", child2.id.to_s, "--history" ]) }
 
       assert_match(/Spec Lineage for Run ##{child2.id}/, output)
       assert_match(/##{root.id}/, output)
@@ -526,7 +526,7 @@ module ArnoldPipeline
       )
       fork_b.create_specification!(content: "# v2b", version: 2)
 
-      output = capture_output { Cli.start(["spec", fork_a.id.to_s, "--history"]) }
+      output = capture_output { Cli.start([ "spec", fork_a.id.to_s, "--history" ]) }
 
       assert_match(/##{root.id}/, output)
       assert_match(/##{fork_a.id}.*◄ current/, output)
@@ -546,7 +546,7 @@ module ArnoldPipeline
       child.create_specification!(content: "# v2", version: 2)
 
       # Request history for the root — root should be marked current, not child
-      output = capture_output { Cli.start(["spec", root.id.to_s, "--history"]) }
+      output = capture_output { Cli.start([ "spec", root.id.to_s, "--history" ]) }
 
       assert_match(/##{root.id}.*◄ current/, output)
       assert_no_match(/##{child.id}.*◄ current/, output)
@@ -563,7 +563,7 @@ module ArnoldPipeline
       )
       child.create_specification!(content: "# v2", version: 2)
 
-      output = capture_output { Cli.start(["spec", child.id.to_s, "--history"]) }
+      output = capture_output { Cli.start([ "spec", child.id.to_s, "--history" ]) }
 
       assert_match(/#{"A" * 70}\.\.\./, output)
       assert_no_match(/#{"A" * 100}/, output)
@@ -575,7 +575,7 @@ module ArnoldPipeline
       spec.spec_revisions.create!(version: 1, content: "# Spec version one content")
       spec.spec_revisions.create!(version: 2, content: "# Spec version two content")
 
-      output = capture_output { Cli.start(["spec", run_record.id.to_s, "--version", "1"]) }
+      output = capture_output { Cli.start([ "spec", run_record.id.to_s, "--version", "1" ]) }
 
       assert_match(/# Spec version one content/, output)
       assert_no_match(/version two/, output)
@@ -586,7 +586,7 @@ module ArnoldPipeline
       run_record.create_specification!(content: "# Spec", version: 1)
 
       assert_raises(SystemExit) do
-        capture_output_and_errors { Cli.start(["spec", run_record.id.to_s, "--version", "99"]) }
+        capture_output_and_errors { Cli.start([ "spec", run_record.id.to_s, "--version", "99" ]) }
       end
     end
 
@@ -603,7 +603,7 @@ module ArnoldPipeline
         summary: { "spec_version" => 1, "content_length" => 4521 }, duration_ms: 3412.5
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s ]) }
 
       assert_match(/Pipeline Run ##{run_record.id}/, output)
       assert_match(/library.*persona=Software Architect/, output)
@@ -617,7 +617,7 @@ module ArnoldPipeline
       run_record.pipeline_events.create!(event_type: :tasks_broken, stage: "task_breakdown", summary: {})
       run_record.pipeline_events.create!(event_type: :analysis_completed, stage: "analysis", summary: {})
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s, "--stage", "analysis"]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s, "--stage", "analysis" ]) }
 
       assert_match(/Pipeline Run ##{run_record.id}/, output)
       assert_match(/ANALYSIS/, output)
@@ -632,7 +632,7 @@ module ArnoldPipeline
         summary: { "content_length" => 100 }, duration_ms: 500.0
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s, "--json"]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s, "--json" ]) }
 
       parsed = JSON.parse(output)
       assert_kind_of Array, parsed
@@ -649,7 +649,7 @@ module ArnoldPipeline
         summary: { total_iterations: 1, total_tasks: 5 }
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s, "--json"]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s, "--json" ]) }
       data = JSON.parse(output)
 
       assert_equal 1, data.size
@@ -664,7 +664,7 @@ module ArnoldPipeline
         payload: { "full_response" => "test data" }
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s, "--verbose"]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s, "--verbose" ]) }
 
       assert_match(/Payload:/, output)
       assert_match(/full_response/, output)
@@ -678,7 +678,7 @@ module ArnoldPipeline
         payload: { "response" => "data" }
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s, "--json", "--verbose"]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s, "--json", "--verbose" ]) }
 
       parsed = JSON.parse(output)
       assert_equal({ "response" => "data" }, parsed.first["payload"])
@@ -686,14 +686,14 @@ module ArnoldPipeline
 
     test "log with non-existent ID exits with error" do
       assert_raises(SystemExit) do
-        capture_output_and_errors { Cli.start(["log", "99999"]) }
+        capture_output_and_errors { Cli.start([ "log", "99999" ]) }
       end
     end
 
     test "log with no events shows message" do
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s ]) }
 
       assert_match(/No events found/, output)
     end
@@ -705,7 +705,7 @@ module ArnoldPipeline
         summary: { "total_iterations" => 2, "total_tasks" => 10 }
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s ]) }
 
       assert_match(/2 iterations, 10 tasks/, output)
     end
@@ -724,7 +724,7 @@ module ArnoldPipeline
         }
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s ]) }
 
       assert_match(/criteria/, output)
       assert_match(/1 failed/, output)
@@ -744,7 +744,7 @@ module ArnoldPipeline
         }
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s ]) }
 
       assert_match(/criteria/, output)
       assert_match(/unmet/, output)
@@ -764,7 +764,7 @@ module ArnoldPipeline
         }
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s, "--verbose"]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s, "--verbose" ]) }
 
       assert_match(/PASS: Gemfile exists \(file_exists\)/, output)
       assert_match(/FAIL: Health check route \(route_exists\)/, output)
@@ -776,7 +776,7 @@ module ArnoldPipeline
         event_type: :tier_gate_evaluated, stage: "tier_gate",
         summary: {
           "pass" => false,
-          "issues" => ["Missing route"],
+          "issues" => [ "Missing route" ],
           "corrective_task_count" => 1,
           "corrective_tasks" => [
             { "title" => "Add route", "description" => "Add GET /up to routes.rb" }
@@ -785,7 +785,7 @@ module ArnoldPipeline
         duration_ms: 5000.0
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s, "--verbose"]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s, "--verbose" ]) }
 
       assert_match(/gate/, output)
       assert_match(/FAIL/, output)
@@ -798,7 +798,7 @@ module ArnoldPipeline
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
       task = run_record.tasks.create!(title: "Setup project", tier: 0, position: 0, priority: 1, status: :superseded, labels: [], depends_on: [])
 
-      output = capture_output { Cli.start(["tasks", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "tasks", run_record.id.to_s ]) }
 
       assert_match(/\[0\] Setup project \[superseded\]/, output)
       assert_match(/Status: superseded/, output)
@@ -808,7 +808,7 @@ module ArnoldPipeline
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
       run_record.tasks.create!(title: "Setup project", tier: 0, position: 0, priority: 1, status: :completed, labels: [], depends_on: [])
 
-      output = capture_output { Cli.start(["tasks", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "tasks", run_record.id.to_s ]) }
 
       assert_match(/\[0\] Setup project\n/, output)
       assert_no_match(/\[superseded\]/, output)
@@ -835,7 +835,7 @@ module ArnoldPipeline
       # Mark task as superseded to match what iterate_spec! would do
       run_record.tasks.update_all(status: :superseded)
 
-      output = capture_output { Cli.start(["iterate", run_record.id.to_s, "Add auth"]) }
+      output = capture_output { Cli.start([ "iterate", run_record.id.to_s, "Add auth" ]) }
 
       assert_match(/Iterating specification for pipeline run/, output)
       assert_match(/Specification updated to v2/, output)
@@ -847,7 +847,7 @@ module ArnoldPipeline
 
     test "iterate with non-existent ID exits with error" do
       assert_raises(SystemExit) do
-        capture_output_and_errors { Cli.start(["iterate", "99999", "Add auth"]) }
+        capture_output_and_errors { Cli.start([ "iterate", "99999", "Add auth" ]) }
       end
     end
 
@@ -855,14 +855,14 @@ module ArnoldPipeline
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
 
       assert_raises(SystemExit) do
-        capture_output_and_errors { Cli.start(["iterate", run_record.id.to_s, "   "]) }
+        capture_output_and_errors { Cli.start([ "iterate", run_record.id.to_s, "   " ]) }
       end
     end
 
     test "iterate with empty change request shows error message" do
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
 
-      stderr_output = capture_stderr_through_exit { Cli.start(["iterate", run_record.id.to_s, "   "]) }
+      stderr_output = capture_stderr_through_exit { Cli.start([ "iterate", run_record.id.to_s, "   " ]) }
       assert_match(/Change request cannot be empty/, stderr_output)
     end
 
@@ -883,7 +883,7 @@ module ArnoldPipeline
 
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
 
-      output = capture_output { Cli.start(["iterate", run_record.id.to_s, "Add auth", "--dry-run"]) }
+      output = capture_output { Cli.start([ "iterate", run_record.id.to_s, "Add auth", "--dry-run" ]) }
 
       assert_match(/Proposed changes to specification/, output)
       assert_match(/ADDED: Auth > Login/, output)
@@ -905,7 +905,7 @@ module ArnoldPipeline
 
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
 
-      output = capture_output { Cli.start(["iterate", run_record.id.to_s, "Add auth", "--dry-run", "--json"]) }
+      output = capture_output { Cli.start([ "iterate", run_record.id.to_s, "Add auth", "--dry-run", "--json" ]) }
 
       parsed = JSON.parse(output)
       assert_kind_of Array, parsed
@@ -924,7 +924,7 @@ module ArnoldPipeline
 
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
 
-      stderr_output = capture_stderr_through_exit { Cli.start(["iterate", run_record.id.to_s, "Add auth"]) }
+      stderr_output = capture_stderr_through_exit { Cli.start([ "iterate", run_record.id.to_s, "Add auth" ]) }
       assert_match(/Cannot iterate a executing pipeline run/, stderr_output)
     end
 
@@ -936,7 +936,7 @@ module ArnoldPipeline
 
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
 
-      output = capture_output { Cli.start(["run", "Build a todo app", "--quiet"]) }
+      output = capture_output { Cli.start([ "run", "Build a todo app", "--quiet" ]) }
       assert_equal "", output
     end
 
@@ -953,7 +953,7 @@ module ArnoldPipeline
         }
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s, "--verbose"]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s, "--verbose" ]) }
 
       assert_match(/Setup DB/, output)
       assert_match(/Add API.*empty_diff/, output)
@@ -972,7 +972,7 @@ module ArnoldPipeline
         }
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s ]) }
 
       assert_match(/1 failed/, output)
       assert_match(/1 ok/, output)
@@ -992,7 +992,7 @@ module ArnoldPipeline
         }
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s ]) }
 
       assert_match(/PIPELINE COMPLETED/, output)
       assert_match(/2 iterations, 8 tasks/, output)
@@ -1014,7 +1014,7 @@ module ArnoldPipeline
         }
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s ]) }
 
       assert_match(/PIPELINE FAILED/, output)
       assert_match(/RuntimeError: Something broke/, output)
@@ -1032,7 +1032,7 @@ module ArnoldPipeline
         }
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s ]) }
 
       assert_match(/45\.0s/, output)
     end
@@ -1047,7 +1047,7 @@ module ArnoldPipeline
         }
       )
 
-      output = capture_output { Cli.start(["log", run_record.id.to_s]) }
+      output = capture_output { Cli.start([ "log", run_record.id.to_s ]) }
 
       assert_match(/5\.0m/, output)
     end
@@ -1064,7 +1064,7 @@ module ArnoldPipeline
       require "arnold_pipeline/cli/setup_wizard"
       ArnoldPipeline::CliModule::SetupWizard.stubs(:api_key_available?).returns(true)
 
-      output = capture_output { Cli.start(["run", "--preview", "Build a todo app"]) }
+      output = capture_output { Cli.start([ "run", "--preview", "Build a todo app" ]) }
 
       assert_equal :null, ArnoldPipeline.configuration.execution_provider
       assert_match(/Arnold Preview/, output)
@@ -1077,7 +1077,7 @@ module ArnoldPipeline
       mock_run = PipelineRun.create!(nl_input: "Build a todo app", status: :paused)
       mock_run.create_specification!(content: "# Todo App\n\n## Purpose\nA simple todo list.", version: 1)
       mock_run.tasks.create!(title: "Setup DB", description: "Create tables", tier: 0, position: 0, status: :pending)
-      mock_run.tasks.create!(title: "Add API", description: "REST endpoints", tier: 1, position: 1, status: :pending, depends_on: [0])
+      mock_run.tasks.create!(title: "Add API", description: "REST endpoints", tier: 1, position: 1, status: :pending, depends_on: [ 0 ])
 
       mock_orchestrator = mock("orchestrator")
       mock_orchestrator.expects(:call).returns(mock_run)
@@ -1085,7 +1085,7 @@ module ArnoldPipeline
       require "arnold_pipeline/cli/setup_wizard"
       ArnoldPipeline::CliModule::SetupWizard.stubs(:api_key_available?).returns(true)
 
-      output = capture_output { Cli.start(["run", "--preview", "Build a todo app"]) }
+      output = capture_output { Cli.start([ "run", "--preview", "Build a todo app" ]) }
 
       assert_match(/# Todo App/, output)
       assert_match(/2 tasks, 2 tiers/, output)
@@ -1109,7 +1109,7 @@ module ArnoldPipeline
       require "arnold_pipeline/cli/setup_wizard"
       ArnoldPipeline::CliModule::SetupWizard.stubs(:api_key_available?).returns(false)
 
-      stderr_output = capture_stderr_through_exit { Cli.start(["run", "--preview", "test"]) }
+      stderr_output = capture_stderr_through_exit { Cli.start([ "run", "--preview", "test" ]) }
       assert_match(/No API key found/, stderr_output)
     ensure
       ENV["ANTHROPIC_API_KEY"] = original_anthropic if original_anthropic
@@ -1120,7 +1120,7 @@ module ArnoldPipeline
     test "run shows doctor hint on ConfigurationError" do
       ArnoldPipeline::Orchestrator.stubs(:new).raises(ArnoldPipeline::ConfigurationError, "LLM API key is required")
 
-      stderr_output = capture_stderr_through_exit { Cli.start(["run", "Build an app"]) }
+      stderr_output = capture_stderr_through_exit { Cli.start([ "run", "Build an app" ]) }
       assert_match(/Configuration error:.*LLM API key is required/, stderr_output)
       assert_match(/arnold doctor/, stderr_output)
     end
@@ -1137,7 +1137,7 @@ module ArnoldPipeline
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
 
       with_user_config_path(user_config_file) do
-        capture_output { Cli.start(["run", "Build a todo app"]) }
+        capture_output { Cli.start([ "run", "Build a todo app" ]) }
       end
 
       assert_equal :openai, ArnoldPipeline.configuration.llm_provider
@@ -1160,7 +1160,7 @@ module ArnoldPipeline
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
 
       with_user_config_path(user_config_file) do
-        capture_output { Cli.start(["run", "Build an app", "--config", explicit_config_file]) }
+        capture_output { Cli.start([ "run", "Build an app", "--config", explicit_config_file ]) }
       end
 
       # Explicit config should override the user config value for llm_model
@@ -1185,7 +1185,7 @@ module ArnoldPipeline
       default_model = ArnoldPipeline.configuration.llm_model
 
       with_user_config_path(nonexistent_path) do
-        capture_output { Cli.start(["run", "Build an app"]) }
+        capture_output { Cli.start([ "run", "Build an app" ]) }
       end
 
       # Defaults should remain unchanged
@@ -1205,7 +1205,7 @@ module ArnoldPipeline
       ArnoldPipeline::Orchestrator.stubs(:new).returns(mock_orchestrator)
 
       with_user_config_path(user_config_file) do
-        capture_output { Cli.start(["run", "Build an app", "--model", "custom-model"]) }
+        capture_output { Cli.start([ "run", "Build an app", "--model", "custom-model" ]) }
       end
 
       # CLI flag should override user config
@@ -1225,7 +1225,7 @@ module ArnoldPipeline
 
       nonexistent_config = File.join(Dir.tmpdir, "arnold_nonexistent_#{SecureRandom.hex(8)}.yml")
       with_user_config_path(nonexistent_config) do
-        output = capture_output { Cli.start(["doctor"]) }
+        output = capture_output { Cli.start([ "doctor" ]) }
 
         assert_match(/Arnold Doctor/, output)
         assert_match(/Ruby/, output)
@@ -1244,7 +1244,7 @@ module ArnoldPipeline
 
       nonexistent_config = File.join(Dir.tmpdir, "arnold_nonexistent_#{SecureRandom.hex(8)}.yml")
       with_user_config_path(nonexistent_config) do
-        output = capture_output { Cli.start(["doctor"]) }
+        output = capture_output { Cli.start([ "doctor" ]) }
 
         assert_match(/\d+ passed/, output)
       end
@@ -1260,7 +1260,7 @@ module ArnoldPipeline
       nonexistent_config = File.join(Dir.tmpdir, "arnold_nonexistent_#{SecureRandom.hex(8)}.yml")
       with_user_config_path(nonexistent_config) do
         # Should not raise SystemExit
-        output = capture_output { Cli.start(["doctor"]) }
+        output = capture_output { Cli.start([ "doctor" ]) }
         assert_match(/passed/, output)
       end
     ensure
@@ -1278,7 +1278,7 @@ module ArnoldPipeline
       nonexistent_config = File.join(Dir.tmpdir, "arnold_nonexistent_#{SecureRandom.hex(8)}.yml")
       with_user_config_path(nonexistent_config) do
         assert_raises(SystemExit) do
-          capture_output_and_errors { Cli.start(["doctor"]) }
+          capture_output_and_errors { Cli.start([ "doctor" ]) }
         end
       end
     ensure

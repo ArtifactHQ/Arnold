@@ -19,16 +19,16 @@ module ArnoldPipeline
       progress = SpecTestProgress.new(
         total_tests: 20,
         total_passing: 15,
-        newly_passing: ["test_login", "test_signup"],
-        regressions: ["test_logout"],
-        still_failing: ["test_admin", "test_reset"]
+        newly_passing: [ "test_login", "test_signup" ],
+        regressions: [ "test_logout" ],
+        still_failing: [ "test_admin", "test_reset" ]
       )
 
       assert_equal 20, progress.total_tests
       assert_equal 15, progress.total_passing
-      assert_equal ["test_login", "test_signup"], progress.newly_passing
-      assert_equal ["test_logout"], progress.regressions
-      assert_equal ["test_admin", "test_reset"], progress.still_failing
+      assert_equal [ "test_login", "test_signup" ], progress.newly_passing
+      assert_equal [ "test_logout" ], progress.regressions
+      assert_equal [ "test_admin", "test_reset" ], progress.still_failing
     end
 
     test "pass_rate calculates percentage" do
@@ -62,7 +62,7 @@ module ArnoldPipeline
       progress = SpecTestProgress.new(
         total_tests: 20,
         total_passing: 8,
-        newly_passing: ["test_login", "test_signup"]
+        newly_passing: [ "test_login", "test_signup" ]
       )
       summary = progress.to_gate_summary
 
@@ -75,7 +75,7 @@ module ArnoldPipeline
       progress = SpecTestProgress.new(
         total_tests: 20,
         total_passing: 8,
-        regressions: ["test_logout"]
+        regressions: [ "test_logout" ]
       )
       summary = progress.to_gate_summary
 
@@ -87,7 +87,7 @@ module ArnoldPipeline
       progress = SpecTestProgress.new(
         total_tests: 20,
         total_passing: 8,
-        still_failing: ["test_admin", "test_reset"]
+        still_failing: [ "test_admin", "test_reset" ]
       )
       summary = progress.to_gate_summary
 

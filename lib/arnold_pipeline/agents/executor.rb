@@ -93,13 +93,13 @@ module ArnoldPipeline
           end
 
           remaining = timeout - elapsed
-          sleep_time = [interval, remaining].min
+          sleep_time = [ interval, remaining ].min
 
           logger.info { "[Arnold] Polling... elapsed: #{elapsed}s, resolved: #{resolved}/#{total} tasks. Next check in #{sleep_time}s" }
 
           sleep_func.call(sleep_time)
           elapsed += sleep_time
-          interval = [interval * 2, max_interval].min
+          interval = [ interval * 2, max_interval ].min
         end
       end
 

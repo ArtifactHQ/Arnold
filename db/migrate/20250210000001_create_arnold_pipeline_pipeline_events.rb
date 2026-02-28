@@ -13,9 +13,9 @@ class CreateArnoldPipelinePipelineEvents < ActiveRecord::Migration[8.1]
       t.timestamps
     end
 
-    add_index :arnold_pipeline_pipeline_events, [:pipeline_run_id, :stage],
+    add_index :arnold_pipeline_pipeline_events, [ :pipeline_run_id, :stage ],
               name: "idx_pipeline_events_on_run_and_stage"
-    add_index :arnold_pipeline_pipeline_events, [:pipeline_run_id, :created_at],
+    add_index :arnold_pipeline_pipeline_events, [ :pipeline_run_id, :created_at ],
               name: "idx_pipeline_events_on_run_and_created_at"
   end
 end

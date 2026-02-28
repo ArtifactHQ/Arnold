@@ -17,7 +17,7 @@ module ArnoldPipeline
 
     test "parses JSON array of file diffs" do
       diffs = [
-        [{ filename: "app/models/user.rb", patch: "+class User; end", status: "added" }].to_json
+        [ { filename: "app/models/user.rb", patch: "+class User; end", status: "added" } ].to_json
       ]
 
       result = DiffSummarizer.call(diffs)
@@ -27,10 +27,10 @@ module ArnoldPipeline
     end
 
     test "handles multiple tasks with JSON diffs" do
-      diff1 = [{ filename: "file1.rb", patch: "+code1", status: "added" }].to_json
-      diff2 = [{ filename: "file2.rb", patch: "+code2", status: "modified" }].to_json
+      diff1 = [ { filename: "file1.rb", patch: "+code1", status: "added" } ].to_json
+      diff2 = [ { filename: "file2.rb", patch: "+code2", status: "modified" } ].to_json
 
-      result = DiffSummarizer.call([diff1, diff2])
+      result = DiffSummarizer.call([ diff1, diff2 ])
 
       assert_includes result, "file1.rb"
       assert_includes result, "file2.rb"
@@ -38,7 +38,7 @@ module ArnoldPipeline
 
     test "parses JSON with string keys" do
       diffs = [
-        [{ "filename" => "app.rb", "patch" => "+hello", "status" => "added" }].to_json
+        [ { "filename" => "app.rb", "patch" => "+hello", "status" => "added" } ].to_json
       ]
 
       result = DiffSummarizer.call(diffs)
@@ -158,7 +158,7 @@ module ArnoldPipeline
     test "truncates individual file patches exceeding max_per_file_chars" do
       long_patch = "x" * 20_000
       diffs = [
-        [{ filename: "big.rb", patch: long_patch, status: "modified" }].to_json
+        [ { filename: "big.rb", patch: long_patch, status: "modified" } ].to_json
       ]
 
       result = DiffSummarizer.call(diffs, max_per_file_chars: 500)
@@ -171,7 +171,7 @@ module ArnoldPipeline
       files = (1..20).map do |i|
         { filename: "file#{i}.rb", patch: "a" * 10_000, status: "added" }
       end
-      diffs = [files.to_json]
+      diffs = [ files.to_json ]
 
       result = DiffSummarizer.call(diffs, max_total_chars: 5_000, max_per_file_chars: 10_000)
 
@@ -183,7 +183,7 @@ module ArnoldPipeline
       files = (1..5).map do |i|
         { filename: "file#{i}.rb", patch: "a" * 3_000, status: "added" }
       end
-      diffs = [files.to_json]
+      diffs = [ files.to_json ]
 
       result = DiffSummarizer.call(diffs, max_total_chars: 4_000, max_per_file_chars: 10_000)
 
@@ -219,14 +219,14 @@ module ArnoldPipeline
         +class Foo; end
       DIFF
 
-      result = DiffSummarizer.call([raw_diff])
+      result = DiffSummarizer.call([ raw_diff ])
 
       assert_includes result, "diff --git"
       assert_includes result, "+class Foo; end"
     end
 
     test "handles empty and nil diffs" do
-      result = DiffSummarizer.call(["", nil, "  "])
+      result = DiffSummarizer.call([ "", nil, "  " ])
 
       assert_equal "", result.strip
     end
@@ -247,7 +247,7 @@ module ArnoldPipeline
 
       long_patch = "x" * 1_000
       diffs = [
-        [{ filename: "big.rb", patch: long_patch, status: "modified" }].to_json
+        [ { filename: "big.rb", patch: long_patch, status: "modified" } ].to_json
       ]
 
       result = DiffSummarizer.call(diffs)
@@ -262,7 +262,7 @@ module ArnoldPipeline
 
       patch = "x" * 100
       diffs = [
-        [{ filename: "file.rb", patch: patch, status: "modified" }].to_json
+        [ { filename: "file.rb", patch: patch, status: "modified" } ].to_json
       ]
 
       # Override to be generous — should NOT truncate
@@ -274,10 +274,10 @@ module ArnoldPipeline
     # --- Deduplication ---
 
     test "deduplicates files by filename, keeping the latest entry" do
-      diff1 = [{ filename: "app/services/token_service.rb", patch: "+class TokenService\n+  # no expiry\n+end", status: "added" }].to_json
-      diff2 = [{ filename: "app/services/token_service.rb", patch: "+  def verify\n+    check_expiry!\n+  end", status: "modified" }].to_json
+      diff1 = [ { filename: "app/services/token_service.rb", patch: "+class TokenService\n+  # no expiry\n+end", status: "added" } ].to_json
+      diff2 = [ { filename: "app/services/token_service.rb", patch: "+  def verify\n+    check_expiry!\n+  end", status: "modified" } ].to_json
 
-      result = DiffSummarizer.call([diff1, diff2])
+      result = DiffSummarizer.call([ diff1, diff2 ])
 
       assert_includes result, "check_expiry!"
       refute_includes result, "no expiry"
@@ -292,7 +292,7 @@ module ArnoldPipeline
         { filename: "app/models/comment.rb", patch: "+class Comment; end", status: "added" }
       ].to_json
 
-      result = DiffSummarizer.call([diff1, diff2])
+      result = DiffSummarizer.call([ diff1, diff2 ])
 
       assert_includes result, "user.rb"
       assert_includes result, "post.rb"
@@ -300,11 +300,11 @@ module ArnoldPipeline
     end
 
     test "deduplication keeps latest when same file appears in multiple tasks" do
-      diff1 = [{ filename: "db/schema.rb", patch: "+create_table :users", status: "added" }].to_json
-      diff2 = [{ filename: "db/schema.rb", patch: "+create_table :users\n+create_table :posts", status: "modified" }].to_json
-      diff3 = [{ filename: "config/routes.rb", patch: "+root 'home#index'", status: "added" }].to_json
+      diff1 = [ { filename: "db/schema.rb", patch: "+create_table :users", status: "added" } ].to_json
+      diff2 = [ { filename: "db/schema.rb", patch: "+create_table :users\n+create_table :posts", status: "modified" } ].to_json
+      diff3 = [ { filename: "config/routes.rb", patch: "+root 'home#index'", status: "added" } ].to_json
 
-      result = DiffSummarizer.call([diff1, diff2, diff3])
+      result = DiffSummarizer.call([ diff1, diff2, diff3 ])
 
       assert_includes result, "create_table :posts"
       assert_equal 1, result.scan("schema.rb").count
@@ -314,10 +314,10 @@ module ArnoldPipeline
     # --- Mixed scenarios ---
 
     test "mixed JSON and legacy diffs in same call" do
-      json_diff = [{ filename: "app.rb", patch: "+json code", status: "added" }].to_json
+      json_diff = [ { filename: "app.rb", patch: "+json code", status: "added" } ].to_json
       legacy_diff = "diff --git a/old.rb b/old.rb\n+legacy code"
 
-      result = DiffSummarizer.call([json_diff, legacy_diff])
+      result = DiffSummarizer.call([ json_diff, legacy_diff ])
 
       assert_includes result, "app.rb"
       assert_includes result, "legacy code"

@@ -16,7 +16,7 @@ module ArnoldPipeline
               "library_selections" => {
                 "persona" => "Software Architect",
                 "recipe" => "Web App",
-                "supporting_recipes" => ["API Service"],
+                "supporting_recipes" => [ "API Service" ],
                 "domain_type" => "PRODUCTIVITY"
               }
             }
@@ -27,8 +27,8 @@ module ArnoldPipeline
             version: 1,
             structured_data: {
               "tech_stack" => { "backend" => "Rails 8+", "frontend" => "Hotwire" },
-              "domains" => [{ "name" => "Collaboration" }],
-              "recipes" => [{ "name" => "Web App" }]
+              "domains" => [ { "name" => "Collaboration" } ],
+              "recipes" => [ { "name" => "Web App" } ]
             }
           )
         end
@@ -57,8 +57,8 @@ module ArnoldPipeline
         test "call returns structured answer via LLM" do
           llm_response = {
             "answer" => "Use Action Cable with Turbo Streams for real-time.",
-            "recipes_referenced" => [{ "name" => "Web App", "relevance" => "Provides Hotwire stack" }],
-            "constraints" => ["Must use Hotwire, no SPA frameworks"],
+            "recipes_referenced" => [ { "name" => "Web App", "relevance" => "Provides Hotwire stack" } ],
+            "constraints" => [ "Must use Hotwire, no SPA frameworks" ],
             "alternatives_considered" => [
               { "approach" => "Phoenix LiveView", "reason_rejected" => "Project uses Rails" }
             ]
@@ -208,9 +208,9 @@ module ArnoldPipeline
         test "response has all expected keys with correct types" do
           llm_response = {
             "answer" => "Use Rails 8+",
-            "recipes_referenced" => [{ "name" => "Web App", "relevance" => "Primary" }],
-            "constraints" => ["Rails 8+"],
-            "alternatives_considered" => [{ "approach" => "Django", "reason_rejected" => "Not Ruby" }]
+            "recipes_referenced" => [ { "name" => "Web App", "relevance" => "Primary" } ],
+            "constraints" => [ "Rails 8+" ],
+            "alternatives_considered" => [ { "approach" => "Django", "reason_rejected" => "Not Ruby" } ]
           }
 
           llm = stub("llm")

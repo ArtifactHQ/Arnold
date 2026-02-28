@@ -41,13 +41,13 @@ module ArnoldPipeline
       name: "corrective_tasks",
       schema: {
         type: "object", additionalProperties: false,
-        required: ["tasks"],
+        required: [ "tasks" ],
         properties: {
           tasks: {
             type: "array",
             items: {
               type: "object", additionalProperties: false,
-              required: ["title", "description", "labels"],
+              required: [ "title", "description", "labels" ],
               properties: {
                 title: { type: "string" },
                 description: { type: "string" },
@@ -86,7 +86,7 @@ module ArnoldPipeline
 
       if @test_result.failures.empty?
         @logger.warn { "Test failures detected but no individual failures parsed — generating generic corrective task" }
-        return [generic_failure_task]
+        return [ generic_failure_task ]
       end
 
       grouped = group_failures_by_category(@test_result.failures)
@@ -143,7 +143,7 @@ module ArnoldPipeline
         @logger.warn { "LLM corrective task generation failed for #{category}: #{e.message}" }
       end
 
-      [build_fallback_task(category, limited_failures)]
+      [ build_fallback_task(category, limited_failures) ]
     end
 
     def generate_via_llm(category, failures)
@@ -181,7 +181,7 @@ module ArnoldPipeline
       USER
 
       result = client.chat_json(
-        messages: [{ role: :user, content: user_prompt }],
+        messages: [ { role: :user, content: user_prompt } ],
         system: system_prompt,
         schema: RESPONSE_SCHEMA
       )
@@ -210,7 +210,7 @@ module ArnoldPipeline
       {
         "title" => "Fix #{category.to_s.tr('_', ' ')} failures (#{failures.size} test#{'s' if failures.size != 1})",
         "description" => "#{failures.size} test failure#{'s' if failures.size != 1} in the #{category} category need fixing.\n\nFailures:\n#{failure_summary}#{ref_text}",
-        "labels" => [category_info[:label]]
+        "labels" => [ category_info[:label] ]
       }
     end
 
@@ -221,7 +221,7 @@ module ArnoldPipeline
           "## Test Summary\n#{@test_result.summary}\n\n" \
           "## Instructions\nRun the full test suite, identify all failures and errors, and fix them.\n" \
           "Focus on errors first (often missing constants, undefined methods) as these frequently cause cascading failures.",
-        "labels" => ["test-fix"]
+        "labels" => [ "test-fix" ]
       }
     end
   end

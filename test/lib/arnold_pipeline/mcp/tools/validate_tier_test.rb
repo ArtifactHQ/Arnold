@@ -18,10 +18,10 @@ module ArnoldPipeline
             position: 0,
             tier: 0,
             status: :completed,
-            labels: ["backend"],
+            labels: [ "backend" ],
             depends_on: [],
-            result_comments: [{ "body" => "Schema created" }],
-            execution_metadata: { "files_changed" => ["db/schema.rb"] }
+            result_comments: [ { "body" => "Schema created" } ],
+            execution_metadata: { "files_changed" => [ "db/schema.rb" ] }
           )
           @t0_task2 = Task.create!(
             pipeline_run: @run,
@@ -30,10 +30,10 @@ module ArnoldPipeline
             position: 1,
             tier: 0,
             status: :completed,
-            labels: ["backend"],
+            labels: [ "backend" ],
             depends_on: [],
-            result_comments: [{ "body" => "Models created" }],
-            execution_metadata: { "files_changed" => ["app/models/todo.rb"] }
+            result_comments: [ { "body" => "Models created" } ],
+            execution_metadata: { "files_changed" => [ "app/models/todo.rb" ] }
           )
           @t1_task1 = Task.create!(
             pipeline_run: @run,
@@ -42,8 +42,8 @@ module ArnoldPipeline
             position: 2,
             tier: 1,
             status: :pending,
-            labels: ["backend", "api"],
-            depends_on: [@t0_task1.id.to_s]
+            labels: [ "backend", "api" ],
+            depends_on: [ @t0_task1.id.to_s ]
           )
           @t1_task2 = Task.create!(
             pipeline_run: @run,
@@ -52,8 +52,8 @@ module ArnoldPipeline
             position: 3,
             tier: 1,
             status: :pending,
-            labels: ["backend"],
-            depends_on: [@t0_task2.id.to_s]
+            labels: [ "backend" ],
+            depends_on: [ @t0_task2.id.to_s ]
           )
         end
 
@@ -230,7 +230,7 @@ module ArnoldPipeline
             position: 0,
             tier: 0,
             status: :completed,
-            result_comments: [{ "body" => "done" }]
+            result_comments: [ { "body" => "done" } ]
           )
 
           result = ValidateTier.call({
@@ -279,10 +279,10 @@ module ArnoldPipeline
         test "call dependencies satisfied for tier 1 when tier 0 complete" do
           @t1_task1.update!(status: :in_progress)
           @t1_task1.update!(status: :completed)
-          @t1_task1.update!(result_comments: [{ "body" => "done" }])
+          @t1_task1.update!(result_comments: [ { "body" => "done" } ])
           @t1_task2.update!(status: :in_progress)
           @t1_task2.update!(status: :completed)
-          @t1_task2.update!(result_comments: [{ "body" => "done" }])
+          @t1_task2.update!(result_comments: [ { "body" => "done" } ])
 
           result = ValidateTier.call({ "tier" => 1 }, @context)
 

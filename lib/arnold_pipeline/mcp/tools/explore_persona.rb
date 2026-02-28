@@ -72,7 +72,7 @@ module ArnoldPipeline
                 description: "Pipeline run ID. Defaults to the latest run if not provided."
               }
             },
-            required: ["persona"]
+            required: [ "persona" ]
           }
         end
 
@@ -192,7 +192,7 @@ module ArnoldPipeline
           user_content = build_user_content(persona_info, spec, domains_involved)
 
           result = agent.send(:chat_json,
-            messages: [{ role: "user", content: user_content }],
+            messages: [ { role: "user", content: user_content } ],
             system: SYSTEM_PROMPT,
             schema: RESPONSE_SCHEMA
           )

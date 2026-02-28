@@ -16,9 +16,9 @@ module ArnoldPipeline
             content: "# Todo App Spec\n\n## Features\n- Add todos\n- Remove todos",
             version: 2,
             structured_data: {
-              "personas" => [{ "name" => "User" }],
-              "domains" => [{ "name" => "Tasks" }],
-              "recipes" => [{ "name" => "Web App" }]
+              "personas" => [ { "name" => "User" } ],
+              "domains" => [ { "name" => "Tasks" } ],
+              "recipes" => [ { "name" => "Web App" } ]
             }
           )
         end
@@ -74,9 +74,9 @@ module ArnoldPipeline
         test "call includes metadata with personas, domains, recipes" do
           result = GetSpec.call({}, @context)
 
-          assert_equal ["User"], result[:metadata][:personas]
-          assert_equal ["Tasks"], result[:metadata][:domains]
-          assert_equal ["Web App"], result[:metadata][:recipes]
+          assert_equal [ "User" ], result[:metadata][:personas]
+          assert_equal [ "Tasks" ], result[:metadata][:domains]
+          assert_equal [ "Web App" ], result[:metadata][:recipes]
         end
 
         test "call includes task counts in metadata" do

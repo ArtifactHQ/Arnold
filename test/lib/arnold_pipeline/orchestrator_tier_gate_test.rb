@@ -66,7 +66,7 @@ module ArnoldPipeline
 
       # Tier 0: fail first, pass on retry
       @tier_gate_check.expects(:call).in_sequence(gate_seq)
-        .returns(gate_result(pass: false, corrective_tasks: [{ "title" => "Fix config", "description" => "Add config", "labels" => ["bugfix"] }]))
+        .returns(gate_result(pass: false, corrective_tasks: [ { "title" => "Fix config", "description" => "Add config", "labels" => [ "bugfix" ] } ]))
       @tier_gate_check.expects(:call).in_sequence(gate_seq)
         .returns(gate_result(pass: true, context_summary: "Fixed config and setup complete."))
 
@@ -98,10 +98,10 @@ module ArnoldPipeline
 
       # First gate call: fail
       @tier_gate_check.expects(:call).in_sequence(gate_seq)
-        .returns(gate_result(pass: false, corrective_tasks: [{ "title" => "Fix build", "description" => "Fix it", "labels" => [] }]))
+        .returns(gate_result(pass: false, corrective_tasks: [ { "title" => "Fix build", "description" => "Fix it", "labels" => [] } ]))
       # Re-gate after corrective: still fail
       @tier_gate_check.expects(:call).in_sequence(gate_seq)
-        .returns(gate_result(pass: false, corrective_tasks: [{ "title" => "Fix again", "description" => "Fix more", "labels" => [] }]))
+        .returns(gate_result(pass: false, corrective_tasks: [ { "title" => "Fix again", "description" => "Fix more", "labels" => [] } ]))
 
       @analyzer.expects(:call).never
 
@@ -222,7 +222,7 @@ module ArnoldPipeline
     def stub_spec_generation!
       @spec_generator.stubs(:call).returns({
         content: "# Todo App Spec\n\nA todo app with CRUD operations",
-        structured_data: { "features" => ["create", "read", "update", "delete"] }
+        structured_data: { "features" => [ "create", "read", "update", "delete" ] }
       })
     end
 
@@ -232,18 +232,18 @@ module ArnoldPipeline
 
     def sample_tasks
       [
-        { "title" => "Setup database", "description" => "Create schema", "priority" => 0, "labels" => ["database"], "position" => 0, "depends_on" => [] },
-        { "title" => "Create models", "description" => "Define models", "priority" => 0, "labels" => ["backend"], "position" => 1, "depends_on" => [0] },
-        { "title" => "Build API", "description" => "REST endpoints", "priority" => 1, "labels" => ["backend"], "position" => 2, "depends_on" => [1] },
-        { "title" => "Add auth", "description" => "Auth system", "priority" => 1, "labels" => ["backend"], "position" => 3, "depends_on" => [1] },
-        { "title" => "Write tests", "description" => "Test suite", "priority" => 2, "labels" => ["testing"], "position" => 4, "depends_on" => [2, 3] }
+        { "title" => "Setup database", "description" => "Create schema", "priority" => 0, "labels" => [ "database" ], "position" => 0, "depends_on" => [] },
+        { "title" => "Create models", "description" => "Define models", "priority" => 0, "labels" => [ "backend" ], "position" => 1, "depends_on" => [ 0 ] },
+        { "title" => "Build API", "description" => "REST endpoints", "priority" => 1, "labels" => [ "backend" ], "position" => 2, "depends_on" => [ 1 ] },
+        { "title" => "Add auth", "description" => "Auth system", "priority" => 1, "labels" => [ "backend" ], "position" => 3, "depends_on" => [ 1 ] },
+        { "title" => "Write tests", "description" => "Test suite", "priority" => 2, "labels" => [ "testing" ], "position" => 4, "depends_on" => [ 2, 3 ] }
       ]
     end
 
     def gate_result(pass:, context_summary: "Tier implementation complete.", issues: [], corrective_tasks: [])
       {
         "pass" => pass,
-        "issues" => pass ? issues : (issues.any? ? issues : ["Critical issue found"]),
+        "issues" => pass ? issues : (issues.any? ? issues : [ "Critical issue found" ]),
         "context_summary" => context_summary,
         "corrective_tasks" => corrective_tasks
       }

@@ -31,7 +31,7 @@ module ArnoldPipeline
                 additionalProperties: { type: "string" }
               }
             },
-            required: ["change_id"]
+            required: [ "change_id" ]
           }
         end
 

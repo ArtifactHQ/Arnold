@@ -12,7 +12,7 @@ class CreateArnoldPipelineSpecRevisions < ActiveRecord::Migration[8.0]
     end
 
     add_index :arnold_pipeline_spec_revisions,
-              [:specification_id, :version], unique: true,
+              [ :specification_id, :version ], unique: true,
               name: "idx_spec_revisions_on_spec_and_version"
   end
 end

@@ -15,7 +15,7 @@ module ArnoldPipeline
       test "runs provided test command and returns parsed result" do
         mock_status = stub(success?: true, exitstatus: 0)
         stdout = "14 runs, 28 assertions, 0 failures, 0 errors, 0 skips"
-        Open3.stubs(:capture3).with("bin/rails test", chdir: @repo_path).returns([stdout, "", mock_status])
+        Open3.stubs(:capture3).with("bin/rails test", chdir: @repo_path).returns([ stdout, "", mock_status ])
 
         result = TestRunner.call(repo_path: @repo_path, test_command: "bin/rails test")
 
@@ -27,7 +27,7 @@ module ArnoldPipeline
       test "returns failed result for failing tests" do
         mock_status = stub(success?: false, exitstatus: 1)
         stdout = "14 runs, 28 assertions, 2 failures, 0 errors, 0 skips"
-        Open3.stubs(:capture3).with("bundle exec rspec", chdir: @repo_path).returns([stdout, "", mock_status])
+        Open3.stubs(:capture3).with("bundle exec rspec", chdir: @repo_path).returns([ stdout, "", mock_status ])
 
         result = TestRunner.call(repo_path: @repo_path, test_command: "bundle exec rspec")
 
@@ -42,8 +42,8 @@ module ArnoldPipeline
         test_status = stub(success?: true, exitstatus: 0)
 
         seq = sequence("execution")
-        Open3.expects(:capture3).with("bin/setup", chdir: @repo_path).returns(["ok", "", boot_status]).in_sequence(seq)
-        Open3.expects(:capture3).with("npm test", chdir: @repo_path).returns(["Tests:  5 passed, 5 total", "", test_status]).in_sequence(seq)
+        Open3.expects(:capture3).with("bin/setup", chdir: @repo_path).returns([ "ok", "", boot_status ]).in_sequence(seq)
+        Open3.expects(:capture3).with("npm test", chdir: @repo_path).returns([ "Tests:  5 passed, 5 total", "", test_status ]).in_sequence(seq)
 
         result = TestRunner.call(
           repo_path: @repo_path,
@@ -56,7 +56,7 @@ module ArnoldPipeline
 
       test "returns error result when boot command fails" do
         boot_status = stub(success?: false, exitstatus: 1)
-        Open3.stubs(:capture3).with("bin/setup", chdir: @repo_path).returns(["", "missing deps", boot_status])
+        Open3.stubs(:capture3).with("bin/setup", chdir: @repo_path).returns([ "", "missing deps", boot_status ])
 
         result = TestRunner.call(
           repo_path: @repo_path,
@@ -106,7 +106,7 @@ module ArnoldPipeline
         File.stubs(:exist?).with(File.join(@repo_path, "bin/rails")).returns(true)
 
         mock_status = stub(success?: true, exitstatus: 0)
-        Open3.expects(:capture3).with("bin/rails test", chdir: @repo_path).returns(["5 runs, 10 assertions, 0 failures, 0 errors", "", mock_status])
+        Open3.expects(:capture3).with("bin/rails test", chdir: @repo_path).returns([ "5 runs, 10 assertions, 0 failures, 0 errors", "", mock_status ])
 
         result = TestRunner.call(repo_path: @repo_path)
 
@@ -120,7 +120,7 @@ module ArnoldPipeline
         File.stubs(:read).with(File.join(@repo_path, "Gemfile")).returns("gem 'rspec-rails'")
 
         mock_status = stub(success?: true, exitstatus: 0)
-        Open3.expects(:capture3).with("bundle exec rspec", chdir: @repo_path).returns(["6 examples, 0 failures", "", mock_status])
+        Open3.expects(:capture3).with("bundle exec rspec", chdir: @repo_path).returns([ "6 examples, 0 failures", "", mock_status ])
 
         result = TestRunner.call(repo_path: @repo_path)
 
@@ -135,7 +135,7 @@ module ArnoldPipeline
         File.stubs(:exist?).with(File.join(@repo_path, "package.json")).returns(true)
 
         mock_status = stub(success?: true, exitstatus: 0)
-        Open3.expects(:capture3).with("npm test", chdir: @repo_path).returns(["Tests:  5 passed, 5 total", "", mock_status])
+        Open3.expects(:capture3).with("npm test", chdir: @repo_path).returns([ "Tests:  5 passed, 5 total", "", mock_status ])
 
         result = TestRunner.call(repo_path: @repo_path)
 
@@ -150,7 +150,7 @@ module ArnoldPipeline
         File.stubs(:exist?).with(File.join(@repo_path, "pytest.ini")).returns(true)
 
         mock_status = stub(success?: true, exitstatus: 0)
-        Open3.expects(:capture3).with("pytest", chdir: @repo_path).returns(["============================== 5 passed ==============================", "", mock_status])
+        Open3.expects(:capture3).with("pytest", chdir: @repo_path).returns([ "============================== 5 passed ==============================", "", mock_status ])
 
         result = TestRunner.call(repo_path: @repo_path)
 
@@ -167,7 +167,7 @@ module ArnoldPipeline
         File.stubs(:exist?).with(File.join(@repo_path, "pyproject.toml")).returns(true)
 
         mock_status = stub(success?: true, exitstatus: 0)
-        Open3.expects(:capture3).with("pytest", chdir: @repo_path).returns(["============================== 3 passed ==============================", "", mock_status])
+        Open3.expects(:capture3).with("pytest", chdir: @repo_path).returns([ "============================== 3 passed ==============================", "", mock_status ])
 
         result = TestRunner.call(repo_path: @repo_path)
 
@@ -233,7 +233,7 @@ module ArnoldPipeline
 
       test "class method delegates to instance" do
         mock_status = stub(success?: true, exitstatus: 0)
-        Open3.stubs(:capture3).returns(["ok", "", mock_status])
+        Open3.stubs(:capture3).returns([ "ok", "", mock_status ])
 
         result = TestRunner.call(
           repo_path: @repo_path,

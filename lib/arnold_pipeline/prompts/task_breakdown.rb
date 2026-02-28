@@ -132,7 +132,7 @@ module ArnoldPipeline
       def self.technology_context(recipe, supporting_recipes)
         return "" if recipe.nil?
 
-        parts = ["# Technology Context"]
+        parts = [ "# Technology Context" ]
         parts << ""
         parts << "Recipe: #{recipe.name} (#{recipe.type})"
         parts << recipe.description.strip if recipe.description
@@ -172,7 +172,7 @@ module ArnoldPipeline
       end
 
       def self.format_section(section)
-        parts = ["### #{section['name']}"]
+        parts = [ "### #{section['name']}" ]
         parts << section["description"].strip if section["description"]
 
         tools = section["rails_tools"] || section["tools"]
@@ -200,7 +200,7 @@ module ArnoldPipeline
       def self.supporting_recipes_brief(recipes)
         return "" if recipes.nil? || recipes.empty?
 
-        parts = ["## Supporting recipes"]
+        parts = [ "## Supporting recipes" ]
         parts << "Consider these additional recipe concerns when creating tasks:"
 
         recipes.each do |r|
@@ -216,7 +216,7 @@ module ArnoldPipeline
       def self.verification_context(recipe)
         return "" if recipe.verification.nil? || recipe.verification.empty?
 
-        parts = ["## Verification"]
+        parts = [ "## Verification" ]
         parts << "After all tasks complete, the project should be verifiable with:"
 
         if recipe.verification["setup_commands"]&.any?
@@ -319,7 +319,7 @@ module ArnoldPipeline
 
       def self.delta_scoping_context(deltas)
         deltas.map.with_index(1) do |delta, i|
-          parts = ["## Delta #{i}: #{delta['operation']&.upcase || 'CHANGED'}"]
+          parts = [ "## Delta #{i}: #{delta['operation']&.upcase || 'CHANGED'}" ]
           parts << "Section: #{delta['section']}" if delta["section"]
           parts << "Requirement: #{delta['requirement']}" if delta["requirement"]
           parts << "" << delta["content"] if delta["content"]

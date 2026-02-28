@@ -180,7 +180,7 @@ module ArnoldPipeline
         return nil unless max_iterations
 
         remaining = max_iterations - iteration_number
-        lines = ["\n## Iteration Context", "This is iteration #{iteration_number} of #{max_iterations}."]
+        lines = [ "\n## Iteration Context", "This is iteration #{iteration_number} of #{max_iterations}." ]
 
         if previous_decisions.any?
           lines << ""

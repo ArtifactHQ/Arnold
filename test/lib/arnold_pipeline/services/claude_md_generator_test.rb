@@ -14,13 +14,13 @@ module ArnoldPipeline
           framework: { "primary" => "Rails 8+", "frontend" => "Hotwire", "css" => "Tailwind CSS" },
           sections: [
             { "name" => "Local Development", "phase" => "pipeline",
-              "guidance" => ["Use bin/dev to start", "SQLite for development"] }
+              "guidance" => [ "Use bin/dev to start", "SQLite for development" ] }
           ],
           verification: {
             "test_command" => "bin/rails test:all",
-            "setup_commands" => ["bundle install", "bin/rails db:prepare"],
+            "setup_commands" => [ "bundle install", "bin/rails db:prepare" ],
             "boot_command" => "bin/rails server -p 3000 -d",
-            "health_checks" => [{ "url" => "http://localhost:3000/up", "expected_status" => 200 }]
+            "health_checks" => [ { "url" => "http://localhost:3000/up", "expected_status" => 200 } ]
           }
         )
 
@@ -28,9 +28,9 @@ module ArnoldPipeline
           code: "GAME", name: "Game / Interactive Entertainment",
           keywords: [], description: "Game apps",
           primary_value: "Fun, engagement",
-          emphasis: ["Progression systems", "Difficulty curves"],
-          document_focus: ["Win/loss conditions"],
-          watch_for: ["Game balance"],
+          emphasis: [ "Progression systems", "Difficulty curves" ],
+          document_focus: [ "Win/loss conditions" ],
+          watch_for: [ "Game balance" ],
           terminology: { "user" => "player", "account" => "profile" }
         )
 

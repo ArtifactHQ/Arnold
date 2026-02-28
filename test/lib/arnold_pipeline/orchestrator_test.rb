@@ -113,7 +113,7 @@ module ArnoldPipeline
       @executor.stubs(:merge_results).returns([])
 
       corrective = {
-        "tasks" => [{ "title" => "Fix", "description" => "Fix it", "position" => 0 }]
+        "tasks" => [ { "title" => "Fix", "description" => "Fix it", "position" => 0 } ]
       }
 
       @analyzer.stubs(:call).returns(analysis_result("iterate_tasks", 75, corrective))
@@ -264,7 +264,7 @@ module ArnoldPipeline
       @executor.stubs(:call).with { |kwargs|
         pipeline_run = kwargs[:pipeline_run]
         task = pipeline_run.tasks.first
-        task.update!(result_comments: [{ "source" => "issue", "author" => "copilot", "body" => "Missing Gemfile" }])
+        task.update!(result_comments: [ { "source" => "issue", "author" => "copilot", "body" => "Missing Gemfile" } ])
         true
       }.returns([])
 
@@ -346,7 +346,7 @@ module ArnoldPipeline
     end
 
     test "break_tasks passes recipe context from structured_data" do
-      stub_spec_generation!(recipe_type: "web_app", supporting_recipe_types: ["api_service"])
+      stub_spec_generation!(recipe_type: "web_app", supporting_recipe_types: [ "api_service" ])
 
       @task_breaker.expects(:call).with { |kwargs|
         kwargs[:spec_content].is_a?(String) &&
@@ -369,7 +369,7 @@ module ArnoldPipeline
       )
       run.create_specification!(
         content: "# Spec with dark mode",
-        structured_data: { "features" => ["crud"] },
+        structured_data: { "features" => [ "crud" ] },
         version: 2
       )
 
@@ -377,7 +377,7 @@ module ArnoldPipeline
         kwargs[:deltas] == sample_deltas &&
           kwargs[:spec_content] == "# Spec with dark mode"
       }.returns([
-        { "title" => "Add dark mode", "description" => "Implement dark mode", "priority" => 0, "labels" => ["frontend"], "position" => 0, "depends_on" => [] }
+        { "title" => "Add dark mode", "description" => "Implement dark mode", "priority" => 0, "labels" => [ "frontend" ], "position" => 0, "depends_on" => [] }
       ])
 
       @orchestrator.resume(pipeline_run: run, stop_after: :tasks)
@@ -668,7 +668,7 @@ module ArnoldPipeline
 
     test "fork! creates new PipelineRun with forked_from_run_id in metadata" do
       run = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
-      run.create_specification!(content: "# Original Spec", structured_data: { "features" => ["crud"] }, version: 2)
+      run.create_specification!(content: "# Original Spec", structured_data: { "features" => [ "crud" ] }, version: 2)
 
       spec_iterator = stub("spec_iterator")
       spec_iterator.stubs(:call).returns(sample_agent_result)
@@ -687,7 +687,7 @@ module ArnoldPipeline
 
     test "fork! copies spec content to new run" do
       run = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
-      run.create_specification!(content: "# Original Spec", structured_data: { "features" => ["crud"] }, version: 2)
+      run.create_specification!(content: "# Original Spec", structured_data: { "features" => [ "crud" ] }, version: 2)
 
       spec_iterator = stub("spec_iterator")
       spec_iterator.stubs(:call).returns(sample_agent_result)
@@ -845,7 +845,7 @@ module ArnoldPipeline
     private
 
     def stub_spec_generation!(recipe_type: nil, supporting_recipe_types: nil)
-      structured_data = { "features" => ["create", "read", "update", "delete"] }
+      structured_data = { "features" => [ "create", "read", "update", "delete" ] }
       structured_data["recipe_type"] = recipe_type if recipe_type
       structured_data["supporting_recipe_types"] = supporting_recipe_types if supporting_recipe_types
 
@@ -861,11 +861,11 @@ module ArnoldPipeline
 
     def sample_tasks
       [
-        { "title" => "Setup database", "description" => "Create schema", "priority" => 0, "labels" => ["database"], "position" => 0, "depends_on" => [] },
-        { "title" => "Create models", "description" => "Define models", "priority" => 0, "labels" => ["backend"], "position" => 1, "depends_on" => [0] },
-        { "title" => "Build API", "description" => "REST endpoints", "priority" => 1, "labels" => ["backend"], "position" => 2, "depends_on" => [1] },
-        { "title" => "Add auth", "description" => "Auth system", "priority" => 1, "labels" => ["backend"], "position" => 3, "depends_on" => [1] },
-        { "title" => "Write tests", "description" => "Test suite", "priority" => 2, "labels" => ["testing"], "position" => 4, "depends_on" => [2, 3] }
+        { "title" => "Setup database", "description" => "Create schema", "priority" => 0, "labels" => [ "database" ], "position" => 0, "depends_on" => [] },
+        { "title" => "Create models", "description" => "Define models", "priority" => 0, "labels" => [ "backend" ], "position" => 1, "depends_on" => [ 0 ] },
+        { "title" => "Build API", "description" => "REST endpoints", "priority" => 1, "labels" => [ "backend" ], "position" => 2, "depends_on" => [ 1 ] },
+        { "title" => "Add auth", "description" => "Auth system", "priority" => 1, "labels" => [ "backend" ], "position" => 3, "depends_on" => [ 1 ] },
+        { "title" => "Write tests", "description" => "Test suite", "priority" => 2, "labels" => [ "testing" ], "position" => 4, "depends_on" => [ 2, 3 ] }
       ]
     end
 

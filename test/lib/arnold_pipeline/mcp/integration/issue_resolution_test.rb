@@ -29,17 +29,17 @@ module ArnoldPipeline
             title: "Setup database schema",
             description: "Create core tables",
             tier: 0, position: 0, status: :completed,
-            labels: ["backend", "database"],
+            labels: [ "backend", "database" ],
             depends_on: [],
-            result_comments: [{ "body" => "Schema created" }]
+            result_comments: [ { "body" => "Schema created" } ]
           )
           @task_models = @run.tasks.create!(
             title: "Create models",
             description: "Define ActiveRecord models",
             tier: 0, position: 1, status: :completed,
-            labels: ["backend", "models"],
+            labels: [ "backend", "models" ],
             depends_on: [],
-            result_comments: [{ "body" => "Models created" }]
+            result_comments: [ { "body" => "Models created" } ]
           )
 
           # Tier 1 - feature tasks
@@ -47,15 +47,15 @@ module ArnoldPipeline
             title: "Implement authentication",
             description: "Build user login, registration, and OAuth",
             tier: 1, position: 2, status: :in_progress,
-            labels: ["backend", "authentication"],
-            depends_on: [@task_db.id, @task_models.id]
+            labels: [ "backend", "authentication" ],
+            depends_on: [ @task_db.id, @task_models.id ]
           )
           @task_products = @run.tasks.create!(
             title: "Build product catalog",
             description: "CRUD for products with search",
             tier: 1, position: 3, status: :pending,
-            labels: ["backend", "products"],
-            depends_on: [@task_models.id]
+            labels: [ "backend", "products" ],
+            depends_on: [ @task_models.id ]
           )
 
           # Tier 2 - depends on tier 1
@@ -63,8 +63,8 @@ module ArnoldPipeline
             title: "Implement order processing",
             description: "Shopping cart and checkout",
             tier: 2, position: 4, status: :pending,
-            labels: ["backend", "orders"],
-            depends_on: [@task_auth.id, @task_products.id]
+            labels: [ "backend", "orders" ],
+            depends_on: [ @task_auth.id, @task_products.id ]
           )
         end
 
@@ -232,7 +232,7 @@ module ArnoldPipeline
           complete_result = call_and_parse("complete_task", {
             "task_id" => @task_products.id.to_s,
             "summary" => "Implemented product catalog with basic search",
-            "files_changed" => ["app/controllers/products_controller.rb"]
+            "files_changed" => [ "app/controllers/products_controller.rb" ]
           })
 
           assert_equal "completed", complete_result["status"]

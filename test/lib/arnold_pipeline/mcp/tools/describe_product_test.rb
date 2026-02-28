@@ -19,8 +19,8 @@ module ArnoldPipeline
               "product_name" => "Fitness Tracker Pro",
               "summary" => "A comprehensive fitness tracking application",
               "personas" => [
-                { "name" => "Athlete", "description" => "Active sports person", "capabilities" => ["track workouts", "set goals"] },
-                { "name" => "Coach", "description" => "Fitness instructor", "capabilities" => ["create plans"] }
+                { "name" => "Athlete", "description" => "Active sports person", "capabilities" => [ "track workouts", "set goals" ] },
+                { "name" => "Coach", "description" => "Fitness instructor", "capabilities" => [ "create plans" ] }
               ],
               "domains" => [
                 { "name" => "Workouts", "description" => "Exercise tracking and logging" },
@@ -74,9 +74,9 @@ module ArnoldPipeline
 
         test "call returns domains with status" do
           Task.create!(pipeline_run: @run, title: "Implement workout tracking", position: 0,
-                       status: :completed, labels: ["workouts"])
+                       status: :completed, labels: [ "workouts" ])
           Task.create!(pipeline_run: @run, title: "Build nutrition logger", position: 1,
-                       status: :in_progress, labels: ["nutrition"])
+                       status: :in_progress, labels: [ "nutrition" ])
 
           result = DescribeProduct.call({}, @context)
 
@@ -143,9 +143,9 @@ module ArnoldPipeline
         test "call extracts domains from task labels when structured_data has none" do
           @spec.update!(structured_data: {})
           Task.create!(pipeline_run: @run, title: "Setup auth", position: 0,
-                       status: :completed, labels: ["authentication"])
+                       status: :completed, labels: [ "authentication" ])
           Task.create!(pipeline_run: @run, title: "Build API", position: 1,
-                       status: :pending, labels: ["backend"])
+                       status: :pending, labels: [ "backend" ])
 
           result = DescribeProduct.call({}, @context)
 

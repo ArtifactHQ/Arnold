@@ -135,7 +135,7 @@ module ArnoldPipeline
       # 6. check_node returns :pass or :warn or :skip based on availability
       test "check_node returns pass, warn, or skip based on availability" do
         result = Doctor.check_node
-        assert_includes [:pass, :warn, :skip], result.status
+        assert_includes [ :pass, :warn, :skip ], result.status
         assert_equal "Node.js", result.name
       end
 
@@ -164,7 +164,7 @@ module ArnoldPipeline
       # 7. check_openspec returns :pass or :skip
       test "check_openspec returns pass or skip" do
         result = Doctor.check_openspec
-        assert_includes [:pass, :skip], result.status
+        assert_includes [ :pass, :skip ], result.status
         assert_equal "OpenSpec CLI", result.name
       end
 
@@ -193,7 +193,7 @@ module ArnoldPipeline
       # 8. check_claude_code returns :pass or :skip
       test "check_claude_code returns pass or skip" do
         result = Doctor.check_claude_code
-        assert_includes [:pass, :skip], result.status
+        assert_includes [ :pass, :skip ], result.status
         assert_equal "Claude Code CLI", result.name
       end
 

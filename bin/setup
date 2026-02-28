@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+# Navigate to project root
+cd "$(dirname "$0")/.."
+
+echo "==> Installing dependencies..."
+bundle install
+
+echo "==> Preparing test database..."
+bin/rails db:test:prepare
+
+echo "==> Setup complete!"

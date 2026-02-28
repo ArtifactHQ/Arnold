@@ -28,7 +28,7 @@ module ArnoldPipeline
                 default: false
               }
             },
-            required: ["tier"]
+            required: [ "tier" ]
           }
         end
 

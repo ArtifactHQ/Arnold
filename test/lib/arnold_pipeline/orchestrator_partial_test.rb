@@ -280,9 +280,9 @@ module ArnoldPipeline
 
       assert_equal "completed", result.status
       # sample_tasks has 4 tiers (0,1,2,3)
-      assert_equal [[0], [1], [2], [3]], tiers_published
-      assert_equal [[0], [1], [2], [3]], tiers_awaited
-      assert_equal [[0], [1], [2], [3]], tiers_merged
+      assert_equal [ [ 0 ], [ 1 ], [ 2 ], [ 3 ] ], tiers_published
+      assert_equal [ [ 0 ], [ 1 ], [ 2 ], [ 3 ] ], tiers_awaited
+      assert_equal [ [ 0 ], [ 1 ], [ 2 ], [ 3 ] ], tiers_merged
     end
 
     test "resume skips completed tiers" do
@@ -310,8 +310,8 @@ module ArnoldPipeline
 
       assert_equal "completed", result.status
       # Tier 0 should be skipped since it's resolved
-      assert_not_includes tiers_published, [0]
-      assert_includes tiers_published, [1]
+      assert_not_includes tiers_published, [ 0 ]
+      assert_includes tiers_published, [ 1 ]
     end
 
     # --- Analysis Loop Continues From Prior Iterations ---
@@ -353,7 +353,7 @@ module ArnoldPipeline
     def stub_spec_generation!
       @spec_generator.stubs(:call).returns({
         content: "# Todo App Spec\n\nA todo app with CRUD operations",
-        structured_data: { "features" => ["create", "read", "update", "delete"] }
+        structured_data: { "features" => [ "create", "read", "update", "delete" ] }
       })
     end
 
@@ -363,11 +363,11 @@ module ArnoldPipeline
 
     def sample_tasks
       [
-        { "title" => "Setup database", "description" => "Create schema", "priority" => 0, "labels" => ["database"], "position" => 0, "depends_on" => [] },
-        { "title" => "Create models", "description" => "Define models", "priority" => 0, "labels" => ["backend"], "position" => 1, "depends_on" => [0] },
-        { "title" => "Build API", "description" => "REST endpoints", "priority" => 1, "labels" => ["backend"], "position" => 2, "depends_on" => [1] },
-        { "title" => "Add auth", "description" => "Auth system", "priority" => 1, "labels" => ["backend"], "position" => 3, "depends_on" => [1] },
-        { "title" => "Write tests", "description" => "Test suite", "priority" => 2, "labels" => ["testing"], "position" => 4, "depends_on" => [2, 3] }
+        { "title" => "Setup database", "description" => "Create schema", "priority" => 0, "labels" => [ "database" ], "position" => 0, "depends_on" => [] },
+        { "title" => "Create models", "description" => "Define models", "priority" => 0, "labels" => [ "backend" ], "position" => 1, "depends_on" => [ 0 ] },
+        { "title" => "Build API", "description" => "REST endpoints", "priority" => 1, "labels" => [ "backend" ], "position" => 2, "depends_on" => [ 1 ] },
+        { "title" => "Add auth", "description" => "Auth system", "priority" => 1, "labels" => [ "backend" ], "position" => 3, "depends_on" => [ 1 ] },
+        { "title" => "Write tests", "description" => "Test suite", "priority" => 2, "labels" => [ "testing" ], "position" => 4, "depends_on" => [ 2, 3 ] }
       ]
     end
 

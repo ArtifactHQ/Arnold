@@ -18,7 +18,7 @@ module ArnoldPipeline
             position: 0,
             tier: 0,
             status: :in_progress,
-            labels: ["backend"],
+            labels: [ "backend" ],
             depends_on: []
           )
           @task2 = Task.create!(
@@ -28,8 +28,8 @@ module ArnoldPipeline
             position: 1,
             tier: 0,
             status: :pending,
-            labels: ["backend"],
-            depends_on: [@task1.id.to_s]
+            labels: [ "backend" ],
+            depends_on: [ @task1.id.to_s ]
           )
           @task3 = Task.create!(
             pipeline_run: @run,
@@ -38,7 +38,7 @@ module ArnoldPipeline
             position: 2,
             tier: 1,
             status: :pending,
-            labels: ["frontend"],
+            labels: [ "frontend" ],
             depends_on: []
           )
         end
@@ -71,7 +71,7 @@ module ArnoldPipeline
           result = CompleteTask.call({
             "task_id" => @task1.id.to_s,
             "summary" => "Database schema created",
-            "files_changed" => ["db/schema.rb", "db/migrate/001_create_tables.rb"]
+            "files_changed" => [ "db/schema.rb", "db/migrate/001_create_tables.rb" ]
           }, @context)
 
           assert_equal @task1.id.to_s, result[:task_id]
@@ -92,7 +92,7 @@ module ArnoldPipeline
         end
 
         test "call appends to existing result_comments" do
-          @task1.update!(result_comments: [{ "body" => "Previous comment" }])
+          @task1.update!(result_comments: [ { "body" => "Previous comment" } ])
 
           CompleteTask.call({
             "task_id" => @task1.id.to_s,
@@ -107,7 +107,7 @@ module ArnoldPipeline
         end
 
         test "call stores files_changed in execution_metadata" do
-          files = ["app/models/user.rb", "db/migrate/001.rb"]
+          files = [ "app/models/user.rb", "db/migrate/001.rb" ]
           CompleteTask.call({
             "task_id" => @task1.id.to_s,
             "summary" => "Done",
@@ -199,7 +199,7 @@ module ArnoldPipeline
           result = CompleteTask.call({
             "task_id" => @task2.id.to_s,
             "summary" => "API built",
-            "files_changed" => ["app/controllers/api_controller.rb"]
+            "files_changed" => [ "app/controllers/api_controller.rb" ]
           }, @context)
 
           assert_equal "completed", result[:status]

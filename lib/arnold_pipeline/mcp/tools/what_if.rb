@@ -106,7 +106,7 @@ module ArnoldPipeline
                 description: "Pipeline run ID. Defaults to the latest run if not provided."
               }
             },
-            required: ["question"]
+            required: [ "question" ]
           }
         end
 
@@ -131,7 +131,7 @@ module ArnoldPipeline
           user_content = build_user_content(question, spec)
 
           result = agent.send(:chat_json,
-            messages: [{ role: "user", content: user_content }],
+            messages: [ { role: "user", content: user_content } ],
             system: SYSTEM_PROMPT,
             schema: RESPONSE_SCHEMA
           )
@@ -212,7 +212,7 @@ module ArnoldPipeline
               complexity_assessment: "Unable to assess — LLM unavailable",
               dependencies: []
             },
-            follow_up_questions: ["Could you provide more detail about this hypothetical?"],
+            follow_up_questions: [ "Could you provide more detail about this hypothetical?" ],
             ready_to_propose: false
           }
         end

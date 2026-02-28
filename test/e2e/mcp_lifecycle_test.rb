@@ -14,8 +14,8 @@ module ArnoldPipeline
           structured_data: {
             "product_name" => "Dog Walking App",
             "personas" => [
-              { "name" => "Dog Walker", "description" => "Walks dogs", "capabilities" => ["Accept bookings", "View schedule"] },
-              { "name" => "Dog Owner", "description" => "Owns dogs", "capabilities" => ["Book walks", "Track walker"] }
+              { "name" => "Dog Walker", "description" => "Walks dogs", "capabilities" => [ "Accept bookings", "View schedule" ] },
+              { "name" => "Dog Owner", "description" => "Owns dogs", "capabilities" => [ "Book walks", "Track walker" ] }
             ],
             "domains" => [
               { "name" => "Booking", "description" => "Walk booking system" },
@@ -37,22 +37,22 @@ module ArnoldPipeline
           title: "Setup database schema",
           description: "Create users, walks, and bookings tables",
           tier: 0, position: 0, status: :pending,
-          labels: ["backend", "database"],
-          acceptance_criteria: [{ "description" => "Tables created" }]
+          labels: [ "backend", "database" ],
+          acceptance_criteria: [ { "description" => "Tables created" } ]
         )
         @tier0_task2 = @run.tasks.create!(
           title: "Setup authentication",
           description: "Add Devise authentication for users",
           tier: 0, position: 1, status: :pending,
-          labels: ["backend", "auth"],
-          acceptance_criteria: [{ "description" => "Auth works" }]
+          labels: [ "backend", "auth" ],
+          acceptance_criteria: [ { "description" => "Auth works" } ]
         )
         @tier1_task = @run.tasks.create!(
           title: "Build booking API",
           description: "Create booking endpoints for walk scheduling",
           tier: 1, position: 2, status: :pending,
-          labels: ["backend", "api", "booking"],
-          depends_on: [@tier0_task1.id, @tier0_task2.id]
+          labels: [ "backend", "api", "booking" ],
+          depends_on: [ @tier0_task1.id, @tier0_task2.id ]
         )
       end
 
@@ -90,7 +90,7 @@ module ArnoldPipeline
         result = call_tool("complete_task", {
           "task_id" => @tier0_task1.id.to_s,
           "summary" => "Created users and walks tables",
-          "files_changed" => ["db/migrate/001_create_users.rb", "db/migrate/002_create_walks.rb"]
+          "files_changed" => [ "db/migrate/001_create_users.rb", "db/migrate/002_create_walks.rb" ]
         })
         assert_equal "completed", result["status"]
         assert_equal 0, result["tier_progress"]["tier"]
@@ -101,7 +101,7 @@ module ArnoldPipeline
         result = call_tool("complete_task", {
           "task_id" => @tier0_task2.id.to_s,
           "summary" => "Added Devise authentication",
-          "files_changed" => ["app/models/user.rb", "config/initializers/devise.rb"]
+          "files_changed" => [ "app/models/user.rb", "config/initializers/devise.rb" ]
         })
         assert_equal true, result["tier_progress"]["ready_for_validation"]
 
@@ -174,11 +174,11 @@ module ArnoldPipeline
         # Complete first task to provide prior context
         @tier0_task1.update!(
           status: :completed,
-          result_comments: [{ "body" => "Created users table with email and password_digest columns" }]
+          result_comments: [ { "body" => "Created users table with email and password_digest columns" } ]
         )
         @tier0_task2.update!(
           status: :completed,
-          result_comments: [{ "body" => "Added Devise auth with JWT tokens" }]
+          result_comments: [ { "body" => "Added Devise auth with JWT tokens" } ]
         )
 
         # Start tier 1 task that depends on tier 0 tasks
@@ -231,7 +231,7 @@ module ArnoldPipeline
         result = call_tool("complete_task", {
           "task_id" => @tier0_task1.id.to_s,
           "summary" => "Completed with workaround",
-          "files_changed" => ["db/migrate/001_create_users.rb"]
+          "files_changed" => [ "db/migrate/001_create_users.rb" ]
         })
         assert_equal "completed", result["status"]
       end
@@ -337,7 +337,7 @@ module ArnoldPipeline
         result = call_tool("complete_task", {
           "task_id" => @tier0_task1.id.to_s,
           "summary" => "Done",
-          "files_changed" => ["file.rb"]
+          "files_changed" => [ "file.rb" ]
         })
         assert_equal "completed", result["status"]
 
@@ -345,7 +345,7 @@ module ArnoldPipeline
         result_raw = @handler.call_tool("complete_task", {
           "task_id" => @tier0_task1.id.to_s,
           "summary" => "Done again",
-          "files_changed" => ["file.rb"]
+          "files_changed" => [ "file.rb" ]
         })
         parsed = JSON.parse(result_raw[:content].first[:text])
         assert parsed.key?("error")
@@ -354,8 +354,8 @@ module ArnoldPipeline
 
       test "validate_tier includes drift info when requested" do
         # Complete all tier 0 tasks
-        @tier0_task1.update!(status: :completed, result_comments: [{ "body" => "done" }])
-        @tier0_task2.update!(status: :completed, result_comments: [{ "body" => "done" }])
+        @tier0_task1.update!(status: :completed, result_comments: [ { "body" => "done" } ])
+        @tier0_task2.update!(status: :completed, result_comments: [ { "body" => "done" } ])
 
         result = call_tool("validate_tier", {
           "run_id" => @run.id.to_s,

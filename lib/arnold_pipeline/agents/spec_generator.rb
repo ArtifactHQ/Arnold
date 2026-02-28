@@ -12,7 +12,7 @@ module ArnoldPipeline
         user = Prompts::SpecGeneration.user_prompt(nl_input:)
 
         response = chat(
-          messages: [{ role: :user, content: user }],
+          messages: [ { role: :user, content: user } ],
           system: system
         )
 

@@ -89,7 +89,7 @@ module ArnoldPipeline
       TestExecution::TestRunner.expects(:call).returns(test_result)
 
       previous_results = {
-        "failed_names" => ["TestA#test_a", "TestB#test_b", "TestC#test_c"]
+        "failed_names" => [ "TestA#test_a", "TestB#test_b", "TestC#test_c" ]
       }
 
       progress = SpecTestProgressTracker.call(
@@ -102,7 +102,7 @@ module ArnoldPipeline
       assert_equal 2, progress.total_passing
       assert_includes progress.newly_passing, "TestA#test_a"
       assert_includes progress.newly_passing, "TestB#test_b"
-      assert_equal ["TestC#test_c"], progress.still_failing
+      assert_equal [ "TestC#test_c" ], progress.still_failing
       assert_equal [], progress.regressions
     end
 
@@ -123,7 +123,7 @@ module ArnoldPipeline
       TestExecution::TestRunner.expects(:call).returns(test_result)
 
       previous_results = {
-        "failed_names" => ["TestA#test_a"]
+        "failed_names" => [ "TestA#test_a" ]
       }
 
       progress = SpecTestProgressTracker.call(
@@ -134,7 +134,7 @@ module ArnoldPipeline
 
       assert_equal 3, progress.total_tests
       assert_equal 1, progress.total_passing
-      assert_equal ["TestA#test_a"], progress.still_failing
+      assert_equal [ "TestA#test_a" ], progress.still_failing
       assert_includes progress.regressions, "TestB#test_b"
       assert_equal [], progress.newly_passing
     end

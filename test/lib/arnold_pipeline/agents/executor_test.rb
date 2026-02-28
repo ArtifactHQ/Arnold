@@ -19,7 +19,7 @@ module ArnoldPipeline
           { external_id: "42", external_url: "https://github.com/o/r/issues/42", title: "Setup DB" }
         ])
 
-        @executor.call(tasks: [task], pipeline_run: @pipeline_run)
+        @executor.call(tasks: [ task ], pipeline_run: @pipeline_run)
 
         task.reload
         assert_equal "42", task.external_id
@@ -31,7 +31,7 @@ module ArnoldPipeline
         task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
 
         @provider.expects(:fetch_results).returns([
-          { task_id: task.id, external_id: "42", diffs: [{ filename: "db/schema.rb" }], status: :completed }
+          { task_id: task.id, external_id: "42", diffs: [ { filename: "db/schema.rb" } ], status: :completed }
         ])
 
         results = @executor.fetch_results(pipeline_run: @pipeline_run)
@@ -44,7 +44,7 @@ module ArnoldPipeline
       test "fetch_results stores comments on task records" do
         task = @pipeline_run.tasks.create!(title: "Setup DB", position: 0, external_id: "42")
 
-        comments = [{ source: "issue", author: "copilot", body: "Can't scaffold without Gemfile", created_at: "2025-02-06T00:00:00Z" }]
+        comments = [ { source: "issue", author: "copilot", body: "Can't scaffold without Gemfile", created_at: "2025-02-06T00:00:00Z" } ]
         @provider.expects(:fetch_results).returns([
           { task_id: task.id, external_id: "42", diffs: [], comments: comments, status: :pending }
         ])
@@ -70,7 +70,7 @@ module ArnoldPipeline
       end
 
       test "merge_results delegates to provider" do
-        @provider.expects(:merge_results).returns([{ pr_number: 1, task_id: 1 }])
+        @provider.expects(:merge_results).returns([ { pr_number: 1, task_id: 1 } ])
 
         results = @executor.merge_results(pipeline_run: @pipeline_run)
         assert_equal 1, results.size
@@ -86,7 +86,7 @@ module ArnoldPipeline
         ])
 
         @executor.call(
-          tasks: [task],
+          tasks: [ task ],
           pipeline_run: @pipeline_run,
           prior_context: "## Prior Implementation Context\n\n**Tier 0 completed:** Setup done."
         )
@@ -101,7 +101,7 @@ module ArnoldPipeline
           { external_id: "42", external_url: "https://github.com/o/r/issues/42", title: "Setup DB" }
         ])
 
-        @executor.call(tasks: [task], pipeline_run: @pipeline_run)
+        @executor.call(tasks: [ task ], pipeline_run: @pipeline_run)
       end
 
       # --- await_results tests ---
@@ -159,7 +159,7 @@ module ArnoldPipeline
 
         executor.await_results(pipeline_run: @pipeline_run)
 
-        assert_equal [2], sleep_calls
+        assert_equal [ 2 ], sleep_calls
       ensure
         ArnoldPipeline.reset_configuration!
       end
@@ -186,7 +186,7 @@ module ArnoldPipeline
         executor.await_results(pipeline_run: @pipeline_run)
 
         # Backoff: 2, 4, 4 (capped by remaining time) = 10s total
-        assert_equal [2, 4, 4], sleep_calls
+        assert_equal [ 2, 4, 4 ], sleep_calls
       ensure
         ArnoldPipeline.reset_configuration!
       end
@@ -212,7 +212,7 @@ module ArnoldPipeline
         executor.await_results(pipeline_run: @pipeline_run)
 
         # Backoff: 2, 4, 6, 6, 2 (remaining) = 20s total
-        assert_equal [2, 4, 6, 6, 2], sleep_calls
+        assert_equal [ 2, 4, 6, 6, 2 ], sleep_calls
       ensure
         ArnoldPipeline.reset_configuration!
       end
@@ -252,7 +252,7 @@ module ArnoldPipeline
 
         task = @pipeline_run.tasks.create!(
           title: "Setup DB", position: 0, external_id: "42", status: :in_progress,
-          result_comments: [{ source: "issue", author: "copilot", body: "I can't do this", created_at: "2025-02-06T00:00:00Z" }]
+          result_comments: [ { source: "issue", author: "copilot", body: "I can't do this", created_at: "2025-02-06T00:00:00Z" } ]
         )
 
         @provider.stubs(:fetch_results).returns([])
@@ -280,7 +280,7 @@ module ArnoldPipeline
 
         task = @pipeline_run.tasks.create!(
           title: "Setup DB", position: 0, external_id: "42", status: :in_progress,
-          result_comments: [{ source: "issue", author: "copilot", body: "Claude Code is working on this issue. I'll analyze this and get back to you.", created_at: "2025-02-06T00:00:00Z" }]
+          result_comments: [ { source: "issue", author: "copilot", body: "Claude Code is working on this issue. I'll analyze this and get back to you.", created_at: "2025-02-06T00:00:00Z" } ]
         )
 
         @provider.stubs(:fetch_results).returns([])
@@ -318,7 +318,7 @@ module ArnoldPipeline
           c.polling_max_interval = 6
         end
 
-        executor.await_results(pipeline_run: @pipeline_run, tasks: [task1])
+        executor.await_results(pipeline_run: @pipeline_run, tasks: [ task1 ])
 
         assert_empty sleep_calls, "Should not sleep when scoped tasks are all resolved"
       ensure
@@ -329,9 +329,9 @@ module ArnoldPipeline
         task1 = @pipeline_run.tasks.create!(title: "Task 1", position: 0, external_id: "1")
         task2 = @pipeline_run.tasks.create!(title: "Task 2", position: 1, external_id: "2")
 
-        @provider.expects(:merge_results).with(pipeline_run: @pipeline_run, tasks: [task1]).returns([{ pr_number: 1, task_id: task1.id }])
+        @provider.expects(:merge_results).with(pipeline_run: @pipeline_run, tasks: [ task1 ]).returns([ { pr_number: 1, task_id: task1.id } ])
 
-        results = @executor.merge_results(pipeline_run: @pipeline_run, tasks: [task1])
+        results = @executor.merge_results(pipeline_run: @pipeline_run, tasks: [ task1 ])
         assert_equal 1, results.size
       end
 
@@ -372,7 +372,7 @@ module ArnoldPipeline
         task = @pipeline_run.tasks.create!(title: "Task", position: 0, external_id: "ext-1")
         metadata = { "cost_usd" => 0.034, "duration_ms" => 28470, "num_turns" => 12 }
 
-        @provider.stubs(:fetch_results).returns([{
+        @provider.stubs(:fetch_results).returns([ {
           task_id: task.id,
           external_id: "ext-1",
           diffs: [],
@@ -380,7 +380,7 @@ module ArnoldPipeline
           status: :completed,
           workflow_active: false,
           execution_metadata: metadata
-        }])
+        } ])
 
         @executor.fetch_results(pipeline_run: @pipeline_run)
 
@@ -391,14 +391,14 @@ module ArnoldPipeline
       test "fetch_results handles missing execution_metadata gracefully" do
         task = @pipeline_run.tasks.create!(title: "Task", position: 0, external_id: "ext-1")
 
-        @provider.stubs(:fetch_results).returns([{
+        @provider.stubs(:fetch_results).returns([ {
           task_id: task.id,
           external_id: "ext-1",
           diffs: [],
           comments: [],
           status: :completed,
           workflow_active: false
-        }])
+        } ])
 
         @executor.fetch_results(pipeline_run: @pipeline_run)
 
@@ -436,7 +436,7 @@ module ArnoldPipeline
 
         executor.await_results(pipeline_run: @pipeline_run)
 
-        assert_equal [2], sleep_calls, "Should poll once more while workflow is active"
+        assert_equal [ 2 ], sleep_calls, "Should poll once more while workflow is active"
       ensure
         ArnoldPipeline.reset_configuration!
       end

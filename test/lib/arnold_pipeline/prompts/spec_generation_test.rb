@@ -114,7 +114,7 @@ module ArnoldPipeline
       end
 
       test "system_prompt includes supporting recipes when present" do
-        supporting = [@manager.find_recipe("Create a REST API with JSON endpoints")]
+        supporting = [ @manager.find_recipe("Create a REST API with JSON endpoints") ]
         prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, supporting_recipes: supporting, domain_type: @domain_type)
         assert_includes prompt, "Supporting recipes"
         assert_includes prompt, "API Service"
@@ -126,7 +126,7 @@ module ArnoldPipeline
       end
 
       test "system_prompt includes supporting_recipe_types in JSON metadata" do
-        supporting = [@manager.find_recipe("Create a REST API with JSON endpoints")]
+        supporting = [ @manager.find_recipe("Create a REST API with JSON endpoints") ]
         prompt = SpecGeneration.system_prompt(persona: @persona, recipe: @recipe, supporting_recipes: supporting, domain_type: @domain_type)
         assert_includes prompt, "supporting_recipe_types"
       end

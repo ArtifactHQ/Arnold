@@ -75,7 +75,7 @@ module ArnoldPipeline
                 description: "Pipeline run ID. Defaults to the latest run if not provided."
               }
             },
-            required: ["capability"]
+            required: [ "capability" ]
           }
         end
 
@@ -110,7 +110,7 @@ module ArnoldPipeline
           end
 
           result = agent.send(:chat_json,
-            messages: [{ role: "user", content: user_content }],
+            messages: [ { role: "user", content: user_content } ],
             system: SYSTEM_PROMPT,
             schema: RESPONSE_SCHEMA
           )
@@ -165,7 +165,7 @@ module ArnoldPipeline
               personas_involved: persona_names,
               depends_on: [],
               enables: [],
-              open_questions: ["Detailed capability analysis unavailable — LLM fallback"]
+              open_questions: [ "Detailed capability analysis unavailable — LLM fallback" ]
             }
           else
             { error: "Could not find capability matching '#{capability_query}'" }

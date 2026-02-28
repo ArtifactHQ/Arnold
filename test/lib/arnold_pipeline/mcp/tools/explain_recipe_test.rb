@@ -16,7 +16,7 @@ module ArnoldPipeline
               "library_selections" => {
                 "persona" => "Software Architect",
                 "recipe" => "Web App",
-                "supporting_recipes" => ["API Service"],
+                "supporting_recipes" => [ "API Service" ],
                 "domain_type" => "PRODUCTIVITY"
               }
             }

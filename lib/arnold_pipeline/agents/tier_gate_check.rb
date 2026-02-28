@@ -8,14 +8,14 @@ module ArnoldPipeline
         name: "tier_gate_result",
         schema: {
           type: "object", additionalProperties: false,
-          required: ["pass", "issues", "context_summary", "corrective_tasks"],
+          required: [ "pass", "issues", "context_summary", "corrective_tasks" ],
           properties: {
             pass: { type: "boolean" },
             issues: { type: "array", items: { type: "string" } },
             context_summary: { type: "string" },
             corrective_tasks: { type: "array", items: {
               type: "object", additionalProperties: false,
-              required: ["title", "description", "labels"],
+              required: [ "title", "description", "labels" ],
               properties: {
                 title: { type: "string" },
                 description: { type: "string" },
@@ -44,7 +44,7 @@ module ArnoldPipeline
         )
 
         result = chat_json(
-          messages: [{ role: :user, content: user }],
+          messages: [ { role: :user, content: user } ],
           system: system,
           schema: RESPONSE_SCHEMA
         )
@@ -58,7 +58,7 @@ module ArnoldPipeline
       def validate_result!(result)
         raise Error, "Expected hash result, got #{result.class}" unless result.is_a?(Hash)
 
-        unless [true, false].include?(result["pass"])
+        unless [ true, false ].include?(result["pass"])
           raise Error, "Invalid pass value: #{result['pass'].inspect}. Must be boolean."
         end
 

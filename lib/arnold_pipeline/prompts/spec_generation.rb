@@ -295,7 +295,7 @@ module ArnoldPipeline
       end
 
       def self.format_section(section)
-        parts = ["### #{section['name']}"]
+        parts = [ "### #{section['name']}" ]
         parts << section["description"].strip if section["description"]
 
         tools = section["rails_tools"] || section["tools"]
@@ -318,7 +318,7 @@ module ArnoldPipeline
       def self.supporting_recipes_section(recipes)
         return "" if recipes.nil? || recipes.empty?
 
-        parts = ["## Supporting recipes"]
+        parts = [ "## Supporting recipes" ]
         parts << "These additional recipes may be relevant. Consider their section concerns where applicable:"
 
         recipes.each do |r|

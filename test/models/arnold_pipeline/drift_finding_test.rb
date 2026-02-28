@@ -224,17 +224,17 @@ module ArnoldPipeline
     test "stores files_examined as JSON array" do
       finding = DriftFinding.create!(
         pipeline_run: @run, drift_type: "structural", severity: "info", description: "d",
-        files_examined: ["app/models/user.rb", "app/controllers/users_controller.rb"]
+        files_examined: [ "app/models/user.rb", "app/controllers/users_controller.rb" ]
       )
-      assert_equal ["app/models/user.rb", "app/controllers/users_controller.rb"], finding.reload.files_examined
+      assert_equal [ "app/models/user.rb", "app/controllers/users_controller.rb" ], finding.reload.files_examined
     end
 
     test "stores affected_tasks as JSON array" do
       finding = DriftFinding.create!(
         pipeline_run: @run, drift_type: "structural", severity: "info", description: "d",
-        affected_tasks: ["1", "2", "3"]
+        affected_tasks: [ "1", "2", "3" ]
       )
-      assert_equal ["1", "2", "3"], finding.reload.affected_tasks
+      assert_equal [ "1", "2", "3" ], finding.reload.affected_tasks
     end
 
     test "pipeline_run has_many drift_findings with dependent destroy" do
