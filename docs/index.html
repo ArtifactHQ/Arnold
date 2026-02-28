@@ -1633,7 +1633,7 @@ config.max_tier_retries = <span class="tok-number">0</span></code></pre>
   <pre><code>ArnoldPipeline.configure <span class="tok-keyword">do</span> |config|
   config.llm_provider   = <span class="tok-keyword">:anthropic</span>
   config.llm_api_key    = <span class="tok-func">ENV</span>[<span class="tok-string">"ANTHROPIC_API_KEY"</span>]
-  config.llm_model      = <span class="tok-string">"claude-sonnet-4-20250514"</span>
+  config.llm_model      = <span class="tok-string">"claude-sonnet-4-6"</span>
   config.github_token   = <span class="tok-func">ENV</span>[<span class="tok-string">"GITHUB_TOKEN"</span>]
   config.github_repo    = <span class="tok-string">"owner/repo"</span>
   config.max_iterations = <span class="tok-number">3</span>
@@ -1760,7 +1760,7 @@ config.openspec_cli_path = <span class="tok-string">"openspec"</span> <span clas
     <tbody>
       <tr><td><code>llm_provider</code></td><td><code>:anthropic</code></td><td><code>:anthropic</code> or <code>:openai</code></td></tr>
       <tr><td><code>llm_api_key</code></td><td>—</td><td>Auto-detected from provider env var</td></tr>
-      <tr><td><code>llm_model</code></td><td>per-provider</td><td><code>claude-sonnet-4-20250514</code> / <code>gpt-4o</code></td></tr>
+      <tr><td><code>llm_model</code></td><td>per-provider</td><td><code>claude-sonnet-4-6</code> / <code>gpt-4o</code></td></tr>
       <tr><td><code>llm_request_timeout</code></td><td><code>600</code></td><td>API timeout in seconds</td></tr>
     </tbody>
   </table>

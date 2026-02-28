@@ -11,7 +11,7 @@ module ArnoldPipeline
           ArnoldPipeline.configure do |c|
             c.llm_provider = :anthropic
             c.llm_api_key = "sk-test"
-            c.llm_model = "claude-sonnet-4-20250514"
+            c.llm_model = "claude-sonnet-4-6"
           end
 
           provider = Llm.build
@@ -39,7 +39,7 @@ module ArnoldPipeline
           ArnoldPipeline.configure { |c| c.llm_api_key = nil }
 
           error = assert_raises(ConfigurationError) do
-            Llm.build(provider: :anthropic, model: "claude-sonnet-4-20250514")
+            Llm.build(provider: :anthropic, model: "claude-sonnet-4-6")
           end
           assert_match(/LLM API key is required/, error.message)
         ensure
@@ -59,11 +59,11 @@ module ArnoldPipeline
           ArnoldPipeline.configure do |c|
             c.llm_provider = :anthropic
             c.llm_api_key = "sk-test"
-            c.llm_model = "claude-sonnet-4-20250514"
+            c.llm_model = "claude-sonnet-4-6"
             c.llm_request_timeout = 900
           end
 
-          Anthropic.expects(:new).with(api_key: "sk-test", model: "claude-sonnet-4-20250514", request_timeout: 900).returns(stub)
+          Anthropic.expects(:new).with(api_key: "sk-test", model: "claude-sonnet-4-6", request_timeout: 900).returns(stub)
           Llm.build
         ensure
           ArnoldPipeline.reset_configuration!

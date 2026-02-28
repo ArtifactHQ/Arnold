@@ -7,7 +7,7 @@ module ArnoldPipeline
     VALID_CRITERIA_CHECK_MODES = %i[advisory gating disabled].freeze
 
     PROVIDER_DEFAULTS = {
-      anthropic: { env_key: "ANTHROPIC_API_KEY", model: "claude-sonnet-4-20250514" },
+      anthropic: { env_key: "ANTHROPIC_API_KEY", model: "claude-sonnet-4-6" },
       openai:    { env_key: "OPENAI_API_KEY",    model: "gpt-4o" }
     }.freeze
 

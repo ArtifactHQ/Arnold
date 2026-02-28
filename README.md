@@ -346,7 +346,7 @@ Each task includes position, title, tier, priority, status, labels, dependencies
 |--------|---------|---------|-------------|
 | `llm_provider` | `:anthropic` | — | `:anthropic` or `:openai` |
 | `llm_api_key` | — | `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` | Auto-detected from provider |
-| `llm_model` | per-provider | — | `claude-sonnet-4-20250514` (anthropic) / `gpt-4o` (openai) |
+| `llm_model` | per-provider | — | `claude-sonnet-4-6` (anthropic) / `gpt-4o` (openai) |
 | `llm_request_timeout` | `600` | — | LLM API request timeout in seconds |
 
 ### Execution Provider (common)
@@ -496,7 +496,7 @@ Configure in `config/initializers/arnold_pipeline.rb`:
 ArnoldPipeline.configure do |config|
   config.llm_provider   = :anthropic
   config.llm_api_key    = ENV["ANTHROPIC_API_KEY"]
-  config.llm_model      = "claude-sonnet-4-20250514"
+  config.llm_model      = "claude-sonnet-4-6"
   config.github_token   = ENV["GITHUB_TOKEN"]
   config.github_repo    = "owner/repo"
   config.max_iterations = 3
@@ -654,7 +654,7 @@ Each task includes position, title, tier, priority, status, labels, dependencies
 |--------|---------|---------|-------------|
 | `llm_provider` | `:anthropic` | — | `:anthropic` or `:openai` |
 | `llm_api_key` | — | `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` | Auto-detected from provider |
-| `llm_model` | per-provider | — | `claude-sonnet-4-20250514` (anthropic) / `gpt-4o` (openai) |
+| `llm_model` | per-provider | — | `claude-sonnet-4-6` (anthropic) / `gpt-4o` (openai) |
 | `execution_provider` | `:github` | — | `:github`, `:claude_code`, or `:null` |
 | `github_token` | — | `GITHUB_TOKEN` | GitHub personal access token |
 | `github_repo` | — | — | Target repo (`owner/repo`) |

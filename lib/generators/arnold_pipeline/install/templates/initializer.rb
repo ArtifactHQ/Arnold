@@ -6,7 +6,7 @@ ArnoldPipeline.configure do |config|
   # config.llm_api_key = ENV["ANTHROPIC_API_KEY"]
 
   # Model to use for LLM calls
-  # config.llm_model = "claude-sonnet-4-20250514"
+  # config.llm_model = "claude-sonnet-4-6"
 
   # Execution provider: :github (more providers coming soon)
   # config.execution_provider = :github

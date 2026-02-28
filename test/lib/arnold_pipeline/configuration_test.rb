@@ -10,7 +10,7 @@ module ArnoldPipeline
 
     test "has sensible defaults" do
       assert_includes Configuration::VALID_LLM_PROVIDERS, @config.llm_provider
-      assert_includes ["claude-sonnet-4-20250514", "gpt-4o"], @config.llm_model
+      assert_includes ["claude-sonnet-4-6", "gpt-4o"], @config.llm_model
       assert_equal :github, @config.execution_provider
       assert_equal 3, @config.max_iterations
       assert_nil @config.github_issue_mention
@@ -122,7 +122,7 @@ module ArnoldPipeline
 
     test "llm_model defaults based on provider" do
       @config.llm_provider = :anthropic
-      assert_equal "claude-sonnet-4-20250514", @config.llm_model
+      assert_equal "claude-sonnet-4-6", @config.llm_model
 
       @config.llm_provider = :openai
       assert_equal "gpt-4o", @config.llm_model
@@ -154,7 +154,7 @@ module ArnoldPipeline
       ArnoldPipeline.configure { |c| c.llm_model = "custom-model" }
       ArnoldPipeline.reset_configuration!
 
-      assert_includes ["claude-sonnet-4-20250514", "gpt-4o"], ArnoldPipeline.configuration.llm_model
+      assert_includes ["claude-sonnet-4-6", "gpt-4o"], ArnoldPipeline.configuration.llm_model
     end
 
     test "validate! raises on invalid polling_interval" do
