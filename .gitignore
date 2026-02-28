@@ -45,5 +45,9 @@ reports/
 # Internal design/plan documents
 docs/plans/
 
+# Internal prompts and research
+prompts/
+research/
+
 # Bundled dependencies
 vendor/bundle
