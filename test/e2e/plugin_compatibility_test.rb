@@ -4,15 +4,13 @@ require "arnold_pipeline/mcp/handler"
 module ArnoldPipeline
   module E2e
     class PluginCompatibilityTest < ActiveSupport::TestCase
-      PLUGIN_PATH = File.expand_path(
-        ENV.fetch("ARNOLD_PLUGIN_PATH", "~/Documents/Projects/artifact/arnold-claude-code-plugin")
-      )
+      PLUGIN_PATH = ENV.fetch("ARNOLD_PLUGIN_PATH", nil)
 
       # Backtick-quoted identifiers in plugin docs that are not Arnold MCP tools
       NON_TOOL_IDENTIFIERS = %w[open_questions].freeze
 
       setup do
-        skip "Plugin repo not found at #{PLUGIN_PATH}" unless File.directory?(PLUGIN_PATH)
+        skip "Set ARNOLD_PLUGIN_PATH to run plugin compatibility tests" unless PLUGIN_PATH && File.directory?(PLUGIN_PATH)
         @handler = Mcp::Handler.new
         @actual_tools = @handler.tools_list.map { |t| t[:name] }
       end
