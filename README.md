@@ -207,6 +207,7 @@ Arnold dispatches tasks directly to the Claude Code CLI on your local machine. E
 arnold run "description" [options]   # Run the full pipeline
 arnold resume ID [options]           # Resume a paused or failed run
 arnold iterate ID "change" [options] # Iterate on a run's specification
+arnold analyze PATH [options]        # Analyze an existing codebase (brownfield)
 arnold status ID [options]           # Check a pipeline run
 arnold list [options]                # List all runs
 arnold spec ID [options]             # Export a run's specification
@@ -245,6 +246,15 @@ arnold tree                          # Print command tree
 #   --json                     Output delta details as JSON (with --dry-run)
 #   --verbose                  Show full before/after for modified requirements
 #   --yes, -y                  Skip confirmation prompt
+
+# Options for `analyze`:
+#   --config FILE              YAML config file
+#   --provider NAME            LLM provider (anthropic/openai)
+#   --model NAME               Model name
+#   --reference-materials F1 F2  Paths to reference docs (PRDs, wikis, etc.)
+#   --json                     Output full profile as JSON
+#   --verbose                  Enable verbose logging
+#   -o, --output FILE          Write as-built spec to file
 
 # Options for `status`:
 #   --json             Output as JSON
@@ -337,6 +347,30 @@ arnold tasks 1 --json -o tasks.json # Write JSON to file
 ```
 
 Each task includes position, title, tier, priority, status, labels, dependencies, and description. JSON output additionally includes `id`, `external_id`, and `external_url`.
+
+### Brownfield Analysis
+
+For existing codebases, Arnold can analyze what's already built before planning new work:
+
+```bash
+arnold analyze ./my-rails-app
+arnold analyze ./my-rails-app --json                          # Full profile as JSON
+arnold analyze ./my-rails-app -o as-built.md                  # Write as-built spec to file
+arnold analyze ./my-rails-app --reference-materials prd.md wiki.md  # Include context docs
+```
+
+The analysis runs an 8-step pipeline:
+
+1. **Stack Detection** — Deterministic scan for language, framework, and tooling (YAML rules)
+2. **Artifact Discovery** — Framework-specific file detection (models, controllers, routes, migrations)
+3. **Recipe Alignment** — Matches discovered stack to a library recipe
+4. **Overlay Resolution** — Loads framework-specific concern mappings and health checks
+5. **Brownfield Analysis** (LLM) — Recipe-concern alignment, convention inventory, documentation fidelity, change surface
+6. **Feature Extraction** (LLM) — Per-concern feature inventories with implementation status
+7. **As-Built Spec Generation** (LLM) — OpenSpec-format specification of existing behavior
+8. **Health Baseline** — Boot, test suite, and linter checks with pass/fail results
+
+The result is a `CodebaseProfile` containing the stack fingerprint, recipe alignment, conventions, health baseline, feature inventories, and an as-built specification. This profile feeds into future pipeline runs when working on brownfield projects.
 
 ## Configuration Reference
 
@@ -431,6 +465,21 @@ Each task includes position, title, tier, priority, status, labels, dependencies
 |--------|---------|-------------|
 | `repo_context_scan_patterns` | `nil` | Glob patterns for repo context scanning (nil = Rails defaults) |
 | `repo_context_scan_files` | `nil` | Specific files to include in repo context scan |
+
+### Brownfield Analysis
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `brownfield_mode` | `nil` | Analysis mode: `:assess`, `:extend`, or `:strangle` |
+| `reference_materials` | `[]` | Array of file paths to reference docs (PRDs, wikis) |
+| `brownfield_scan_budget` | `50000` | Token budget for LLM analysis steps |
+| `brownfield_deep_dive_domains` | `nil` | Array of domain names for targeted deep analysis |
+| `convention_compliance_enabled` | `false` | Enforce convention compliance during analysis |
+| `regression_baseline_enabled` | `true` | Run health baseline checks during analysis |
+| `stack_detection_overrides` | `{}` | Hash of manual stack overrides (e.g., `{ language: "ruby" }`) |
+| `additional_detection_rules_path` | `nil` | Path to additional YAML detection rules |
+| `additional_artifact_maps_path` | `nil` | Path to additional YAML artifact maps |
+| `health_baseline_timeout` | `120` | Seconds before health check execution times out |
 
 ## Key Concepts
 
@@ -1077,6 +1126,16 @@ lib/arnold_pipeline/
     spec_iterator.rb       # User change request → structured spec deltas
     task_breaker.rb        # Specification → ordered task list (JSON)
     tier_gate_check.rb     # Per-tier diff validation, corrective task generation
+    brownfield_analyzer.rb # LLM: recipe-concern alignment, conventions, change surface
+    feature_extractor.rb   # LLM: per-concern feature inventories
+    as_built_spec.rb       # LLM: OpenSpec-format spec from existing codebase
+  brownfield/
+    stack_detector.rb      # Deterministic stack detection (language, framework, tooling)
+    artifact_discoverer.rb # Framework-specific file discovery (models, routes, etc.)
+    overlay_resolver.rb    # Loads framework-specific concern mappings from YAML
+    health_baseline_runner.rb # Executes boot, test, and linter health checks
+    data/                  # YAML data files: detection_rules, artifact_maps, concerns,
+                           #   framework_overlays, test_output_parsers
   library/
     domain_type.rb         # Data.define value object for domain types
     manager.rb             # Keyword-based retrieval of personas, recipes, domain types
@@ -1119,11 +1178,12 @@ app/models/arnold_pipeline/
   spec_revision.rb         # Spec version snapshot (content, change_source, delta_summary)
   specification.rb         # Generated spec (content, structured_data, version)
   task.rb                  # Pipeline task (title, tier, deps, external_id, diff, status)
+  codebase_profile.rb      # Brownfield analysis result (stack, conventions, health, features)
 ```
 
 ### Key Classes
 
-- **Orchestrator** — The pipeline driver. `call(nl_input:, stop_after:)` for new runs, `resume(pipeline_run:, stop_after:)` for continuation, `iterate_spec!(pipeline_run:, change_request:)` for user-initiated spec refinement, `fork!(pipeline_run:, change_request:)` for iterating completed runs. Owns the state machine and delegates to agents.
+- **Orchestrator** — The pipeline driver. `call(nl_input:, stop_after:)` for new runs, `resume(pipeline_run:, stop_after:)` for continuation, `iterate_spec!(pipeline_run:, change_request:)` for user-initiated spec refinement, `fork!(pipeline_run:, change_request:)` for iterating completed runs, `analyze_codebase!(repo_path:)` for brownfield analysis. Owns the state machine and delegates to agents.
 - **AnalysisLoop** — Extracted iteration logic. Runs the analyzer, interprets the decision (`done`, `iterate_tasks`, `iterate_spec`), and drives the next cycle. Includes a version skew guard that suppresses `iterate_spec` when the spec has been user-iterated past the task generation version.
 - **DeltaMerger** — Shared service for applying structured deltas to specs. Used by both AnalysisLoop (analysis-driven iteration) and Orchestrator (user-initiated iteration). Handles the merge chain: OpenSpec CLI merge, structured append fallback, delta persistence, and revision snapshots.
 - **TierExecutionEngine** — Manages tier-by-tier execution: publish tasks for a tier, await results, run gate check, merge, advance to next tier.
@@ -1134,7 +1194,7 @@ app/models/arnold_pipeline/
 ### Testing
 
 ```bash
-bundle exec rails test              # Full suite (1075+ tests)
+bundle exec rails test              # Full suite (2063 tests)
 bundle exec rails test test/agents/ # Specific directory
 bundle exec rails test test/agents/analyzer_test.rb:42  # Specific line
 ```

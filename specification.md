@@ -683,6 +683,11 @@ The system SHALL record event types for empirical validation:
 | spec_test_execution | 18 | Records spec-scenario test execution results |
 | post_merge_hooks | 19 | Records post-merge hook execution results |
 | verification_checks | 20 | Records verification check execution results |
+| stack_detection | 21 | Records stack detection results during brownfield analysis |
+| codebase_profiling | 22 | Records LLM-driven codebase profiling results |
+| feature_extraction | 23 | Records feature extraction from existing concerns |
+| as_built_spec_generated | 24 | Records as-built specification generation |
+| health_baseline | 25 | Records health baseline check execution results |
 
 #### Scenario: Validation Event Recording [SPEC-EVENT-007]
 - GIVEN a tier completes execution and validation.
@@ -898,6 +903,74 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 - AND the server runs until stdin closes or a SIGINT/SIGTERM signal is received.
 - Options: --config (YAML path).
 
+#### Command: analyze [SPEC-CLI-ANALYZE-001]
+- GIVEN a file path argument pointing to an existing directory.
+- WHEN `arnold analyze PATH` is executed.
+- THEN the system performs brownfield codebase analysis and produces a CodebaseProfile, HealthBaseline, and As-Built Specification.
+- AND the profile summary is displayed (project name, detected stack, confidence score, concern status counts, health baseline pass/fail).
+- WHEN the --json flag is provided.
+- THEN the full profile data is output as JSON (project_name, stack, confidence, recipe_alignment, conventions, health_baseline, feature_inventories, documentation_fidelity, change_surface, token_budget_used, analyzed_at).
+- WHEN the --output/-o flag is provided.
+- THEN the as-built specification markdown is written to the specified file.
+- Options: --config (YAML path), --provider (anthropic|openai), --model (name), --reference-materials (array of file paths), --json (boolean), --verbose (boolean), --output/-o (file path).
+- Exit code 0 on success, 1 on error (including directory not found).
+
+### Requirement: Brownfield Codebase Analysis [SPEC-BROWNFIELD-001]
+The system SHALL provide a brownfield analysis pipeline that produces a CodebaseProfile, HealthBaseline, and As-Built Specification from an existing codebase.
+The analysis pipeline SHALL execute as a sequence of deterministic and LLM-driven steps, recorded via pipeline events under the "brownfield" stage.
+
+#### Scenario: Stack Detection [SPEC-BROWNFIELD-002]
+- GIVEN a path to an existing codebase directory.
+- WHEN the StackDetector service is called.
+- THEN the service scans the directory for language, framework, and tooling indicators using YAML-defined detection rules.
+- AND returns a stack fingerprint hash containing language, framework, confidence score, and detected tooling.
+- AND supports user-provided overrides via `stack_detection_overrides` configuration.
+- AND supports additional detection rules via `additional_detection_rules_path` configuration.
+
+#### Scenario: Artifact Discovery [SPEC-BROWNFIELD-003]
+- GIVEN a repo path and a stack fingerprint.
+- WHEN the ArtifactDiscoverer service is called.
+- THEN the service scans for framework-specific artifacts (models, controllers, views, migrations, routes, configs) using YAML-defined artifact maps.
+- AND returns an array of discovered artifacts with path, type, and metadata.
+- AND supports additional artifact maps via `additional_artifact_maps_path` configuration.
+
+#### Scenario: Overlay Resolution [SPEC-BROWNFIELD-004]
+- GIVEN a stack fingerprint.
+- WHEN the OverlayResolver service is called.
+- THEN the service loads the appropriate framework overlay from YAML data files.
+- AND returns framework-specific concern mappings, conventions, and health check definitions.
+
+#### Scenario: Brownfield Analysis (LLM) [SPEC-BROWNFIELD-005]
+- GIVEN stack fingerprint, discovered artifacts, framework overlay, and optional reference materials.
+- WHEN the BrownfieldAnalyzer agent is called.
+- THEN the agent produces a recipe alignment (mapping recipe concerns to detected implementations), convention inventory, documentation fidelity assessment, and change surface analysis.
+- AND respects the `brownfield_scan_budget` token budget configuration.
+
+#### Scenario: Feature Extraction (LLM) [SPEC-BROWNFIELD-006]
+- GIVEN recipe alignment, artifacts, stack fingerprint, and change surface.
+- WHEN the FeatureExtractor agent is called.
+- THEN the agent produces per-concern feature inventories listing existing features with their implementation status and file locations.
+
+#### Scenario: As-Built Spec Generation (LLM) [SPEC-BROWNFIELD-007]
+- GIVEN feature inventories and stack fingerprint.
+- WHEN the AsBuiltSpec agent is called.
+- THEN the agent produces an OpenSpec-format specification document reflecting the existing codebase's actual behavior.
+- AND the specification is persisted as a Specification record with `spec_type: "as_built"`.
+
+#### Scenario: Health Baseline [SPEC-BROWNFIELD-008]
+- GIVEN a repo path, convention inventory, and artifact map.
+- WHEN the HealthBaselineRunner service is called.
+- THEN the service executes health checks (boot, test suite, linter) with a configurable timeout (`health_baseline_timeout`).
+- AND returns pass/fail results per check plus a summary.
+- AND the health baseline is persisted as part of the CodebaseProfile.
+
+#### Scenario: CodebaseProfile Persistence [SPEC-BROWNFIELD-009]
+- GIVEN a completed brownfield analysis.
+- WHEN all analysis steps succeed.
+- THEN a CodebaseProfile record is created with: project_name, stack_fingerprint, recipe_alignment, conventions, documentation_fidelity, health_baseline, change_surface, scan_data, feature_inventories, confidence, token_budget_used, and analyzed_at.
+- AND the CodebaseProfile belongs to the PipelineRun.
+- AND the PipelineRun transitions to `completed` status.
+
 ### Requirement: Drift Detection [SPEC-DRIFT-001]
 The system SHALL provide a DriftDetector agent that analyzes completed pipeline work against the specification to identify divergence.
 Drift findings SHALL be persisted as DriftFinding records and support resolution workflows.
@@ -1053,6 +1126,16 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | spec_test_generation_enabled | Boolean | false | None |
 | spec_test_directory | String | "test/spec_integration" | None |
 | spec_test_persona | String | "testing_specialist" | None |
+| brownfield_mode | Symbol | nil | Must be :assess, :extend, or :strangle when set |
+| reference_materials | Array | [] | Must be an Array |
+| brownfield_scan_budget | Integer | 50000 | Positive integer (token budget for brownfield LLM analysis) |
+| brownfield_deep_dive_domains | Array | nil | nil or Array of domain names for targeted deep analysis |
+| convention_compliance_enabled | Boolean | false | None |
+| regression_baseline_enabled | Boolean | true | None |
+| stack_detection_overrides | Hash | {} | Must be a Hash |
+| additional_detection_rules_path | String | nil | Path to additional YAML detection rules |
+| additional_artifact_maps_path | String | nil | Path to additional YAML artifact maps |
+| health_baseline_timeout | Integer | 120 | Positive integer (seconds for health check execution) |
 
 ### PipelineRun State Machine
 
