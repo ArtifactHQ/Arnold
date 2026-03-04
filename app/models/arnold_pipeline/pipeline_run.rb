@@ -14,7 +14,7 @@ module ArnoldPipeline
     }
 
     VALID_TRANSITIONS = {
-      "pending" => %w[generating_spec executing failed],
+      "pending" => %w[generating_spec executing analyzing failed],
       "generating_spec" => %w[breaking_tasks paused failed],
       "breaking_tasks" => %w[executing paused failed],
       "executing" => %w[awaiting_results analyzing paused failed],
@@ -27,6 +27,9 @@ module ArnoldPipeline
     }.freeze
 
     has_one :specification, dependent: :destroy
+    has_one :codebase_profile, dependent: :destroy
+    has_one :target_specification, -> { where(spec_type: "target") }, class_name: "Specification"
+    has_one :as_built_specification, -> { where(spec_type: "as_built") }, class_name: "Specification"
     has_many :tasks, dependent: :destroy
     has_many :iterations, dependent: :destroy
     has_many :pipeline_events, dependent: :destroy

@@ -1,0 +1,206 @@
+---
+# Stack detection rules for brownfield codebase analysis.
+# Each rule has signals with weights; highest aggregate score wins.
+# Signal types: file_exists, dir_exists, file_glob, contains (optional regex on file content)
+
+stacks:
+  ruby_rails:
+    language: ruby
+    framework: rails
+    signals:
+      - type: file_exists
+        path: Gemfile
+        weight: 3
+      - type: file_exists
+        path: config/application.rb
+        weight: 5
+      - type: file_exists
+        path: config/routes.rb
+        weight: 4
+      - type: dir_exists
+        path: app/models
+        weight: 3
+      - type: dir_exists
+        path: app/controllers
+        weight: 3
+      - type: file_exists
+        path: Rakefile
+        weight: 1
+      - type: file_exists
+        path: config/database.yml
+        weight: 2
+      - type: file_exists
+        path: bin/rails
+        weight: 4
+      - type: file_glob
+        pattern: "db/migrate/*.rb"
+        weight: 2
+      - type: file_exists
+        path: Gemfile
+        contains: "rails"
+        weight: 3
+
+  typescript_nextjs:
+    language: typescript
+    framework: nextjs
+    signals:
+      - type: file_exists
+        path: package.json
+        weight: 2
+      - type: file_exists
+        path: next.config.js
+        weight: 5
+      - type: file_exists
+        path: next.config.mjs
+        weight: 5
+      - type: file_exists
+        path: next.config.ts
+        weight: 5
+      - type: file_exists
+        path: tsconfig.json
+        weight: 3
+      - type: dir_exists
+        path: app
+        weight: 1
+      - type: dir_exists
+        path: pages
+        weight: 2
+      - type: file_exists
+        path: package.json
+        contains: "next"
+        weight: 4
+      - type: file_glob
+        pattern: "app/**/page.tsx"
+        weight: 3
+      - type: file_glob
+        pattern: "app/**/layout.tsx"
+        weight: 2
+
+  java_spring_boot:
+    language: java
+    framework: spring_boot
+    signals:
+      - type: file_exists
+        path: pom.xml
+        weight: 3
+      - type: file_exists
+        path: build.gradle
+        weight: 3
+      - type: file_exists
+        path: build.gradle.kts
+        weight: 3
+      - type: dir_exists
+        path: src/main/java
+        weight: 4
+      - type: dir_exists
+        path: src/main/resources
+        weight: 2
+      - type: file_exists
+        path: src/main/resources/application.properties
+        weight: 4
+      - type: file_exists
+        path: src/main/resources/application.yml
+        weight: 4
+      - type: file_glob
+        pattern: "src/main/java/**/*Application.java"
+        weight: 5
+      - type: file_exists
+        path: pom.xml
+        contains: "spring-boot"
+        weight: 4
+      - type: file_exists
+        path: build.gradle
+        contains: "spring-boot"
+        weight: 4
+
+  python_django:
+    language: python
+    framework: django
+    signals:
+      - type: file_exists
+        path: manage.py
+        weight: 5
+      - type: file_exists
+        path: requirements.txt
+        weight: 2
+      - type: file_exists
+        path: pyproject.toml
+        weight: 2
+      - type: file_exists
+        path: setup.py
+        weight: 1
+      - type: file_glob
+        pattern: "**/settings.py"
+        weight: 4
+      - type: file_glob
+        pattern: "**/wsgi.py"
+        weight: 3
+      - type: file_glob
+        pattern: "**/urls.py"
+        weight: 3
+      - type: file_glob
+        pattern: "**/models.py"
+        weight: 2
+      - type: file_exists
+        path: requirements.txt
+        contains: "django"
+        weight: 4
+      - type: file_exists
+        path: Pipfile
+        weight: 1
+
+  rust:
+    language: rust
+    framework: ~
+    signals:
+      - type: file_exists
+        path: Cargo.toml
+        weight: 5
+      - type: file_exists
+        path: Cargo.lock
+        weight: 3
+      - type: dir_exists
+        path: src
+        weight: 1
+      - type: file_exists
+        path: src/main.rs
+        weight: 4
+      - type: file_exists
+        path: src/lib.rs
+        weight: 3
+      - type: file_glob
+        pattern: "src/**/*.rs"
+        weight: 2
+      - type: file_exists
+        path: .cargo/config.toml
+        weight: 2
+
+  csharp_aspnet:
+    language: csharp
+    framework: aspnet
+    signals:
+      - type: file_glob
+        pattern: "*.csproj"
+        weight: 4
+      - type: file_glob
+        pattern: "*.sln"
+        weight: 3
+      - type: file_exists
+        path: Program.cs
+        weight: 3
+      - type: file_exists
+        path: Startup.cs
+        weight: 4
+      - type: dir_exists
+        path: Controllers
+        weight: 3
+      - type: file_exists
+        path: appsettings.json
+        weight: 3
+      - type: file_glob
+        pattern: "**/*.csproj"
+        contains: "Microsoft.AspNetCore"
+        weight: 5
+      - type: file_exists
+        path: Properties/launchSettings.json
+        weight: 2

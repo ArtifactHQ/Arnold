@@ -125,10 +125,10 @@ module ArnoldPipeline
       assert_includes run_record.errors[:status], "cannot transition from 'pending' to 'completed'"
     end
 
-    test "rejects invalid transition from pending to analyzing" do
+    test "allows transition from pending to analyzing (brownfield)" do
       run_record = PipelineRun.create!(nl_input: "Build an app")
       run_record.status = :analyzing
-      assert_not run_record.valid?
+      assert run_record.valid?
     end
 
     test "rejects transition from completed (terminal state)" do

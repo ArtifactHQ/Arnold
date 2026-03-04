@@ -5,6 +5,13 @@ require "arnold_pipeline/agents/executor"
 require "arnold_pipeline/agents/analyzer"
 require "arnold_pipeline/agents/tier_gate_check"
 require "arnold_pipeline/agents/spec_iterator"
+require "arnold_pipeline/agents/brownfield_analyzer"
+require "arnold_pipeline/agents/feature_extractor"
+require "arnold_pipeline/agents/as_built_spec"
+require "arnold_pipeline/brownfield/stack_detector"
+require "arnold_pipeline/brownfield/artifact_discoverer"
+require "arnold_pipeline/brownfield/overlay_resolver"
+require "arnold_pipeline/brownfield/health_baseline_runner"
 require "arnold_pipeline/tier_calculator"
 require "arnold_pipeline/tier_execution_engine"
 require "arnold_pipeline/analysis_loop"
@@ -157,6 +164,146 @@ module ArnoldPipeline
       )
 
       { pipeline_run: new_run.reload, deltas: raw_deltas }
+    end
+
+    def analyze_codebase!(repo_path:, description: nil, reference_materials: [])
+      config = ArnoldPipeline.configuration
+      pipeline_run = PipelineRun.create!(
+        nl_input: description || "Brownfield analysis of #{File.basename(repo_path)}",
+        status: :pending
+      )
+      @event_recorder = PipelineEventRecorder.new(pipeline_run:)
+
+      begin
+        pipeline_run.update!(status: :analyzing)
+
+        # Step 1: Stack detection
+        stack_fingerprint = @event_recorder.timed(
+          event_type: :stack_detection, stage: "brownfield",
+          summary: ->(r) { { language: r&.dig(:language), framework: r&.dig(:framework), confidence: r&.dig(:confidence) } }
+        ) do
+          Brownfield::StackDetector.call(
+            repo_path:,
+            overrides: config.stack_detection_overrides,
+            additional_rules_path: config.additional_detection_rules_path
+          )
+        end
+
+        # Step 2: Artifact discovery
+        artifacts = Brownfield::ArtifactDiscoverer.call(
+          repo_path:,
+          stack_fingerprint:,
+          additional_maps_path: config.additional_artifact_maps_path
+        )
+
+        # Step 3: Recipe alignment from library
+        recipe = library_manager.all_recipes.find { |r| r.type == stack_fingerprint[:framework] } rescue nil
+
+        # Step 4: Overlay resolution
+        overlay = Brownfield::OverlayResolver.call(
+          stack_fingerprint:,
+          additional_path: config.additional_artifact_maps_path
+        )
+
+        # Step 5: Brownfield analysis (LLM)
+        brownfield_analyzer = Agents::BrownfieldAnalyzer.new(logger:)
+        analysis = @event_recorder.timed(
+          event_type: :codebase_profiling, stage: "brownfield",
+          summary: ->(r) { { concerns_found: r&.dig(:recipe_alignment, "concerns")&.count { |_, v| v["status"] != "absent" } || 0, token_budget_used: r&.dig(:token_budget_used) } }
+        ) do
+          brownfield_analyzer.call(
+            repo_path:,
+            stack_fingerprint:,
+            artifacts:,
+            overlay:,
+            reference_materials:,
+            change_request: description
+          )
+        end
+
+        # Step 6: Feature extraction (LLM)
+        feature_extractor = Agents::FeatureExtractor.new(logger:)
+        feature_inventories = @event_recorder.timed(
+          event_type: :feature_extraction, stage: "brownfield",
+          summary: ->(r) { { concern_count: r&.size || 0, total_features: r&.sum { |i| i["features"]&.size || 0 } || 0 } }
+        ) do
+          ArnoldPipeline.configuration.target_repo_path = repo_path
+          feature_extractor.call(
+            recipe_alignment: analysis[:recipe_alignment],
+            artifacts:,
+            stack_fingerprint:,
+            change_surface: analysis[:change_surface]
+          )
+        end
+
+        # Step 7: As-built spec generation (LLM)
+        project_name = File.basename(repo_path).tr("-_", " ").split.map(&:capitalize).join(" ")
+        as_built_agent = Agents::AsBuiltSpec.new(logger:)
+        spec_result = @event_recorder.timed(
+          event_type: :as_built_spec_generated, stage: "brownfield",
+          summary: ->(r) { { content_length: r&.dig(:content)&.length } }
+        ) do
+          as_built_agent.call(
+            feature_inventories:,
+            stack_fingerprint:,
+            project_name:
+          )
+        end
+
+        # Step 8: Health baseline
+        health_result = @event_recorder.timed(
+          event_type: :health_baseline, stage: "brownfield",
+          summary: ->(r) { { all_passed: r&.dig(:all_passed), summary: r&.dig(:summary) } }
+        ) do
+          Brownfield::HealthBaselineRunner.call(
+            repo_path:,
+            conventions: analysis[:conventions],
+            artifact_map: artifacts,
+            timeout: config.health_baseline_timeout
+          )
+        end
+
+        # Persist as-built specification
+        pipeline_run.create_specification!(
+          content: spec_result[:content],
+          structured_data: spec_result[:structured_data],
+          version: 1,
+          spec_type: "as_built"
+        )
+
+        # Persist codebase profile
+        profile = pipeline_run.create_codebase_profile!(
+          project_name:,
+          stack_fingerprint:,
+          recipe_alignment: analysis[:recipe_alignment],
+          conventions: analysis[:conventions],
+          documentation_fidelity: analysis[:documentation_fidelity],
+          health_baseline: health_result,
+          change_surface: analysis[:change_surface],
+          scan_data: { artifacts_found: artifacts.count { |a| a[:path] } },
+          feature_inventories:,
+          confidence: stack_fingerprint[:confidence],
+          token_budget_used: analysis[:token_budget_used],
+          analyzed_at: Time.current
+        )
+
+        pipeline_run.update!(status: :completed)
+        @event_recorder.record(
+          event_type: :pipeline_completed, stage: "lifecycle",
+          summary: { status: "completed", type: "brownfield_analysis" }
+        )
+
+        profile
+      rescue => e
+        @event_recorder&.record(
+          event_type: :pipeline_failed, stage: "lifecycle",
+          summary: { error_class: e.class.name, error_message: e.message }
+        )
+        pipeline_run.update!(status: :failed, metadata: (pipeline_run.metadata || {}).merge(
+          "error" => e.message, "error_class" => e.class.name
+        ))
+        raise
+      end
     end
 
     private

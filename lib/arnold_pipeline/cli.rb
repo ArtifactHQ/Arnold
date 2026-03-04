@@ -427,6 +427,94 @@ module ArnoldPipeline
       server.start
     end
 
+    desc "analyze PATH", "Analyze an existing codebase"
+    option :config, type: :string, desc: "Path to YAML config file"
+    option :provider, type: :string, desc: "LLM provider (anthropic or openai)"
+    option :model, type: :string, desc: "LLM model name"
+    option :reference_materials, type: :array, desc: "Paths to reference documentation files"
+    option :json, type: :boolean, default: false, desc: "Output as JSON"
+    option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
+    option :output, type: :string, aliases: "-o", desc: "Write as-built spec to file"
+    def analyze(path, description = nil)
+      if path == "--help" || path == "-h"
+        invoke :help, [ "analyze" ]
+        return
+      end
+      with_error_handling do
+        setup_standalone!
+        load_config!(options)
+        require "arnold_pipeline/orchestrator"
+
+        repo_path = File.expand_path(path)
+        unless Dir.exist?(repo_path)
+          say_error "Directory not found: #{repo_path}", :red
+          raise SystemExit.new(1)
+        end
+
+        logger = build_logger(options[:verbose])
+        ArnoldPipeline.configuration.verbose_event_logging = true if options[:verbose]
+        orchestrator = Orchestrator.new(logger:)
+
+        quiet_say "Analyzing codebase at: #{repo_path}", :green
+        profile = orchestrator.analyze_codebase!(
+          repo_path:,
+          description:,
+          reference_materials: options[:reference_materials] || []
+        )
+
+        if options[:json]
+          data = {
+            project_name: profile.project_name,
+            stack: profile.stack_fingerprint,
+            confidence: profile.confidence,
+            recipe_alignment: profile.recipe_alignment,
+            conventions: profile.conventions,
+            health_baseline: profile.health_baseline,
+            feature_inventories: profile.feature_inventories,
+            documentation_fidelity: profile.documentation_fidelity,
+            change_surface: profile.change_surface,
+            token_budget_used: profile.token_budget_used,
+            analyzed_at: profile.analyzed_at&.iso8601
+          }
+          say JSON.pretty_generate(data)
+        else
+          quiet_say "\nAnalysis Complete!", :green
+          quiet_say "  Project: #{profile.project_name}"
+          quiet_say "  Stack: #{profile.stack_language}/#{profile.stack_framework}"
+          quiet_say "  Confidence: #{profile.confidence}%"
+
+          if profile.health_baseline
+            health = profile.health_baseline
+            quiet_say "  Health: #{health['summary'] || health[:summary]}"
+          end
+
+          if profile.recipe_alignment&.dig("concerns")
+            concerns = profile.recipe_alignment["concerns"]
+            present = concerns.count { |_, v| v["status"] == "present" }
+            partial = concerns.count { |_, v| v["status"] == "partial" }
+            absent = concerns.count { |_, v| v["status"] == "absent" }
+            quiet_say "  Concerns: #{present} present, #{partial} partial, #{absent} absent"
+          end
+
+          if profile.feature_inventories
+            total = profile.feature_inventories.sum { |i| i["features"]&.size || 0 }
+            quiet_say "  Features: #{total} discovered"
+          end
+
+          quiet_say "  Run ID: #{profile.pipeline_run_id}"
+        end
+
+        if options[:output]
+          spec = profile.pipeline_run.specification
+          if spec
+            File.write(options[:output], spec.content)
+            $stderr.puts "As-built spec written to #{options[:output]}"
+          end
+        end
+      end
+    end
+
+
     desc "version", "Show the version"
     def version
       say "arnold_pipeline #{ArnoldPipeline::VERSION}"
@@ -589,6 +677,16 @@ module ArnoldPipeline
             raise ArnoldPipeline::ConfigurationError, "Invalid workflow_branch_pattern: #{e.message}"
           end
         end
+        c.brownfield_mode = yaml_config[:brownfield_mode]&.to_sym if yaml_config[:brownfield_mode]
+        c.reference_materials = yaml_config[:reference_materials] if yaml_config[:reference_materials]
+        c.brownfield_scan_budget = yaml_config[:brownfield_scan_budget] if yaml_config[:brownfield_scan_budget]
+        c.brownfield_deep_dive_domains = yaml_config[:brownfield_deep_dive_domains] if yaml_config[:brownfield_deep_dive_domains]
+        c.convention_compliance_enabled = yaml_config[:convention_compliance_enabled] unless yaml_config[:convention_compliance_enabled].nil?
+        c.regression_baseline_enabled = yaml_config[:regression_baseline_enabled] unless yaml_config[:regression_baseline_enabled].nil?
+        c.stack_detection_overrides = yaml_config[:stack_detection_overrides] if yaml_config[:stack_detection_overrides]
+        c.additional_detection_rules_path = yaml_config[:additional_detection_rules_path] if yaml_config[:additional_detection_rules_path]
+        c.additional_artifact_maps_path = yaml_config[:additional_artifact_maps_path] if yaml_config[:additional_artifact_maps_path]
+        c.health_baseline_timeout = yaml_config[:health_baseline_timeout] if yaml_config[:health_baseline_timeout]
       end
     end
 

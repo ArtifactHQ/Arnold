@@ -1,0 +1,478 @@
+---
+# Per-stack concern overlays with typical implementations, expected locations, and conventions.
+
+stacks:
+  ruby_rails:
+    auth:
+      typical_implementations:
+        - Rails 8 built-in authentication (has_secure_password)
+        - Devise gem
+        - Rodauth
+        - Custom session-based auth
+      expected_locations:
+        - app/models/user.rb
+        - app/controllers/sessions_controller.rb
+        - app/controllers/registrations_controller.rb
+        - app/controllers/passwords_controller.rb
+        - app/controllers/concerns/authentication.rb
+        - config/initializers/devise.rb
+      conventions:
+        session_store: cookie-based (Rails default)
+        password_hashing: bcrypt via has_secure_password
+        current_user: Current.user via ActiveSupport::CurrentAttributes
+
+    data_layer:
+      typical_implementations:
+        - ActiveRecord (Rails default ORM)
+        - SQLite / PostgreSQL / MySQL
+      expected_locations:
+        - app/models/
+        - db/migrate/
+        - db/schema.rb
+        - db/seeds.rb
+        - app/models/concerns/
+      conventions:
+        naming: "singular model name, plural table name"
+        associations: "has_many, belongs_to, has_one, has_and_belongs_to_many"
+        validations: "ActiveModel validations in model files"
+        callbacks: "before_save, after_create, etc."
+
+    api_layer:
+      typical_implementations:
+        - RESTful resource routes
+        - Turbo Streams for real-time
+        - API-only mode (--api flag)
+        - GraphQL via graphql-ruby
+      expected_locations:
+        - config/routes.rb
+        - app/controllers/
+        - app/controllers/api/
+        - app/views/
+      conventions:
+        routing: "resources :models with standard CRUD actions"
+        response_formats: "HTML, Turbo Stream, JSON"
+        strong_params: "params.require(:model).permit(...)"
+
+    background_jobs:
+      typical_implementations:
+        - Solid Queue (Rails 8 default)
+        - Sidekiq
+        - Delayed Job
+        - Good Job
+      expected_locations:
+        - app/jobs/
+        - config/recurring.yml
+        - app/mailers/
+      conventions:
+        interface: "ActiveJob with perform_later / perform_now"
+        queue_adapter: "config.active_job.queue_adapter"
+
+    realtime:
+      typical_implementations:
+        - Action Cable with Solid Cable
+        - Turbo Streams broadcasts
+        - Hotwire
+      expected_locations:
+        - app/channels/
+        - app/javascript/channels/
+        - config/cable.yml
+      conventions:
+        broadcasting: "model.broadcast_append_to / broadcast_replace_to"
+        channels: "ApplicationCable::Channel subclasses"
+
+    testing:
+      typical_implementations:
+        - Minitest (Rails default)
+        - RSpec
+        - Capybara for system tests
+      expected_locations:
+        - test/
+        - spec/
+        - test/models/
+        - test/controllers/
+        - test/system/
+        - test/fixtures/
+      conventions:
+        runner: "bin/rails test or bundle exec rspec"
+        fixtures: "test/fixtures/*.yml"
+        system_tests: "driven_by :selenium, using: :headless_chrome"
+
+    deployment:
+      typical_implementations:
+        - Kamal 2 (Rails 8 default)
+        - Heroku
+        - Docker + custom
+        - Capistrano
+      expected_locations:
+        - config/deploy.yml
+        - Dockerfile
+        - .github/workflows/
+        - Procfile
+      conventions:
+        assets: "rails assets:precompile"
+        secrets: "Rails encrypted credentials"
+
+  typescript_nextjs:
+    auth:
+      typical_implementations:
+        - NextAuth.js / Auth.js
+        - Clerk
+        - Custom JWT
+        - Supabase Auth
+      expected_locations:
+        - app/api/auth/[...nextauth]/route.ts
+        - lib/auth.ts
+        - middleware.ts
+      conventions:
+        session_store: JWT or database sessions
+        middleware: "Next.js middleware for route protection"
+
+    data_layer:
+      typical_implementations:
+        - Prisma ORM
+        - Drizzle ORM
+        - TypeORM
+        - Raw SQL
+      expected_locations:
+        - prisma/schema.prisma
+        - lib/db.ts
+        - app/api/**/route.ts
+      conventions:
+        schema: "Prisma schema or Drizzle schema files"
+        migrations: "prisma migrate or drizzle-kit"
+
+    api_layer:
+      typical_implementations:
+        - Next.js API Routes (app/api/)
+        - Next.js Server Actions
+        - tRPC
+        - REST endpoints
+      expected_locations:
+        - app/api/**/route.ts
+        - app/**/actions.ts
+        - lib/api/
+      conventions:
+        routing: "file-based routing in app/ directory"
+        data_fetching: "Server Components, fetch(), Server Actions"
+
+    background_jobs:
+      typical_implementations:
+        - Vercel Cron
+        - Inngest
+        - BullMQ
+        - Custom with node-cron
+      expected_locations:
+        - app/api/cron/
+        - vercel.json (crons section)
+        - lib/jobs/
+      conventions:
+        scheduling: "API route-based cron triggers"
+
+    realtime:
+      typical_implementations:
+        - Pusher
+        - Ably
+        - Socket.io
+        - Server-Sent Events
+      expected_locations:
+        - lib/pusher.ts
+        - app/api/socket/
+      conventions:
+        pattern: "Event-driven pub/sub"
+
+    testing:
+      typical_implementations:
+        - Jest
+        - Vitest
+        - Playwright
+        - Cypress
+      expected_locations:
+        - __tests__/
+        - "**/*.test.ts"
+        - "**/*.spec.ts"
+        - cypress/
+        - e2e/
+      conventions:
+        runner: "npm test or npx jest"
+        e2e: "Playwright or Cypress"
+
+    deployment:
+      typical_implementations:
+        - Vercel (default for Next.js)
+        - Docker
+        - AWS Amplify
+        - Netlify
+      expected_locations:
+        - vercel.json
+        - next.config.js (output setting)
+        - Dockerfile
+        - .github/workflows/
+      conventions:
+        build: "next build"
+        output: "standalone, export, or default"
+
+  java_spring_boot:
+    auth:
+      typical_implementations:
+        - Spring Security
+        - OAuth2 / OIDC
+      expected_locations:
+        - src/main/java/**/security/
+        - src/main/java/**/config/SecurityConfig.java
+      conventions:
+        framework: Spring Security filter chain
+    data_layer:
+      typical_implementations:
+        - Spring Data JPA / Hibernate
+        - Flyway or Liquibase migrations
+      expected_locations:
+        - src/main/java/**/entity/
+        - src/main/java/**/repository/
+        - src/main/resources/db/migration/
+      conventions:
+        annotations: "@Entity, @Repository, @Table"
+    api_layer:
+      typical_implementations:
+        - Spring MVC @RestController
+        - Spring WebFlux
+      expected_locations:
+        - src/main/java/**/controller/
+      conventions:
+        annotations: "@RestController, @RequestMapping, @GetMapping"
+    background_jobs:
+      typical_implementations:
+        - Spring @Scheduled
+        - Spring Batch
+      expected_locations:
+        - src/main/java/**/scheduler/
+        - src/main/java/**/job/
+      conventions:
+        annotations: "@Scheduled, @EnableScheduling"
+    realtime:
+      typical_implementations:
+        - Spring WebSocket
+        - STOMP
+      expected_locations:
+        - src/main/java/**/websocket/
+      conventions:
+        protocol: STOMP over WebSocket
+    testing:
+      typical_implementations:
+        - JUnit 5
+        - Mockito
+        - Spring Boot Test
+      expected_locations:
+        - src/test/java/
+      conventions:
+        runner: "./mvnw test"
+    deployment:
+      typical_implementations:
+        - Docker
+        - Spring Boot jar
+        - Kubernetes
+      expected_locations:
+        - Dockerfile
+        - docker-compose.yml
+      conventions:
+        build: "./mvnw package"
+
+  python_django:
+    auth:
+      typical_implementations:
+        - Django built-in auth
+        - django-allauth
+        - Django REST Framework JWT
+      expected_locations:
+        - "**/auth/"
+        - "**/accounts/"
+      conventions:
+        user_model: "AUTH_USER_MODEL setting"
+    data_layer:
+      typical_implementations:
+        - Django ORM
+        - Django migrations
+      expected_locations:
+        - "**/models.py"
+        - "**/migrations/"
+      conventions:
+        pattern: "Model classes in models.py per app"
+    api_layer:
+      typical_implementations:
+        - Django views + URL conf
+        - Django REST Framework
+        - Django Ninja
+      expected_locations:
+        - "**/views.py"
+        - "**/urls.py"
+        - "**/serializers.py"
+      conventions:
+        routing: "URL patterns in urls.py"
+    background_jobs:
+      typical_implementations:
+        - Celery
+        - Django Q
+        - Huey
+      expected_locations:
+        - "**/tasks.py"
+        - "**/celery.py"
+      conventions:
+        interface: "@shared_task decorator"
+    realtime:
+      typical_implementations:
+        - Django Channels
+        - ASGI
+      expected_locations:
+        - "**/consumers.py"
+        - "**/routing.py"
+      conventions:
+        protocol: ASGI WebSocket consumers
+    testing:
+      typical_implementations:
+        - pytest
+        - Django TestCase
+        - unittest
+      expected_locations:
+        - "**/tests.py"
+        - "**/tests/"
+      conventions:
+        runner: "python manage.py test"
+    deployment:
+      typical_implementations:
+        - Docker
+        - Gunicorn + Nginx
+        - PaaS (Heroku, Render)
+      expected_locations:
+        - Dockerfile
+        - Procfile
+      conventions:
+        wsgi: "gunicorn project.wsgi"
+
+  rust:
+    auth:
+      typical_implementations:
+        - Custom middleware
+        - JWT via jsonwebtoken crate
+      expected_locations:
+        - src/auth/
+        - src/middleware/
+      conventions:
+        pattern: "Middleware extractors"
+    data_layer:
+      typical_implementations:
+        - Diesel ORM
+        - SeaORM
+        - SQLx
+      expected_locations:
+        - src/models/
+        - migrations/
+      conventions:
+        pattern: "Diesel schema.rs or SQLx queries"
+    api_layer:
+      typical_implementations:
+        - Actix-web
+        - Axum
+        - Rocket
+      expected_locations:
+        - src/routes/
+        - src/handlers/
+      conventions:
+        pattern: "Handler functions with extractors"
+    background_jobs:
+      typical_implementations:
+        - Tokio tasks
+        - Custom async workers
+      expected_locations:
+        - src/jobs/
+        - src/workers/
+      conventions:
+        pattern: "tokio::spawn for async tasks"
+    realtime:
+      typical_implementations:
+        - WebSocket via tungstenite
+        - Axum WebSocket
+      expected_locations:
+        - src/ws/
+      conventions:
+        pattern: "WebSocket upgrade handlers"
+    testing:
+      typical_implementations:
+        - Built-in Rust tests
+        - Integration tests
+      expected_locations:
+        - tests/
+        - src/**/*.rs (inline #[cfg(test)])
+      conventions:
+        runner: "cargo test"
+    deployment:
+      typical_implementations:
+        - Docker multi-stage build
+        - Static binary
+      expected_locations:
+        - Dockerfile
+      conventions:
+        build: "cargo build --release"
+
+  csharp_aspnet:
+    auth:
+      typical_implementations:
+        - ASP.NET Identity
+        - JWT Bearer
+      expected_locations:
+        - "**/*Identity*"
+        - "**/*Auth*"
+      conventions:
+        framework: "ASP.NET Core Identity"
+    data_layer:
+      typical_implementations:
+        - Entity Framework Core
+        - Dapper
+      expected_locations:
+        - Data/
+        - Models/
+        - Migrations/
+      conventions:
+        pattern: "DbContext and entity classes"
+    api_layer:
+      typical_implementations:
+        - ASP.NET MVC Controllers
+        - Minimal APIs
+      expected_locations:
+        - Controllers/
+        - Endpoints/
+      conventions:
+        pattern: "Controller classes or MapGet/MapPost"
+    background_jobs:
+      typical_implementations:
+        - Hangfire
+        - IHostedService
+      expected_locations:
+        - Services/
+        - Jobs/
+      conventions:
+        pattern: "BackgroundService or IHostedService"
+    realtime:
+      typical_implementations:
+        - SignalR
+      expected_locations:
+        - Hubs/
+      conventions:
+        pattern: "Hub classes"
+    testing:
+      typical_implementations:
+        - xUnit
+        - NUnit
+        - MSTest
+      expected_locations:
+        - "*.Tests/"
+        - "*.Tests.csproj"
+      conventions:
+        runner: "dotnet test"
+    deployment:
+      typical_implementations:
+        - Docker
+        - Azure App Service
+        - IIS
+      expected_locations:
+        - Dockerfile
+      conventions:
+        build: "dotnet publish"

@@ -6,5 +6,8 @@ module ArnoldPipeline
 
     validates :content, presence: true
     validates :version, presence: true, numericality: { greater_than: 0 }
+
+    scope :target, -> { where(spec_type: "target") }
+    scope :as_built, -> { where(spec_type: "as_built") }
   end
 end
