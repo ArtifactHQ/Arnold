@@ -33,7 +33,13 @@ module ArnoldPipeline
       codebase_profiling: 25,
       feature_extraction: 26,
       as_built_spec_generated: 27,
-      health_baseline: 28
+      health_baseline: 28,
+      test_name_collection: 29,
+      concern_diff_analysis: 30,
+      file_manifest_built: 31,
+      route_table_parsed: 32,
+      git_activity_analyzed: 33,
+      parallel_agents_completed: 34
     }
 
     belongs_to :pipeline_run

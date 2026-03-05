@@ -39,7 +39,8 @@ module ArnoldPipeline
                   :brownfield_deep_dive_domains, :convention_compliance_enabled,
                   :regression_baseline_enabled, :stack_detection_overrides,
                   :additional_detection_rules_path, :additional_artifact_maps_path,
-                  :health_baseline_timeout
+                  :health_baseline_timeout,
+                  :brownfield_agent_models, :brownfield_agent_budgets
     attr_writer   :llm_provider, :llm_api_key, :llm_model
 
     def initialize
@@ -100,6 +101,8 @@ module ArnoldPipeline
       @additional_detection_rules_path              = nil
       @additional_artifact_maps_path                = nil
       @health_baseline_timeout                      = 120
+      @brownfield_agent_models                       = {}
+      @brownfield_agent_budgets                      = {}
     end
 
     def llm_provider

@@ -1,3 +1,4 @@
+require "yaml"
 require "arnold_pipeline/library/manager"
 require "arnold_pipeline/agents/spec_generator"
 require "arnold_pipeline/agents/task_breaker"
@@ -5,13 +6,24 @@ require "arnold_pipeline/agents/executor"
 require "arnold_pipeline/agents/analyzer"
 require "arnold_pipeline/agents/tier_gate_check"
 require "arnold_pipeline/agents/spec_iterator"
-require "arnold_pipeline/agents/brownfield_analyzer"
-require "arnold_pipeline/agents/feature_extractor"
-require "arnold_pipeline/agents/as_built_spec"
 require "arnold_pipeline/brownfield/stack_detector"
 require "arnold_pipeline/brownfield/artifact_discoverer"
 require "arnold_pipeline/brownfield/overlay_resolver"
 require "arnold_pipeline/brownfield/health_baseline_runner"
+require "arnold_pipeline/brownfield/test_name_collector"
+require "arnold_pipeline/brownfield/file_manifest_builder"
+require "arnold_pipeline/brownfield/route_table_parser"
+require "arnold_pipeline/brownfield/git_activity_analyzer"
+require "arnold_pipeline/brownfield/analysis_context"
+require "arnold_pipeline/brownfield/file_content_cache"
+require "arnold_pipeline/brownfield/parallel_agent_runner"
+require "arnold_pipeline/agents/brownfield/infrastructure_agent"
+require "arnold_pipeline/agents/brownfield/data_model_agent"
+require "arnold_pipeline/agents/brownfield/business_logic_agent"
+require "arnold_pipeline/agents/brownfield/controller_route_agent"
+require "arnold_pipeline/agents/brownfield/view_ux_agent"
+require "arnold_pipeline/agents/brownfield/synthesis_agent"
+require "arnold_pipeline/agents/concern_diff_analyzer"
 require "arnold_pipeline/tier_calculator"
 require "arnold_pipeline/tier_execution_engine"
 require "arnold_pipeline/analysis_loop"
@@ -176,6 +188,8 @@ module ArnoldPipeline
 
       begin
         pipeline_run.update!(status: :analyzing)
+        project_name = File.basename(repo_path).tr("-_", " ").split.map(&:capitalize).join(" ")
+        config.target_repo_path = repo_path
 
         # Step 1: Stack detection
         stack_fingerprint = @event_recorder.timed(
@@ -196,60 +210,82 @@ module ArnoldPipeline
           additional_maps_path: config.additional_artifact_maps_path
         )
 
-        # Step 3: Recipe alignment from library
-        recipe = library_manager.all_recipes.find { |r| r.type == stack_fingerprint[:framework] } rescue nil
-
-        # Step 4: Overlay resolution
+        # Step 3: Overlay resolution
         overlay = Brownfield::OverlayResolver.call(
           stack_fingerprint:,
           additional_path: config.additional_artifact_maps_path
         )
 
-        # Step 5: Brownfield analysis (LLM)
-        brownfield_analyzer = Agents::BrownfieldAnalyzer.new(logger:)
-        analysis = @event_recorder.timed(
-          event_type: :codebase_profiling, stage: "brownfield",
-          summary: ->(r) { { concerns_found: r&.dig(:recipe_alignment, "concerns")&.count { |_, v| v["status"] != "absent" } || 0, token_budget_used: r&.dig(:token_budget_used) } }
+        # Step 4: Enhanced deterministic layer (no LLM)
+        file_manifest = @event_recorder.timed(
+          event_type: :file_manifest_built, stage: "brownfield",
+          summary: ->(r) { { file_count: r&.size || 0 } }
         ) do
-          brownfield_analyzer.call(
-            repo_path:,
-            stack_fingerprint:,
-            artifacts:,
-            overlay:,
-            reference_materials:,
-            change_request: description
-          )
+          Brownfield::FileManifestBuilder.call(repo_path:, stack_fingerprint:)
         end
 
-        # Pre-load reference materials as {path:, content:} hashes for downstream agents.
-        # BrownfieldAnalyzer reads files itself; FeatureExtractor and AsBuiltSpec receive pre-read content.
+        route_table = @event_recorder.timed(
+          event_type: :route_table_parsed, stage: "brownfield",
+          summary: ->(r) { { route_count: r&.size || 0 } }
+        ) do
+          Brownfield::RouteTableParser.call(repo_path:, stack_fingerprint:)
+        end
+
+        git_activity = @event_recorder.timed(
+          event_type: :git_activity_analyzed, stage: "brownfield",
+          summary: ->(r) { { files_tracked: r&.size || 0 } }
+        ) do
+          Brownfield::GitActivityAnalyzer.call(repo_path:)
+        end
+
+        test_name_data = @event_recorder.timed(
+          event_type: :test_name_collection, stage: "brownfield",
+          summary: ->(r) { { test_count: r&.dig(:test_names)&.size || 0, framework: r&.dig(:framework) } }
+        ) do
+          Brownfield::TestNameCollector.call(repo_path:, stack_fingerprint:)
+        end
+
         loaded_references = load_reference_materials(reference_materials)
 
-        # Step 6: Feature extraction (LLM)
-        feature_extractor = Agents::FeatureExtractor.new(logger:)
-        feature_inventories = @event_recorder.timed(
-          event_type: :feature_extraction, stage: "brownfield",
-          summary: ->(r) { { concern_count: r&.size || 0, total_features: r&.sum { |i| i["features"]&.size || 0 } || 0 } }
+        # Load concerns from YAML
+        concerns_path = File.expand_path("brownfield/data/concerns.yml", __dir__)
+        concerns = YAML.safe_load_file(concerns_path)["concerns"]
+
+        # Step 5: Build analysis context + file cache
+        context = Brownfield::AnalysisContext.new(
+          repo_path:, stack_fingerprint:, artifacts:, overlay:,
+          file_manifest:, route_table:, git_activity:,
+          test_names: test_name_data[:grouped_by_concern] || {},
+          concerns:, reference_materials: loaded_references,
+          change_request: description
+        )
+        file_cache = Brownfield::FileContentCache.new(repo_path:)
+
+        # Step 6: Run 5 specialized agents in parallel
+        agents = build_brownfield_agents
+        runner = Brownfield::ParallelAgentRunner.new(logger:)
+
+        agent_results = @event_recorder.timed(
+          event_type: :parallel_agents_completed, stage: "brownfield",
+          summary: ->(r) {
+            succeeded = r&.count { |ar| ar.error.nil? } || 0
+            failed = r&.count { |ar| ar.error.present? } || 0
+            total_tokens = r&.sum(&:tokens_used) || 0
+            { agents_succeeded: succeeded, agents_failed: failed, total_tokens: }
+          }
         ) do
-          ArnoldPipeline.configuration.target_repo_path = repo_path
-          feature_extractor.call(
-            recipe_alignment: analysis[:recipe_alignment],
-            artifacts:,
-            stack_fingerprint:,
-            change_surface: analysis[:change_surface],
-            reference_materials: loaded_references
-          )
+          runner.run(agents:, context:, file_cache:)
         end
 
-        # Step 7: As-built spec generation (LLM)
-        project_name = File.basename(repo_path).tr("-_", " ").split.map(&:capitalize).join(" ")
-        as_built_agent = Agents::AsBuiltSpec.new(logger:)
+        # Step 7: Synthesis
+        synthesis_agent = build_brownfield_agent(Agents::Brownfield::SynthesisAgent, :synthesis)
         spec_result = @event_recorder.timed(
           event_type: :as_built_spec_generated, stage: "brownfield",
           summary: ->(r) { { content_length: r&.dig(:content)&.length } }
         ) do
-          as_built_agent.call(
-            feature_inventories:,
+          synthesis_agent.call(
+            agent_results:,
+            concerns:,
             stack_fingerprint:,
             project_name:,
             reference_materials: loaded_references
@@ -257,17 +293,23 @@ module ArnoldPipeline
         end
 
         # Step 8: Health baseline
+        infra_result = agent_results.find { |r| r.agent_name == "infrastructure" }
+        conventions = infra_result&.output&.dig("conventions") || {}
+
         health_result = @event_recorder.timed(
           event_type: :health_baseline, stage: "brownfield",
           summary: ->(r) { { all_passed: r&.dig(:all_passed), summary: r&.dig(:summary) } }
         ) do
           Brownfield::HealthBaselineRunner.call(
             repo_path:,
-            conventions: analysis[:conventions],
+            conventions:,
             artifact_map: artifacts,
             timeout: config.health_baseline_timeout
           )
         end
+
+        # Build backward-compatible recipe_alignment from infrastructure concerns
+        recipe_alignment = build_recipe_alignment(agent_results)
 
         # Persist as-built specification
         pipeline_run.create_specification!(
@@ -278,18 +320,22 @@ module ArnoldPipeline
         )
 
         # Persist codebase profile
+        total_tokens = agent_results.sum(&:tokens_used) + (spec_result[:tokens_used] || 0)
         profile = pipeline_run.create_codebase_profile!(
           project_name:,
           stack_fingerprint:,
-          recipe_alignment: analysis[:recipe_alignment],
-          conventions: analysis[:conventions],
-          documentation_fidelity: analysis[:documentation_fidelity],
+          recipe_alignment:,
+          conventions:,
+          documentation_fidelity: nil,
           health_baseline: health_result,
-          change_surface: analysis[:change_surface],
+          change_surface: nil,
           scan_data: { artifacts_found: artifacts.count { |a| a[:path] } },
-          feature_inventories:,
+          feature_inventories: agent_results.filter_map { |r|
+            next unless r.output
+            { "agent" => r.agent_name, "data" => r.output }
+          },
           confidence: stack_fingerprint[:confidence],
-          token_budget_used: analysis[:token_budget_used],
+          token_budget_used: total_tokens,
           analyzed_at: Time.current
         )
 
@@ -552,6 +598,7 @@ module ArnoldPipeline
       logger.warn { "[Arnold] Failed to capture baseline SHA: #{e.message}" }
     end
 
+<<<<<<< HEAD
     def finalize!(pipeline_run)
       logger.info { "[Arnold] Running post-pipeline finalization..." }
       config = ArnoldPipeline.configuration
@@ -708,6 +755,41 @@ module ArnoldPipeline
           required: c["required"] || c[:required] || false
         )
       end
+    end
+
+    BROWNFIELD_AGENT_CLASSES = {
+      infrastructure: Agents::Brownfield::InfrastructureAgent,
+      data_model: Agents::Brownfield::DataModelAgent,
+      business_logic: Agents::Brownfield::BusinessLogicAgent,
+      controller_route: Agents::Brownfield::ControllerRouteAgent,
+      view_ux: Agents::Brownfield::ViewUxAgent
+    }.freeze
+
+    def build_brownfield_agents
+      BROWNFIELD_AGENT_CLASSES.each_with_object({}) do |(agent_key, agent_class), agents|
+        agents[agent_key] = build_brownfield_agent(agent_class, agent_key)
+      end
+    end
+
+    def build_brownfield_agent(agent_class, agent_key)
+      model_override = ArnoldPipeline.configuration.brownfield_agent_models[agent_key]
+      if model_override
+        llm = Providers::Llm.build(model: model_override)
+        agent_class.new(llm:, logger:)
+      else
+        agent_class.new(logger:)
+      end
+    end
+
+    def build_recipe_alignment(agent_results)
+      infra = agent_results.find { |r| r.agent_name == "infrastructure" }
+      concerns_array = infra&.output&.dig("concerns") || []
+
+      concerns_hash = concerns_array.each_with_object({}) do |entry, hash|
+        hash[entry["concern_id"]] = entry.except("concern_id")
+      end
+
+      { "concerns" => concerns_hash }
     end
 
     def load_reference_materials(paths)

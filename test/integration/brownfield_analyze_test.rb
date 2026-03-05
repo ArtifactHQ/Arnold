@@ -19,67 +19,69 @@ module ArnoldPipeline
       FileUtils.rm_rf(@fixture_path) if @fixture_path
     end
 
-    test "full analyze_codebase! flow with stubbed LLM" do
-      llm = mock("llm")
-
-      # Concern mapping response
-      concern_json = JSON.generate({
-        concerns: {
-          auth: { status: "present", implementation: "has_secure_password", files: ["app/models/user.rb"], notes: "Built-in Rails auth" },
-          data_layer: { status: "present", implementation: "active_record", files: ["db/schema.rb"], notes: "Standard AR" },
-          api_layer: { status: "present", implementation: "rails_controllers", files: ["config/routes.rb"], notes: "RESTful" },
-          background_jobs: { status: "absent" },
-          realtime: { status: "absent" },
-          testing: { status: "partial", implementation: "minitest", files: ["test/"], notes: "Some tests" },
-          deployment: { status: "absent" }
-        }
-      })
-
-      # Convention extraction response
-      convention_json = JSON.generate({
-        naming_conventions: "snake_case",
-        architecture_pattern: "MVC",
-        test_framework: "minitest",
-        code_style: "standard ruby",
-        dependency_management: "bundler",
-        error_handling: "rescue blocks",
-        configuration_approach: "Rails credentials"
-      })
-
-      # Feature extraction response
-      feature_json = JSON.generate({
-        concern_id: "auth",
-        features: [
-          { name: "User Registration", description: "Users can sign up", status: "implemented", files: ["app/models/user.rb"], dependencies: [] }
-        ]
-      })
-
-      # As-built spec response
-      spec_content = "# Test App — As-Built Specification\n\n## Purpose\nA test app.\n\n```json\n{\"project_name\": \"Test App\", \"total_features\": 1}\n```"
-
-      # LLM calls: concern_mapping, convention_extraction, change_surface (description provided), then feature extraction per present concern, then as-built spec
-      llm.stubs(:chat).returns(concern_json, convention_json, concern_json, feature_json, feature_json, feature_json, spec_content)
-
+    test "full analyze_codebase! flow with parallel agents" do
       null_logger = Logger.new(IO::NULL)
 
-      # Stub the LLM agents
-      brownfield_analyzer = Agents::BrownfieldAnalyzer.new(llm:, logger: null_logger)
-      feature_extractor = Agents::FeatureExtractor.new(llm:, logger: null_logger)
-      as_built_agent = Agents::AsBuiltSpec.new(llm:, logger: null_logger)
+      # Single shared LLM mock — all agents created by orchestrator use default Providers::Llm.build
+      llm = mock("llm")
+      Providers::Llm.stubs(:build).returns(llm)
 
-      # Build orchestrator with stubbed LLM to avoid API key requirement
-      orchestrator = Orchestrator.new(
-        spec_generator: Agents::SpecGenerator.new(llm:, logger: null_logger),
-        task_breaker: Agents::TaskBreaker.new(llm:, logger: null_logger),
-        analyzer: Agents::Analyzer.new(llm:, logger: null_logger),
-        tier_gate_check: Agents::TierGateCheck.new(llm:, logger: null_logger),
-        spec_iterator: Agents::SpecIterator.new(llm:, logger: null_logger),
-        logger: null_logger
+      infra_result = {
+        "conventions" => {
+          "naming_conventions" => "snake_case",
+          "architecture_pattern" => "MVC",
+          "test_framework" => "minitest",
+          "code_style" => "standard ruby",
+          "dependency_management" => "bundler",
+          "error_handling" => "rescue blocks",
+          "configuration_approach" => "Rails credentials"
+        },
+        "infrastructure" => [
+          { "area" => "web_server", "description" => "Puma", "status" => "configured", "files" => [] }
+        ],
+        "concerns" => [
+          { "concern_id" => "auth", "status" => "present", "implementation" => "has_secure_password", "files" => ["app/models/user.rb"], "notes" => "Built-in Rails auth" },
+          { "concern_id" => "data_layer", "status" => "present", "implementation" => "active_record", "files" => ["db/schema.rb"], "notes" => "Standard AR" },
+          { "concern_id" => "api_layer", "status" => "present", "implementation" => "rails_controllers", "files" => ["config/routes.rb"], "notes" => "RESTful" }
+        ]
+      }
+
+      data_result = {
+        "entities" => [
+          { "name" => "User", "table" => "users", "file" => "app/models/user.rb",
+            "attributes" => [{ "name" => "email", "type" => "string" }],
+            "associations" => [], "validations" => [], "callbacks" => [],
+            "scopes" => [], "business_methods" => [], "status" => "implemented" }
+        ],
+        "relationships" => []
+      }
+
+      biz_result = { "services" => [] }
+
+      ctrl_result = {
+        "endpoints" => [
+          { "verb" => "GET", "path" => "/", "controller" => "HomeController", "action" => "index",
+            "description" => "Landing page", "access_control" => "public",
+            "side_effects" => [], "error_handling" => "default",
+            "input_params" => [], "output_format" => "html", "status" => "implemented" }
+        ]
+      }
+
+      view_result = { "pages" => [] }
+
+      # Use stubs (not expects) since thread execution order is non-deterministic
+      llm.stubs(:chat_json).returns(infra_result)
+      llm.stubs(:chat_json).returns(infra_result, data_result, biz_result, ctrl_result, view_result)
+
+      spec_content = "# Test App — As-Built Specification\n\n## Purpose\nA test app.\n\n```json\n{\"project_name\": \"Test App\", \"total_features\": 1}\n```"
+      llm.stubs(:chat).returns(spec_content)
+
+      Brownfield::TestNameCollector.stubs(:call).returns(
+        { test_names: [], grouped_by_concern: {}, framework: nil }
       )
 
-      Agents::BrownfieldAnalyzer.stubs(:new).returns(brownfield_analyzer)
-      Agents::FeatureExtractor.stubs(:new).returns(feature_extractor)
-      Agents::AsBuiltSpec.stubs(:new).returns(as_built_agent)
+      # Build orchestrator — Providers::Llm.build already stubbed above
+      orchestrator = Orchestrator.new(logger: null_logger)
 
       profile = orchestrator.analyze_codebase!(
         repo_path: @fixture_path,
@@ -103,10 +105,15 @@ module ArnoldPipeline
       assert spec.present?
       assert_equal "as_built", spec.spec_type
 
+      # Feature inventories stored as agent outputs
+      assert profile.feature_inventories.is_a?(Array)
+      agent_names = profile.feature_inventories.map { |i| i["agent"] }
+      assert_includes agent_names, "infrastructure"
+
       # Events should be recorded
       events = run.pipeline_events
       brownfield_events = events.select { |e| e.stage == "brownfield" }
-      assert brownfield_events.size >= 4 # stack_detection, codebase_profiling, feature_extraction, as_built_spec_generated, health_baseline
+      assert brownfield_events.size >= 6 # stack_detection, file_manifest, route_table, git_activity, test_names, parallel_agents, as_built_spec, health_baseline
     end
 
     private
@@ -114,7 +121,6 @@ module ArnoldPipeline
     def create_rails_fixture
       dir = Dir.mktmpdir("brownfield_test_")
 
-      # Create Rails-like structure
       FileUtils.mkdir_p(File.join(dir, "app/models"))
       FileUtils.mkdir_p(File.join(dir, "app/controllers"))
       FileUtils.mkdir_p(File.join(dir, "config"))
@@ -131,7 +137,6 @@ module ArnoldPipeline
       File.write(File.join(dir, "Rakefile"), "require_relative 'config/application'")
       File.write(File.join(dir, "app/models/user.rb"), "class User < ApplicationRecord; has_secure_password; end")
 
-      # Init git repo for git_status check
       Open3.capture3("git init && git config user.email 'test@test.com' && git config user.name 'Test' && git add -A && git commit -m 'init'", chdir: dir)
 
       dir
