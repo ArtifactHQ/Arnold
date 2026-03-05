@@ -92,7 +92,7 @@ module ArnoldPipeline
 
       def self.doc_fidelity_prompt(reference_materials:, artifacts:)
         ref_contents = reference_materials.map { |path|
-          content = File.read(path)[0, 5000] rescue "[could not read #{path}]"
+          content = File.read(path, encoding: "utf-8")[0, 5000] rescue "[could not read #{path}]"
           "### #{File.basename(path)}\n```\n#{content}\n```"
         }.join("\n\n")
 

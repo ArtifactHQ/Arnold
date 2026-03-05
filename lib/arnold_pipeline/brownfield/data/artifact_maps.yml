@@ -1,7 +1,7 @@
 ---
 # Maps abstract artifact roles to file paths per stack.
-# Roles: schema, routes, dependency_manifest, entry_point, orm_config,
-#        ci_config, boot_command, test_command
+# Roles: schema, routes, components, dependency_manifest, entry_point,
+#        orm_config, ci_config, boot_command, test_command
 
 stacks:
   ruby_rails:
@@ -12,6 +12,15 @@ stacks:
         format: sql
     routes:
       - path: config/routes.rb
+        format: ruby
+    components:
+      - path: app/views/**/*.html.erb
+        format: erb
+      - path: app/helpers/**/*.rb
+        format: ruby
+      - path: app/javascript/controllers/**/*.js
+        format: javascript
+      - path: app/components/**/*.rb
         format: ruby
     dependency_manifest:
       - path: Gemfile
@@ -47,6 +56,15 @@ stacks:
         format: tsx
       - path: app/api/**/route.ts
         format: typescript
+    components:
+      - path: app/components/**/*.tsx
+        format: tsx
+      - path: components/**/*.tsx
+        format: tsx
+      - path: app/**/layout.tsx
+        format: tsx
+      - path: lib/hooks/**/*.ts
+        format: typescript
     dependency_manifest:
       - path: package.json
         format: json
@@ -81,6 +99,11 @@ stacks:
     routes:
       - path: src/main/java/**/*Controller.java
         format: java
+    components:
+      - path: src/main/resources/templates/**/*.html
+        format: html
+      - path: src/main/resources/static/**/*.js
+        format: javascript
     dependency_manifest:
       - path: pom.xml
         format: maven
@@ -111,6 +134,13 @@ stacks:
     routes:
       - path: "**/urls.py"
         format: python
+    components:
+      - path: "**/templates/**/*.html"
+        format: html
+      - path: "**/static/**/*.js"
+        format: javascript
+      - path: "**/templatetags/**/*.py"
+        format: python
     dependency_manifest:
       - path: requirements.txt
         format: pip
@@ -135,6 +165,7 @@ stacks:
   rust:
     schema: []
     routes: []
+    components: []
     dependency_manifest:
       - path: Cargo.toml
         format: toml
@@ -161,6 +192,13 @@ stacks:
         format: csharp
       - path: Program.cs
         format: csharp
+    components:
+      - path: Pages/**/*.cshtml
+        format: razor
+      - path: Views/**/*.cshtml
+        format: razor
+      - path: Components/**/*.razor
+        format: blazor
     dependency_manifest:
       - path: "*.csproj"
         format: xml

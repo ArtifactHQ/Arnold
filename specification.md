@@ -930,7 +930,8 @@ The analysis pipeline SHALL execute as a sequence of deterministic and LLM-drive
 #### Scenario: Artifact Discovery [SPEC-BROWNFIELD-003]
 - GIVEN a repo path and a stack fingerprint.
 - WHEN the ArtifactDiscoverer service is called.
-- THEN the service scans for framework-specific artifacts (models, controllers, views, migrations, routes, configs) using YAML-defined artifact maps.
+- THEN the service scans for framework-specific artifacts (schema, routes, components, dependency manifests, entry points, ORM config, CI config) using YAML-defined artifact maps.
+- AND the `components` role discovers UI files (views, templates, React components, layouts, hooks) per stack.
 - AND returns an array of discovered artifacts with path, type, and metadata.
 - AND supports additional artifact maps via `additional_artifact_maps_path` configuration.
 
@@ -947,14 +948,16 @@ The analysis pipeline SHALL execute as a sequence of deterministic and LLM-drive
 - AND respects the `brownfield_scan_budget` token budget configuration.
 
 #### Scenario: Feature Extraction (LLM) [SPEC-BROWNFIELD-006]
-- GIVEN recipe alignment, artifacts, stack fingerprint, and change surface.
+- GIVEN recipe alignment, artifacts, stack fingerprint, change surface, and optional reference materials.
 - WHEN the FeatureExtractor agent is called.
 - THEN the agent produces per-concern feature inventories listing existing features with their implementation status and file locations.
+- AND when reference materials are provided, they are included in the extraction prompt as additional context for discovering features not obvious from code structure alone.
 
 #### Scenario: As-Built Spec Generation (LLM) [SPEC-BROWNFIELD-007]
-- GIVEN feature inventories and stack fingerprint.
+- GIVEN feature inventories, stack fingerprint, and optional reference materials.
 - WHEN the AsBuiltSpec agent is called.
 - THEN the agent produces an OpenSpec-format specification document reflecting the existing codebase's actual behavior.
+- AND when reference materials are provided, they are included in the generation prompt to produce a richer specification informed by product documentation.
 - AND the specification is persisted as a Specification record with `spec_type: "as_built"`.
 
 #### Scenario: Health Baseline [SPEC-BROWNFIELD-008]

@@ -6,7 +6,7 @@ module ArnoldPipeline
       MAPS_PATH = File.expand_path("data/artifact_maps.yml", __dir__)
       MAX_CONTENT_SIZE = 10_240 # 10KB
 
-      ROLES = %w[schema routes dependency_manifest entry_point orm_config ci_config].freeze
+      ROLES = %w[schema routes components dependency_manifest entry_point orm_config ci_config].freeze
 
       def self.call(repo_path:, stack_fingerprint:, additional_maps_path: nil)
         new(repo_path:, stack_fingerprint:, additional_maps_path:).call
@@ -92,9 +92,9 @@ module ArnoldPipeline
       end
 
       def read_truncated(path)
-        content = File.read(path, MAX_CONTENT_SIZE)
-        if File.size(path) > MAX_CONTENT_SIZE
-          content + "\n...[truncated at #{MAX_CONTENT_SIZE} bytes]..."
+        content = File.read(path, encoding: "utf-8")
+        if content.length > MAX_CONTENT_SIZE
+          content[0, MAX_CONTENT_SIZE] + "\n...[truncated at #{MAX_CONTENT_SIZE} bytes]..."
         else
           content
         end

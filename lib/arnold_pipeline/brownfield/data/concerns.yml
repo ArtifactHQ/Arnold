@@ -96,6 +96,35 @@ concerns:
       - jest
       - pytest
 
+  frontend:
+    name: Frontend & UI
+    description: User interface components, pages, layouts, client-side state, styling, and user interactions.
+    indicators:
+      - component
+      - page
+      - layout
+      - hook
+      - useState
+      - useEffect
+      - context
+      - provider
+      - modal
+      - form
+      - button
+      - sidebar
+      - navbar
+      - dashboard
+      - view
+      - template
+      - partial
+      - stylesheet
+      - tailwind
+      - css
+      - styled
+      - theme
+      - responsive
+      - ui
+
   deployment:
     name: Deployment & Infrastructure
     description: CI/CD pipelines, containerization, hosting, and infrastructure configuration.

@@ -65,6 +65,44 @@ module ArnoldPipeline
         assert_includes result[:content], "MyApp"
         assert_equal({}, result[:structured_data])
       end
+
+      test "includes reference_materials in prompt" do
+        inventories = [
+          {
+            "concern_id" => "auth",
+            "features" => [
+              { "name" => "Login", "description" => "User login", "status" => "implemented", "files" => [], "dependencies" => [] }
+            ]
+          }
+        ]
+
+        reference_materials = [
+          { path: "docs/ARCHITECTURE.md", content: "# Architecture\n\nMicroservices with event sourcing" }
+        ]
+
+        @llm.expects(:chat).once.with { |messages:, **| messages.first[:content].include?("Reference Documentation") }.returns("# MyApp\n```json\n{}\n```")
+
+        result = @agent.call(
+          feature_inventories: inventories,
+          stack_fingerprint: { language: "ruby", framework: "rails" },
+          project_name: "MyApp",
+          reference_materials:
+        )
+
+        assert_includes result[:content], "MyApp"
+      end
+
+      test "works without reference_materials (backward compatible)" do
+        @llm.expects(:chat).once.with { |messages:, **| !messages.first[:content].include?("Reference Documentation") }.returns("# MyApp\n```json\n{}\n```")
+
+        result = @agent.call(
+          feature_inventories: [],
+          stack_fingerprint: { language: "ruby", framework: "rails" },
+          project_name: "MyApp"
+        )
+
+        assert_includes result[:content], "MyApp"
+      end
     end
   end
 end

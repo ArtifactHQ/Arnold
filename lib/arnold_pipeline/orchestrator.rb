@@ -221,6 +221,10 @@ module ArnoldPipeline
           )
         end
 
+        # Pre-load reference materials as {path:, content:} hashes for downstream agents.
+        # BrownfieldAnalyzer reads files itself; FeatureExtractor and AsBuiltSpec receive pre-read content.
+        loaded_references = load_reference_materials(reference_materials)
+
         # Step 6: Feature extraction (LLM)
         feature_extractor = Agents::FeatureExtractor.new(logger:)
         feature_inventories = @event_recorder.timed(
@@ -232,7 +236,8 @@ module ArnoldPipeline
             recipe_alignment: analysis[:recipe_alignment],
             artifacts:,
             stack_fingerprint:,
-            change_surface: analysis[:change_surface]
+            change_surface: analysis[:change_surface],
+            reference_materials: loaded_references
           )
         end
 
@@ -246,7 +251,8 @@ module ArnoldPipeline
           as_built_agent.call(
             feature_inventories:,
             stack_fingerprint:,
-            project_name:
+            project_name:,
+            reference_materials: loaded_references
           )
         end
 
@@ -701,6 +707,22 @@ module ArnoldPipeline
           type: c["type"] || c[:type] || :custom,
           required: c["required"] || c[:required] || false
         )
+      end
+    end
+
+    def load_reference_materials(paths)
+      return [] if paths.nil? || paths.empty?
+
+      paths.filter_map do |path|
+        next unless File.exist?(path)
+        content = File.read(path, encoding: "utf-8")
+        content = content[0, 10_000] if content.length > 10_000
+        next unless content
+
+        { path: path, content: content }
+      rescue => e
+        logger.warn { "[Arnold] Failed to read reference material #{path}: #{e.message}" }
+        nil
       end
     end
 

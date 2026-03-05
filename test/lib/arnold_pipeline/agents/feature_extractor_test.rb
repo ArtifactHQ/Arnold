@@ -98,6 +98,49 @@ module ArnoldPipeline
 
         assert_empty result
       end
+
+      test "passes reference_materials through to prompt" do
+        recipe_alignment = {
+          "concerns" => {
+            "auth" => { "status" => "present", "implementation" => "devise", "files" => ["db/schema.rb"] }
+          }
+        }
+
+        reference_materials = [
+          { path: "docs/FEATURES.md", content: "# Features\n\nUser login with SSO support" }
+        ]
+
+        feature_json = '{"concern_id": "auth", "features": [{"name": "Login", "description": "User login", "status": "implemented", "files": ["app/models/user.rb"], "dependencies": []}]}'
+        @llm.expects(:chat).once.with { |messages:, **| messages.first[:content].include?("Reference Documentation") }.returns(feature_json)
+
+        result = @agent.call(
+          recipe_alignment:,
+          artifacts: @artifacts,
+          stack_fingerprint: @stack_fingerprint,
+          reference_materials:
+        )
+
+        assert_equal 1, result.size
+      end
+
+      test "works without reference_materials (backward compatible)" do
+        recipe_alignment = {
+          "concerns" => {
+            "auth" => { "status" => "present", "files" => ["db/schema.rb"] }
+          }
+        }
+
+        feature_json = '{"concern_id": "auth", "features": []}'
+        @llm.expects(:chat).once.with { |messages:, **| !messages.first[:content].include?("Reference Documentation") }.returns(feature_json)
+
+        result = @agent.call(
+          recipe_alignment:,
+          artifacts: @artifacts,
+          stack_fingerprint: @stack_fingerprint
+        )
+
+        assert_equal 1, result.size
+      end
     end
   end
 end

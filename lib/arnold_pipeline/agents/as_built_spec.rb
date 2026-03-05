@@ -4,11 +4,12 @@ require "arnold_pipeline/prompts/as_built_spec"
 module ArnoldPipeline
   module Agents
     class AsBuiltSpec < BaseAgent
-      def call(feature_inventories:, stack_fingerprint:, project_name:)
+      def call(feature_inventories:, stack_fingerprint:, project_name:, reference_materials: [])
         prompt = Prompts::AsBuiltSpec.generation_prompt(
           feature_inventories:,
           stack_fingerprint:,
-          project_name:
+          project_name:,
+          reference_materials:
         )
 
         response = chat(messages: [{ role: "user", content: prompt }])

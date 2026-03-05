@@ -97,6 +97,27 @@ stacks:
         fixtures: "test/fixtures/*.yml"
         system_tests: "driven_by :selenium, using: :headless_chrome"
 
+    frontend:
+      typical_implementations:
+        - ERB views with layouts
+        - Hotwire (Turbo + Stimulus)
+        - ViewComponent
+        - Importmap or jsbundling-rails
+        - Tailwind CSS via tailwindcss-rails
+      expected_locations:
+        - app/views/
+        - app/views/layouts/
+        - app/helpers/
+        - app/javascript/
+        - app/javascript/controllers/
+        - app/components/
+        - app/assets/stylesheets/
+      conventions:
+        templating: "ERB partials with _prefix naming"
+        interactivity: "Stimulus controllers for JS behavior"
+        navigation: "Turbo Drive for SPA-like page transitions"
+        updates: "Turbo Frames and Turbo Streams for partial updates"
+
     deployment:
       typical_implementations:
         - Kamal 2 (Rails 8 default)
@@ -196,6 +217,25 @@ stacks:
         runner: "npm test or npx jest"
         e2e: "Playwright or Cypress"
 
+    frontend:
+      typical_implementations:
+        - React Server Components + Client Components
+        - Next.js App Router (layouts, pages, loading, error boundaries)
+        - Tailwind CSS / CSS Modules / styled-components
+        - Shadcn/ui / Radix / Headless UI
+      expected_locations:
+        - app/**/page.tsx
+        - app/**/layout.tsx
+        - app/components/
+        - components/
+        - lib/hooks/
+        - app/**/loading.tsx
+        - app/**/error.tsx
+      conventions:
+        routing: "file-based routing via app/ directory structure"
+        components: "React function components with TypeScript"
+        state: "useState, useContext, Zustand, or Jotai for client state"
+
     deployment:
       typical_implementations:
         - Vercel (default for Next.js)
@@ -265,6 +305,19 @@ stacks:
         - src/test/java/
       conventions:
         runner: "./mvnw test"
+    frontend:
+      typical_implementations:
+        - Thymeleaf templates
+        - JSP / JSF
+        - React/Angular frontend (separate)
+      expected_locations:
+        - src/main/resources/templates/
+        - src/main/resources/static/
+        - src/main/webapp/
+      conventions:
+        templating: "Thymeleaf HTML templates with th: attributes"
+        static_assets: "src/main/resources/static/"
+
     deployment:
       typical_implementations:
         - Docker
@@ -336,6 +389,20 @@ stacks:
         - "**/tests/"
       conventions:
         runner: "python manage.py test"
+    frontend:
+      typical_implementations:
+        - Django templates
+        - Jinja2 templates
+        - HTMX
+        - React/Vue frontend (separate)
+      expected_locations:
+        - "**/templates/"
+        - "**/static/"
+        - "**/templatetags/"
+      conventions:
+        templating: "Django template language with {% %} and {{ }} tags"
+        static_files: "STATIC_ROOT / STATICFILES_DIRS settings"
+
     deployment:
       typical_implementations:
         - Docker
@@ -403,6 +470,18 @@ stacks:
         - src/**/*.rs (inline #[cfg(test)])
       conventions:
         runner: "cargo test"
+    frontend:
+      typical_implementations:
+        - Yew (Rust WASM framework)
+        - Leptos
+        - Static file serving
+      expected_locations:
+        - src/frontend/
+        - static/
+        - templates/
+      conventions:
+        pattern: "Typically API-only; frontend served separately or via WASM"
+
     deployment:
       typical_implementations:
         - Docker multi-stage build
@@ -467,6 +546,20 @@ stacks:
         - "*.Tests.csproj"
       conventions:
         runner: "dotnet test"
+    frontend:
+      typical_implementations:
+        - Razor Pages / Razor Views
+        - Blazor (Server or WebAssembly)
+        - Tag Helpers
+      expected_locations:
+        - Pages/
+        - Views/
+        - Components/
+        - wwwroot/
+      conventions:
+        templating: "Razor syntax with @model and Tag Helpers"
+        spa: "Blazor components with .razor extension"
+
     deployment:
       typical_implementations:
         - Docker

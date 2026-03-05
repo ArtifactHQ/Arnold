@@ -6,7 +6,7 @@ module ArnoldPipeline
     class FeatureExtractor < BaseAgent
       MAX_FILE_READ = 8_192
 
-      def call(recipe_alignment:, artifacts:, stack_fingerprint:, change_surface: nil)
+      def call(recipe_alignment:, artifacts:, stack_fingerprint:, change_surface: nil, reference_materials: [])
         @token_budget = ArnoldPipeline.configuration.brownfield_scan_budget
         @tokens_used = 0
         deep_dive_filter = ArnoldPipeline.configuration.brownfield_deep_dive_domains
@@ -27,7 +27,8 @@ module ArnoldPipeline
             concern_name: concern_id.tr("_", " ").capitalize,
             files:,
             stack_fingerprint:,
-            change_surface:
+            change_surface:,
+            reference_materials:
           )
 
           inventories << inventory if inventory
@@ -38,7 +39,7 @@ module ArnoldPipeline
 
       private
 
-      def extract_features(concern_id:, concern_name:, files:, stack_fingerprint:, change_surface:)
+      def extract_features(concern_id:, concern_name:, files:, stack_fingerprint:, change_surface:, reference_materials: [])
         change_request = change_surface&.dig("summary")
 
         prompt = if change_request
@@ -46,13 +47,15 @@ module ArnoldPipeline
             concern_id:, concern_name:,
             implementation_files: files,
             stack_fingerprint:,
-            change_request:
+            change_request:,
+            reference_materials:
           )
         else
           Prompts::FeatureExtraction.extraction_prompt(
             concern_id:, concern_name:,
             implementation_files: files,
-            stack_fingerprint:
+            stack_fingerprint:,
+            reference_materials:
           )
         end
 
@@ -80,7 +83,12 @@ module ArnoldPipeline
 
           full_path = File.join(repo_path, path)
           if File.exist?(full_path)
-            result[path] = File.read(full_path, MAX_FILE_READ) rescue nil
+            begin
+              content = File.read(full_path, encoding: "utf-8")
+              result[path] = content.length > MAX_FILE_READ ? content[0, MAX_FILE_READ] : content
+            rescue
+              nil
+            end
           end
         end
 
