@@ -10,6 +10,7 @@ module ArnoldPipeline
   class Cli < Thor
     package_name "arnold"
     class_option :quiet, type: :boolean, default: false, desc: "Suppress informational output"
+    class_option :backtrace, type: :boolean, default: false, desc: "Show full error backtrace on failure"
     def self.exit_on_failure? = true
 
     STANDALONE_DB_DIR = File.expand_path("~/.arnold_pipeline")
@@ -733,8 +734,13 @@ module ArnoldPipeline
       raise SystemExit.new(1)
     rescue StandardError => e
       say_error "Error: #{e.message}", :red
-      if options[:verbose]
-        say_error e.backtrace&.first(10)&.join("\n"), :red
+      if options[:backtrace] || options[:verbose]
+        if e.respond_to?(:raw_response) && e.raw_response
+          say_error "\nRaw LLM response (first 500 chars):", :yellow
+          say_error e.raw_response.slice(0, 500), :yellow
+        end
+        say_error "\nBacktrace:", :red
+        say_error e.backtrace&.first(20)&.join("\n"), :red
       end
       raise SystemExit.new(1)
     end

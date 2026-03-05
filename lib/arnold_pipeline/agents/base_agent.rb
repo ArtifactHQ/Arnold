@@ -52,6 +52,11 @@ module ArnoldPipeline
       rescue JSON::ParserError => e
         logger.error { "JSON parse failed: #{e.message}" }
         logger.debug { "Extracted content (first 200 chars): #{raw&.slice(0, 200).inspect}" }
+        repaired = attempt_json_repair(sanitized)
+        if repaired
+          logger.warn { "JSON repaired by closing #{repaired[:closed]} unclosed bracket(s)" }
+          return repaired[:result]
+        end
         raise LlmParseError.new(e.message, raw_response: text, original_error: e)
       end
 
@@ -102,6 +107,51 @@ module ArnoldPipeline
           i += 1
         end
 
+        nil
+      end
+
+      def attempt_json_repair(text)
+        # Count unmatched openers, respecting string literals
+        stack = []
+        in_string = false
+        i = 0
+
+        while i < text.length
+          char = text[i]
+
+          if in_string
+            if char == "\\" then i += 1 # skip escaped char
+            elsif char == '"' then in_string = false
+            end
+          else
+            case char
+            when '"' then in_string = true
+            when "{", "[" then stack.push(char)
+            when "}"
+              return nil if stack.empty? || stack.last != "{"
+              stack.pop
+            when "]"
+              return nil if stack.empty? || stack.last != "["
+              stack.pop
+            end
+          end
+
+          i += 1
+        end
+
+        # Only repair when there are unclosed openers (truncation signature)
+        return nil if stack.empty?
+
+        # Strip trailing comma before closing (common in truncated output)
+        repaired = text.rstrip.chomp(",")
+
+        # Close in reverse order
+        closers = stack.reverse.map { |opener| opener == "{" ? "}" : "]" }
+        repaired += closers.join
+
+        parsed = JSON.parse(repaired, allow_trailing_comma: true)
+        { result: parsed, closed: closers.size }
+      rescue JSON::ParserError
         nil
       end
 

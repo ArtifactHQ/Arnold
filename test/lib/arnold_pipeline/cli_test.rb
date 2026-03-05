@@ -241,6 +241,37 @@ module ArnoldPipeline
       assert_match(/\.rb/, stderr_output) # backtrace includes file references
     end
 
+    test "run with unexpected error and --backtrace shows backtrace" do
+      ArnoldPipeline::Orchestrator.stubs(:new).raises(RuntimeError, "something went wrong")
+
+      stderr_output = capture_stderr_through_exit { Cli.start([ "run", "Build an app", "--backtrace" ]) }
+      assert_match(/Error:.*something went wrong/, stderr_output)
+      assert_match(/Backtrace:/, stderr_output)
+      assert_match(/\.rb/, stderr_output)
+    end
+
+    test "run with unexpected error without --backtrace hides backtrace" do
+      ArnoldPipeline::Orchestrator.stubs(:new).raises(RuntimeError, "something went wrong")
+
+      stderr_output = capture_stderr_through_exit { Cli.start([ "run", "Build an app" ]) }
+      assert_match(/Error:.*something went wrong/, stderr_output)
+      refute_match(/Backtrace:/, stderr_output)
+    end
+
+    test "LlmParseError with --backtrace shows raw response excerpt" do
+      error = ArnoldPipeline::Agents::LlmParseError.new(
+        "expected ',' or '}' after object value",
+        raw_response: "{ bad json " * 100
+      )
+      ArnoldPipeline::Orchestrator.stubs(:new).raises(error)
+
+      stderr_output = capture_stderr_through_exit { Cli.start([ "run", "Build an app", "--backtrace" ]) }
+      assert_match(/Error:.*expected ','/, stderr_output)
+      assert_match(/Raw LLM response \(first 500 chars\):/, stderr_output)
+      assert_match(/bad json/, stderr_output)
+      assert_match(/Backtrace:/, stderr_output)
+    end
+
     test "resume shows friendly message for ConfigurationError" do
       run_record = PipelineRun.create!(nl_input: "Build an app", status: :paused)
       ArnoldPipeline::Orchestrator.stubs(:new).raises(ArnoldPipeline::ConfigurationError, "GitHub token is required")

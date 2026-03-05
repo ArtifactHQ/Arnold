@@ -247,6 +247,44 @@ module ArnoldPipeline
         assert_kind_of String, result
       end
 
+      # -- Truncated JSON repair --
+
+      test "repairs truncated object with missing closing brace" do
+        text = '{"key": "value"'
+        result = @agent.parse_json(text)
+        assert_equal({ "key" => "value" }, result)
+      end
+
+      test "repairs truncated array inside object" do
+        text = '{"items": [1, 2'
+        result = @agent.parse_json(text)
+        assert_equal({ "items" => [1, 2] }, result)
+      end
+
+      test "repairs truncated nested structure" do
+        text = '{"outer": {"inner": [1, 2, 3'
+        result = @agent.parse_json(text)
+        assert_equal({ "outer" => { "inner" => [1, 2, 3] } }, result)
+      end
+
+      test "repairs truncated object with trailing comma" do
+        text = '{"a": 1, "b": 2,'
+        result = @agent.parse_json(text)
+        assert_equal({ "a" => 1, "b" => 2 }, result)
+      end
+
+      test "does not repair non-truncation parse errors" do
+        assert_raises(ArnoldPipeline::Agents::LlmParseError) do
+          @agent.parse_json('{invalid token}')
+        end
+      end
+
+      test "does not repair mismatched brackets" do
+        assert_raises(ArnoldPipeline::Agents::LlmParseError) do
+          @agent.parse_json('{"key": ]')
+        end
+      end
+
       # -- chat_json delegation --
 
       test "chat_json delegates to llm.chat_json and returns result" do

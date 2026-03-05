@@ -16,6 +16,14 @@ stacks:
         - app/controllers/passwords_controller.rb
         - app/controllers/concerns/authentication.rb
         - config/initializers/devise.rb
+      behavioral_files:
+        - app/models/user.rb
+        - app/models/session.rb
+        - app/models/current.rb
+        - app/controllers/concerns/authentication.rb
+        - app/controllers/sessions_controller.rb
+        - app/controllers/registrations_controller.rb
+        - app/controllers/passwords_controller.rb
       conventions:
         session_store: cookie-based (Rails default)
         password_hashing: bcrypt via has_secure_password
@@ -31,6 +39,10 @@ stacks:
         - db/schema.rb
         - db/seeds.rb
         - app/models/concerns/
+      behavioral_files:
+        - "app/models/*.rb"
+        - "app/models/concerns/*.rb"
+        - "app/services/*.rb"
       conventions:
         naming: "singular model name, plural table name"
         associations: "has_many, belongs_to, has_one, has_and_belongs_to_many"
@@ -48,6 +60,10 @@ stacks:
         - app/controllers/
         - app/controllers/api/
         - app/views/
+      behavioral_files:
+        - "app/controllers/**/*.rb"
+        - "app/serializers/*.rb"
+        - "app/policies/*.rb"
       conventions:
         routing: "resources :models with standard CRUD actions"
         response_formats: "HTML, Turbo Stream, JSON"
@@ -63,6 +79,9 @@ stacks:
         - app/jobs/
         - config/recurring.yml
         - app/mailers/
+      behavioral_files:
+        - "app/jobs/*.rb"
+        - "app/mailers/*.rb"
       conventions:
         interface: "ActiveJob with perform_later / perform_now"
         queue_adapter: "config.active_job.queue_adapter"
@@ -76,6 +95,9 @@ stacks:
         - app/channels/
         - app/javascript/channels/
         - config/cable.yml
+      behavioral_files:
+        - "app/channels/*.rb"
+        - "app/javascript/channels/*.js"
       conventions:
         broadcasting: "model.broadcast_append_to / broadcast_replace_to"
         channels: "ApplicationCable::Channel subclasses"
@@ -92,6 +114,9 @@ stacks:
         - test/controllers/
         - test/system/
         - test/fixtures/
+      behavioral_files:
+        - "test/**/*_test.rb"
+        - "spec/**/*_spec.rb"
       conventions:
         runner: "bin/rails test or bundle exec rspec"
         fixtures: "test/fixtures/*.yml"
@@ -112,6 +137,11 @@ stacks:
         - app/javascript/controllers/
         - app/components/
         - app/assets/stylesheets/
+      behavioral_files:
+        - "app/views/**/*.html.erb"
+        - "app/helpers/*.rb"
+        - "app/javascript/controllers/*.js"
+        - "app/components/**/*.rb"
       conventions:
         templating: "ERB partials with _prefix naming"
         interactivity: "Stimulus controllers for JS behavior"
@@ -129,6 +159,10 @@ stacks:
         - Dockerfile
         - .github/workflows/
         - Procfile
+      behavioral_files:
+        - config/deploy.yml
+        - Dockerfile
+        - ".github/workflows/*.yml"
       conventions:
         assets: "rails assets:precompile"
         secrets: "Rails encrypted credentials"
@@ -144,6 +178,10 @@ stacks:
         - app/api/auth/[...nextauth]/route.ts
         - lib/auth.ts
         - middleware.ts
+      behavioral_files:
+        - lib/auth.ts
+        - middleware.ts
+        - "app/api/auth/**/route.ts"
       conventions:
         session_store: JWT or database sessions
         middleware: "Next.js middleware for route protection"
@@ -158,6 +196,11 @@ stacks:
         - prisma/schema.prisma
         - lib/db.ts
         - app/api/**/route.ts
+      behavioral_files:
+        - "lib/db*.ts"
+        - "lib/models/*.ts"
+        - "lib/services/*.ts"
+        - prisma/schema.prisma
       conventions:
         schema: "Prisma schema or Drizzle schema files"
         migrations: "prisma migrate or drizzle-kit"
@@ -172,6 +215,10 @@ stacks:
         - app/api/**/route.ts
         - app/**/actions.ts
         - lib/api/
+      behavioral_files:
+        - "app/api/**/route.ts"
+        - "app/**/actions.ts"
+        - "lib/api/*.ts"
       conventions:
         routing: "file-based routing in app/ directory"
         data_fetching: "Server Components, fetch(), Server Actions"
@@ -186,6 +233,9 @@ stacks:
         - app/api/cron/
         - vercel.json (crons section)
         - lib/jobs/
+      behavioral_files:
+        - "app/api/cron/**/route.ts"
+        - "lib/jobs/*.ts"
       conventions:
         scheduling: "API route-based cron triggers"
 
@@ -198,6 +248,10 @@ stacks:
       expected_locations:
         - lib/pusher.ts
         - app/api/socket/
+      behavioral_files:
+        - "lib/pusher*.ts"
+        - "app/api/socket/**/route.ts"
+        - "lib/realtime/*.ts"
       conventions:
         pattern: "Event-driven pub/sub"
 
@@ -213,6 +267,10 @@ stacks:
         - "**/*.spec.ts"
         - cypress/
         - e2e/
+      behavioral_files:
+        - "__tests__/**/*.test.ts"
+        - "**/*.test.ts"
+        - "**/*.spec.ts"
       conventions:
         runner: "npm test or npx jest"
         e2e: "Playwright or Cypress"
@@ -231,6 +289,11 @@ stacks:
         - lib/hooks/
         - app/**/loading.tsx
         - app/**/error.tsx
+      behavioral_files:
+        - "app/**/page.tsx"
+        - "app/**/layout.tsx"
+        - "components/**/*.tsx"
+        - "lib/hooks/*.ts"
       conventions:
         routing: "file-based routing via app/ directory structure"
         components: "React function components with TypeScript"
@@ -247,6 +310,11 @@ stacks:
         - next.config.js (output setting)
         - Dockerfile
         - .github/workflows/
+      behavioral_files:
+        - vercel.json
+        - next.config.js
+        - Dockerfile
+        - ".github/workflows/*.yml"
       conventions:
         build: "next build"
         output: "standalone, export, or default"
@@ -259,6 +327,9 @@ stacks:
       expected_locations:
         - src/main/java/**/security/
         - src/main/java/**/config/SecurityConfig.java
+      behavioral_files:
+        - "src/main/java/**/security/*.java"
+        - "src/main/java/**/config/SecurityConfig.java"
       conventions:
         framework: Spring Security filter chain
     data_layer:
@@ -269,6 +340,10 @@ stacks:
         - src/main/java/**/entity/
         - src/main/java/**/repository/
         - src/main/resources/db/migration/
+      behavioral_files:
+        - "src/main/java/**/entity/*.java"
+        - "src/main/java/**/repository/*.java"
+        - "src/main/java/**/service/*.java"
       conventions:
         annotations: "@Entity, @Repository, @Table"
     api_layer:
@@ -277,6 +352,9 @@ stacks:
         - Spring WebFlux
       expected_locations:
         - src/main/java/**/controller/
+      behavioral_files:
+        - "src/main/java/**/controller/*.java"
+        - "src/main/java/**/dto/*.java"
       conventions:
         annotations: "@RestController, @RequestMapping, @GetMapping"
     background_jobs:
@@ -286,6 +364,9 @@ stacks:
       expected_locations:
         - src/main/java/**/scheduler/
         - src/main/java/**/job/
+      behavioral_files:
+        - "src/main/java/**/scheduler/*.java"
+        - "src/main/java/**/job/*.java"
       conventions:
         annotations: "@Scheduled, @EnableScheduling"
     realtime:
@@ -294,6 +375,8 @@ stacks:
         - STOMP
       expected_locations:
         - src/main/java/**/websocket/
+      behavioral_files:
+        - "src/main/java/**/websocket/*.java"
       conventions:
         protocol: STOMP over WebSocket
     testing:
@@ -303,6 +386,9 @@ stacks:
         - Spring Boot Test
       expected_locations:
         - src/test/java/
+      behavioral_files:
+        - "src/test/java/**/*Test.java"
+        - "src/test/java/**/*IT.java"
       conventions:
         runner: "./mvnw test"
     frontend:
@@ -314,6 +400,9 @@ stacks:
         - src/main/resources/templates/
         - src/main/resources/static/
         - src/main/webapp/
+      behavioral_files:
+        - "src/main/resources/templates/**/*.html"
+        - "src/main/resources/static/**/*.js"
       conventions:
         templating: "Thymeleaf HTML templates with th: attributes"
         static_assets: "src/main/resources/static/"
@@ -326,6 +415,10 @@ stacks:
       expected_locations:
         - Dockerfile
         - docker-compose.yml
+      behavioral_files:
+        - Dockerfile
+        - docker-compose.yml
+        - ".github/workflows/*.yml"
       conventions:
         build: "./mvnw package"
 
@@ -338,6 +431,11 @@ stacks:
       expected_locations:
         - "**/auth/"
         - "**/accounts/"
+      behavioral_files:
+        - "**/auth/views.py"
+        - "**/auth/models.py"
+        - "**/accounts/views.py"
+        - "**/accounts/models.py"
       conventions:
         user_model: "AUTH_USER_MODEL setting"
     data_layer:
@@ -347,6 +445,11 @@ stacks:
       expected_locations:
         - "**/models.py"
         - "**/migrations/"
+      behavioral_files:
+        - "**/models.py"
+        - "**/managers.py"
+        - "**/services.py"
+        - "**/signals.py"
       conventions:
         pattern: "Model classes in models.py per app"
     api_layer:
@@ -358,6 +461,11 @@ stacks:
         - "**/views.py"
         - "**/urls.py"
         - "**/serializers.py"
+      behavioral_files:
+        - "**/views.py"
+        - "**/serializers.py"
+        - "**/permissions.py"
+        - "**/filters.py"
       conventions:
         routing: "URL patterns in urls.py"
     background_jobs:
@@ -366,6 +474,9 @@ stacks:
         - Django Q
         - Huey
       expected_locations:
+        - "**/tasks.py"
+        - "**/celery.py"
+      behavioral_files:
         - "**/tasks.py"
         - "**/celery.py"
       conventions:
@@ -377,6 +488,8 @@ stacks:
       expected_locations:
         - "**/consumers.py"
         - "**/routing.py"
+      behavioral_files:
+        - "**/consumers.py"
       conventions:
         protocol: ASGI WebSocket consumers
     testing:
@@ -387,6 +500,10 @@ stacks:
       expected_locations:
         - "**/tests.py"
         - "**/tests/"
+      behavioral_files:
+        - "**/tests.py"
+        - "**/tests/*.py"
+        - "**/conftest.py"
       conventions:
         runner: "python manage.py test"
     frontend:
@@ -399,6 +516,10 @@ stacks:
         - "**/templates/"
         - "**/static/"
         - "**/templatetags/"
+      behavioral_files:
+        - "**/templates/**/*.html"
+        - "**/templatetags/*.py"
+        - "**/static/**/*.js"
       conventions:
         templating: "Django template language with {% %} and {{ }} tags"
         static_files: "STATIC_ROOT / STATICFILES_DIRS settings"
@@ -411,6 +532,10 @@ stacks:
       expected_locations:
         - Dockerfile
         - Procfile
+      behavioral_files:
+        - Dockerfile
+        - Procfile
+        - ".github/workflows/*.yml"
       conventions:
         wsgi: "gunicorn project.wsgi"
 
@@ -422,6 +547,9 @@ stacks:
       expected_locations:
         - src/auth/
         - src/middleware/
+      behavioral_files:
+        - "src/auth/*.rs"
+        - "src/middleware/*.rs"
       conventions:
         pattern: "Middleware extractors"
     data_layer:
@@ -432,6 +560,10 @@ stacks:
       expected_locations:
         - src/models/
         - migrations/
+      behavioral_files:
+        - "src/models/*.rs"
+        - "src/db/*.rs"
+        - "src/services/*.rs"
       conventions:
         pattern: "Diesel schema.rs or SQLx queries"
     api_layer:
@@ -442,6 +574,9 @@ stacks:
       expected_locations:
         - src/routes/
         - src/handlers/
+      behavioral_files:
+        - "src/routes/*.rs"
+        - "src/handlers/*.rs"
       conventions:
         pattern: "Handler functions with extractors"
     background_jobs:
@@ -451,6 +586,9 @@ stacks:
       expected_locations:
         - src/jobs/
         - src/workers/
+      behavioral_files:
+        - "src/jobs/*.rs"
+        - "src/workers/*.rs"
       conventions:
         pattern: "tokio::spawn for async tasks"
     realtime:
@@ -459,6 +597,8 @@ stacks:
         - Axum WebSocket
       expected_locations:
         - src/ws/
+      behavioral_files:
+        - "src/ws/*.rs"
       conventions:
         pattern: "WebSocket upgrade handlers"
     testing:
@@ -468,6 +608,9 @@ stacks:
       expected_locations:
         - tests/
         - src/**/*.rs (inline #[cfg(test)])
+      behavioral_files:
+        - "tests/*.rs"
+        - "tests/**/*.rs"
       conventions:
         runner: "cargo test"
     frontend:
@@ -479,6 +622,9 @@ stacks:
         - src/frontend/
         - static/
         - templates/
+      behavioral_files:
+        - "src/frontend/*.rs"
+        - "templates/*.html"
       conventions:
         pattern: "Typically API-only; frontend served separately or via WASM"
 
@@ -488,6 +634,9 @@ stacks:
         - Static binary
       expected_locations:
         - Dockerfile
+      behavioral_files:
+        - Dockerfile
+        - ".github/workflows/*.yml"
       conventions:
         build: "cargo build --release"
 
@@ -499,6 +648,9 @@ stacks:
       expected_locations:
         - "**/*Identity*"
         - "**/*Auth*"
+      behavioral_files:
+        - "**/*Identity*.cs"
+        - "**/*Auth*.cs"
       conventions:
         framework: "ASP.NET Core Identity"
     data_layer:
@@ -509,6 +661,10 @@ stacks:
         - Data/
         - Models/
         - Migrations/
+      behavioral_files:
+        - "Data/*.cs"
+        - "Models/*.cs"
+        - "Services/*.cs"
       conventions:
         pattern: "DbContext and entity classes"
     api_layer:
@@ -518,6 +674,9 @@ stacks:
       expected_locations:
         - Controllers/
         - Endpoints/
+      behavioral_files:
+        - "Controllers/*.cs"
+        - "Endpoints/*.cs"
       conventions:
         pattern: "Controller classes or MapGet/MapPost"
     background_jobs:
@@ -527,6 +686,9 @@ stacks:
       expected_locations:
         - Services/
         - Jobs/
+      behavioral_files:
+        - "Services/*Service.cs"
+        - "Jobs/*.cs"
       conventions:
         pattern: "BackgroundService or IHostedService"
     realtime:
@@ -534,6 +696,8 @@ stacks:
         - SignalR
       expected_locations:
         - Hubs/
+      behavioral_files:
+        - "Hubs/*.cs"
       conventions:
         pattern: "Hub classes"
     testing:
@@ -544,6 +708,8 @@ stacks:
       expected_locations:
         - "*.Tests/"
         - "*.Tests.csproj"
+      behavioral_files:
+        - "*.Tests/**/*Test*.cs"
       conventions:
         runner: "dotnet test"
     frontend:
@@ -556,6 +722,11 @@ stacks:
         - Views/
         - Components/
         - wwwroot/
+      behavioral_files:
+        - "Pages/*.cshtml"
+        - "Pages/*.cshtml.cs"
+        - "Views/**/*.cshtml"
+        - "Components/**/*.razor"
       conventions:
         templating: "Razor syntax with @model and Tag Helpers"
         spa: "Blazor components with .razor extension"
@@ -567,5 +738,8 @@ stacks:
         - IIS
       expected_locations:
         - Dockerfile
+      behavioral_files:
+        - Dockerfile
+        - ".github/workflows/*.yml"
       conventions:
         build: "dotnet publish"

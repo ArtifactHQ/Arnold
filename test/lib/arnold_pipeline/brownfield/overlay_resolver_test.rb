@@ -65,6 +65,35 @@ module ArnoldPipeline
 
         assert overlay.key?("auth")
       end
+
+      test "returns behavioral_files key for each concern" do
+        fingerprint = { language: "ruby", framework: "rails" }
+        overlay = OverlayResolver.call(stack_fingerprint: fingerprint)
+
+        %w[auth data_layer api_layer background_jobs realtime testing frontend deployment].each do |concern|
+          assert overlay[concern].key?("behavioral_files"),
+            "Expected #{concern} overlay to have behavioral_files key"
+          assert overlay[concern]["behavioral_files"].is_a?(Array),
+            "Expected #{concern} behavioral_files to be an Array"
+          assert overlay[concern]["behavioral_files"].any?,
+            "Expected #{concern} behavioral_files to not be empty"
+        end
+      end
+
+      test "all stacks have behavioral_files for all concerns" do
+        %w[ruby_rails typescript_nextjs java_spring_boot python_django rust csharp_aspnet].each do |stack_key|
+          parts = stack_key.split("_", 2)
+          fingerprint = { language: parts[0], framework: parts[1] || parts[0] }
+          overlay = OverlayResolver.call(stack_fingerprint: fingerprint)
+
+          next if overlay.empty? # Unknown stack mapping
+
+          overlay.each do |concern_id, concern_data|
+            assert concern_data.key?("behavioral_files"),
+              "Expected #{stack_key}/#{concern_id} to have behavioral_files"
+          end
+        end
+      end
     end
   end
 end
