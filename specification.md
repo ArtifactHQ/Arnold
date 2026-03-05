@@ -779,6 +779,11 @@ Event recording SHALL be non-fatal: database errors during event creation do not
 ### Requirement: CLI Commands
 The system SHALL provide a command-line interface via the `arnold_pipeline` executable.
 
+#### Global Options [SPEC-CLI-GLOBAL-001]
+All commands accept the following global options:
+- `--quiet` — Suppress informational output.
+- `--backtrace` — Show full error backtrace on failure. For LlmParseError, also shows the raw LLM response excerpt (first 500 chars).
+
 #### Command: run
 - GIVEN a natural language description as argument.
 - WHEN `arnold_pipeline run DESCRIPTION` is executed.
@@ -939,26 +944,52 @@ The analysis pipeline SHALL execute as a sequence of deterministic and LLM-drive
 - GIVEN a stack fingerprint.
 - WHEN the OverlayResolver service is called.
 - THEN the service loads the appropriate framework overlay from YAML data files.
-- AND returns framework-specific concern mappings, conventions, and health check definitions.
+- AND returns framework-specific concern mappings, conventions, health check definitions, and `behavioral_files` glob patterns per concern.
+- AND `behavioral_files` patterns are resolved by agents to identify which files contain behavioral implementation for each concern.
 
-#### Scenario: Brownfield Analysis (LLM) [SPEC-BROWNFIELD-005]
-- GIVEN stack fingerprint, discovered artifacts, framework overlay, and optional reference materials.
-- WHEN the BrownfieldAnalyzer agent is called.
-- THEN the agent produces a recipe alignment (mapping recipe concerns to detected implementations), convention inventory, documentation fidelity assessment, and change surface analysis.
-- AND respects the `brownfield_scan_budget` token budget configuration.
+#### Scenario: Enhanced Deterministic Layer [SPEC-BROWNFIELD-010]
+- GIVEN a repo path and a stack fingerprint.
+- WHEN the brownfield analysis pipeline executes its deterministic pre-processing steps.
+- THEN a FileManifestBuilder walks the repo tree, skips vendor directories, and parses files by language to produce an AST-like manifest of classes, methods, and modules.
+- AND a RouteTableParser extracts HTTP endpoints from framework-specific route files (Rails, Django, Next.js).
+- AND a GitActivityAnalyzer mines commit history (past 6 months) to produce file churn and authorship data.
+- AND a TestNameCollector runs the test framework in dry-run mode, parses test names, and groups them by concern using keyword matching. Supports minitest, rspec, jest, pytest, and cargo.
+- AND all deterministic results are packaged into an AnalysisContext (Data.define) alongside stack fingerprint, artifacts, overlay, concerns, reference materials, and change request.
 
-#### Scenario: Feature Extraction (LLM) [SPEC-BROWNFIELD-006]
-- GIVEN recipe alignment, artifacts, stack fingerprint, change surface, and optional reference materials.
-- WHEN the FeatureExtractor agent is called.
-- THEN the agent produces per-concern feature inventories listing existing features with their implementation status and file locations.
-- AND when reference materials are provided, they are included in the extraction prompt as additional context for discovering features not obvious from code structure alone.
+#### Scenario: Parallel Specialized Agents [SPEC-BROWNFIELD-011]
+- GIVEN an AnalysisContext and a FileContentCache (thread-safe, 50KB per-file limit).
+- WHEN the ParallelAgentRunner executes the 5 specialized agents concurrently via threads.
+- THEN each agent receives the shared context and file cache, uses `chat_json` with a strict JSON schema, and returns `{data:, tokens_used:}`.
+- AND the 5 specialized agents are:
+  - **DataModelAgent**: Analyzes models, associations, validations, callbacks, scopes, and business methods. Output schema: `data_model_analysis`.
+  - **BusinessLogicAgent**: Extracts service objects, domain logic, state machines, and side effects. Output schema: `business_logic_analysis`.
+  - **ControllerRouteAgent**: Documents HTTP endpoints, access control, input/output contracts. Output schema: `controller_route_analysis`.
+  - **InfrastructureAgent**: Identifies conventions, framework concerns (auth, data_layer, API, etc.), and configuration patterns. Output schema: `infrastructure_analysis`.
+  - **ViewUxAgent**: Maps views, pages, layouts, role-based adaptations, and JavaScript controllers. Output schema: `view_ux_analysis`.
+- AND each agent result is wrapped in an AgentResult (agent_name, output, error, duration_ms, tokens_used).
+- AND agent failures are isolated — one agent crashing does not prevent other agents from completing.
+- AND per-agent model overrides are supported via `brownfield_agent_models` configuration.
 
-#### Scenario: As-Built Spec Generation (LLM) [SPEC-BROWNFIELD-007]
-- GIVEN feature inventories, stack fingerprint, and optional reference materials.
-- WHEN the AsBuiltSpec agent is called.
-- THEN the agent produces an OpenSpec-format specification document reflecting the existing codebase's actual behavior.
-- AND when reference materials are provided, they are included in the generation prompt to produce a richer specification informed by product documentation.
+#### Scenario: Synthesis Agent (As-Built Spec Generation) [SPEC-BROWNFIELD-012]
+- GIVEN all 5 agent results, the concerns mapping, stack fingerprint, project name, and optional reference materials.
+- WHEN the SynthesisAgent is called after all parallel agents complete.
+- THEN it produces an OpenSpec-format specification document in Markdown reflecting the codebase's actual behavior.
+- AND when reference materials are provided, they are included to produce a richer specification informed by product documentation.
 - AND the specification is persisted as a Specification record with `spec_type: "as_built"`.
+
+#### Scenario: Concern Diff Analysis [SPEC-BROWNFIELD-013]
+- GIVEN an as-built specification, a change request, and a list of concern IDs.
+- WHEN the ConcernDiffAnalyzer agent is called.
+- THEN it uses `chat_json` with a strict schema to identify which concerns are affected by the change.
+- AND each affected concern is classified as `modify`, `extend`, or `new` with a rationale.
+- AND the output includes a `delta_concerns` array and a summary string.
+
+#### Scenario: JSON Parse Repair [SPEC-BROWNFIELD-014]
+- GIVEN an LLM response containing truncated JSON (unclosed brackets or braces).
+- WHEN `BaseAgent#parse_json` fails to parse the response.
+- THEN the repair mechanism counts unmatched openers (respecting string literals), appends the missing closers in reverse order, and reattempts parsing.
+- AND trailing commas before closing brackets are stripped before repair.
+- AND structural mismatches (e.g., `}` without a matching `{`) return nil instead of attempting repair.
 
 #### Scenario: Health Baseline [SPEC-BROWNFIELD-008]
 - GIVEN a repo path, convention inventory, and artifact map.
@@ -970,7 +1001,7 @@ The analysis pipeline SHALL execute as a sequence of deterministic and LLM-drive
 #### Scenario: CodebaseProfile Persistence [SPEC-BROWNFIELD-009]
 - GIVEN a completed brownfield analysis.
 - WHEN all analysis steps succeed.
-- THEN a CodebaseProfile record is created with: project_name, stack_fingerprint, recipe_alignment, conventions, documentation_fidelity, health_baseline, change_surface, scan_data, feature_inventories, confidence, token_budget_used, and analyzed_at.
+- THEN a CodebaseProfile record is created with: project_name, stack_fingerprint, recipe_alignment, conventions, health_baseline, change_surface, scan_data (including agent_results, file_manifest, route_table, git_activity, test_names), as_built_spec content, confidence, token_budget_used, and analyzed_at.
 - AND the CodebaseProfile belongs to the PipelineRun.
 - AND the PipelineRun transitions to `completed` status.
 
