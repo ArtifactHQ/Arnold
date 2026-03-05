@@ -290,17 +290,77 @@ module ArnoldPipeline
       test "chat_json delegates to llm.chat_json and returns result" do
         schema = { name: "test", schema: { type: "object" } }
         expected = { "key" => "value" }
-        @llm.expects(:chat_json).with(
-          messages: [ { role: :user, content: "Hi" } ],
-          system: nil,
-          schema: schema
-        ).returns(expected)
+        @llm.expects(:chat_json).with { |kwargs|
+          kwargs[:messages] == [{ role: :user, content: "Hi" }] &&
+            kwargs[:system].nil? &&
+            kwargs[:schema][:name] == "test"
+        }.returns(expected)
 
         result = @agent.chat_json(
           messages: [ { role: :user, content: "Hi" } ],
           schema: schema
         )
         assert_equal expected, result
+      end
+
+      # -- Schema normalization --
+
+      test "normalize_schema adds missing keys to required array" do
+        schema = {
+          name: "test",
+          schema: {
+            type: "object",
+            required: %w[a],
+            properties: { a: { type: "string" }, b: { anyOf: [{ type: "string" }, { type: "null" }] } }
+          }
+        }
+        @llm.expects(:chat_json).with { |kwargs|
+          inner = kwargs[:schema][:schema]
+          inner[:required].sort == %w[a b] && inner[:additionalProperties] == false
+        }.returns({})
+        @agent.chat_json(messages: [{ role: :user, content: "x" }], schema: schema)
+      end
+
+      test "normalize_schema recurses into nested objects and items" do
+        schema = {
+          name: "test",
+          schema: {
+            type: "object",
+            required: %w[list],
+            properties: {
+              list: {
+                type: "array",
+                items: {
+                  type: "object",
+                  required: %w[id],
+                  properties: {
+                    id: { type: "string" },
+                    meta: { anyOf: [{ type: "string" }, { type: "null" }] }
+                  }
+                }
+              }
+            }
+          }
+        }
+        @llm.expects(:chat_json).with { |kwargs|
+          items = kwargs[:schema][:schema][:properties][:list][:items]
+          items[:required].sort == %w[id meta]
+        }.returns({})
+        @agent.chat_json(messages: [{ role: :user, content: "x" }], schema: schema)
+      end
+
+      test "normalize_schema does not mutate the original schema" do
+        schema = {
+          name: "test",
+          schema: {
+            type: "object",
+            required: %w[a],
+            properties: { a: { type: "string" }, b: { type: "string" } }
+          }
+        }
+        @llm.stubs(:chat_json).returns({})
+        @agent.chat_json(messages: [{ role: :user, content: "x" }], schema: schema)
+        assert_equal %w[a], schema[:schema][:required]
       end
     end
   end

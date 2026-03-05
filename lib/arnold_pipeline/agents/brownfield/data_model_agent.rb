@@ -64,7 +64,7 @@ module ArnoldPipeline
                 type: "array",
                 items: {
                   type: "object", additionalProperties: false,
-                  required: %w[from to type],
+                  required: %w[from to type through],
                   properties: {
                     from: { type: "string" },
                     to: { type: "string" },
