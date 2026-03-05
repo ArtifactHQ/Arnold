@@ -123,7 +123,7 @@ module ArnoldPipeline
         result = {
           name: name.to_s,
           command:,
-          success: check_success?(name, status),
+          success: check_success?(name, status, stdout:),
           exit_code: status.exitstatus,
           stdout: truncate_output(stdout, STDOUT_CAP),
           stderr: truncate_output(stderr, STDERR_CAP),
@@ -159,11 +159,11 @@ module ArnoldPipeline
         }
       end
 
-      def check_success?(name, status)
+      def check_success?(name, status, stdout: "")
         case name
         when :git_status
           # git status --porcelain exits 0 regardless — success means repo is clean
-          status.success?
+          status.success? && stdout.strip.empty?
         when :lint
           # Lint warnings are OK, only hard failures count
           status.success?

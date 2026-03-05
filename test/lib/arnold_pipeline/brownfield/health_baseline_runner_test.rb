@@ -20,6 +20,20 @@ module ArnoldPipeline
         end
       end
 
+      test "git_status check fails when repo has uncommitted changes" do
+        Dir.mktmpdir do |dir|
+          Open3.capture3("git init", chdir: dir)
+          Open3.capture3("git config user.email 'test@test.com'", chdir: dir)
+          Open3.capture3("git config user.name 'Test'", chdir: dir)
+          File.write(File.join(dir, "dirty.txt"), "uncommitted")
+
+          result = HealthBaselineRunner.call(repo_path: dir)
+          git_check = result[:checks].find { |c| c[:name] == "git_status" }
+          assert git_check, "git_status check should be present"
+          refute git_check[:success], "git_status should fail with uncommitted changes"
+        end
+      end
+
       test "detects build command for Rails project" do
         Dir.mktmpdir do |dir|
           File.write(File.join(dir, "Gemfile"), "source 'https://rubygems.org'")

@@ -13,7 +13,7 @@ module ArnoldPipeline
     }.freeze
 
     BROWNFIELD_MODEL_DEFAULTS = {
-      agent:     "gpt-5-mini-2025-08-07",
+      agent:     { anthropic: "claude-sonnet-4-6", openai: "gpt-5-mini-2025-08-07" },
       synthesis: { anthropic: "claude-sonnet-4-6", openai: "gpt-5-mini-2025-08-07" }
     }.freeze
 
@@ -126,11 +126,8 @@ module ArnoldPipeline
       explicit = @brownfield_agent_models[agent_key]
       return explicit if explicit
 
-      if agent_key == :synthesis
-        BROWNFIELD_MODEL_DEFAULTS[:synthesis][llm_provider]
-      else
-        BROWNFIELD_MODEL_DEFAULTS[:agent]
-      end
+      defaults = BROWNFIELD_MODEL_DEFAULTS[agent_key] || BROWNFIELD_MODEL_DEFAULTS[:agent]
+      defaults.is_a?(Hash) ? defaults[llm_provider] : defaults
     end
 
     def target_repo_path

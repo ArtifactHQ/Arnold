@@ -154,7 +154,7 @@ module ArnoldPipeline
       ArnoldPipeline.configure { |c| c.llm_model = "custom-model" }
       ArnoldPipeline.reset_configuration!
 
-      assert_includes [ "claude-sonnet-4-6", "gpt-4o" ], ArnoldPipeline.configuration.llm_model
+      assert_includes [ "claude-sonnet-4-6", "gpt-5-mini-2025-08-07" ], ArnoldPipeline.configuration.llm_model
     end
 
     test "validate! raises on invalid polling_interval" do
@@ -544,10 +544,16 @@ module ArnoldPipeline
 
     # -- Brownfield model defaults --
 
-    test "brownfield_model_for returns gpt-5-mini for parallel agents" do
+    test "brownfield_model_for returns provider-specific model for parallel agents" do
+      @config.llm_provider = :openai
       assert_equal "gpt-5-mini-2025-08-07", @config.brownfield_model_for(:data_model)
       assert_equal "gpt-5-mini-2025-08-07", @config.brownfield_model_for(:business_logic)
       assert_equal "gpt-5-mini-2025-08-07", @config.brownfield_model_for(:infrastructure)
+
+      @config.llm_provider = :anthropic
+      assert_equal "claude-sonnet-4-6", @config.brownfield_model_for(:data_model)
+      assert_equal "claude-sonnet-4-6", @config.brownfield_model_for(:business_logic)
+      assert_equal "claude-sonnet-4-6", @config.brownfield_model_for(:infrastructure)
     end
 
     test "brownfield_model_for returns provider-specific model for synthesis" do

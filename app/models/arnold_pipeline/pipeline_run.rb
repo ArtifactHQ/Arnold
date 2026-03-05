@@ -26,7 +26,8 @@ module ArnoldPipeline
       "max_iterations_reached" => []
     }.freeze
 
-    has_one :specification, dependent: :destroy
+    # Default: returns the target (greenfield) spec. Brownfield uses as_built_specification.
+    has_one :specification, -> { where(spec_type: "target") }, dependent: :destroy
     has_one :codebase_profile, dependent: :destroy
     has_one :target_specification, -> { where(spec_type: "target") }, class_name: "Specification"
     has_one :as_built_specification, -> { where(spec_type: "as_built") }, class_name: "Specification"

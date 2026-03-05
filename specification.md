@@ -688,6 +688,12 @@ The system SHALL record event types for empirical validation:
 | feature_extraction | 23 | Records feature extraction from existing concerns |
 | as_built_spec_generated | 24 | Records as-built specification generation |
 | health_baseline | 25 | Records health baseline check execution results |
+| test_name_collection | 26 | Records test name collection results during brownfield analysis |
+| concern_diff_analysis | 27 | Records concern diff analysis results |
+| file_manifest_built | 28 | Records file manifest build results during brownfield analysis |
+| route_table_parsed | 29 | Records route table parsing results during brownfield analysis |
+| git_activity_analyzed | 30 | Records git activity analysis results during brownfield analysis |
+| parallel_agents_completed | 31 | Records parallel agent execution results during brownfield analysis |
 
 #### Scenario: Validation Event Recording [SPEC-EVENT-007]
 - GIVEN a tier completes execution and validation.
@@ -1191,7 +1197,7 @@ The PipelineRun model uses a status enum with the following values and valid tra
 #### Valid State Transitions
 
 ```
-pending -> generating_spec | executing | failed
+pending -> generating_spec | executing | analyzing (brownfield) | failed
 generating_spec -> breaking_tasks | failed | paused
 breaking_tasks -> executing | failed | paused
 executing -> awaiting_results | analyzing (sync providers) | failed | paused
@@ -1203,4 +1209,4 @@ completed -> (terminal, no transitions)
 max_iterations_reached -> (terminal, no transitions)
 ```
 
-The `analyzing` state has branching transitions: `completed` and `max_iterations_reached` are terminal states; `executing` is reached via an `iterate_tasks` decision (new corrective tasks); `breaking_tasks` is reached via an `iterate_spec` decision (the spec is updated inline, then tasks are re-broken without a separate `generating_spec` pass). The `executing` → `analyzing` transition supports sync providers (e.g., Claude Code) that skip the `awaiting_results` polling stage. `pending` can transition directly to `executing` or `failed` for resume/restart paths. `paused` and `failed` have explicit transition targets matching the stages they can resume into. Active stages may transition to `failed` on error; stages with a `stop_after` checkpoint may transition to `paused`.
+The `analyzing` state has branching transitions: `completed` and `max_iterations_reached` are terminal states; `executing` is reached via an `iterate_tasks` decision (new corrective tasks); `breaking_tasks` is reached via an `iterate_spec` decision (the spec is updated inline, then tasks are re-broken without a separate `generating_spec` pass). The `executing` → `analyzing` transition supports sync providers (e.g., Claude Code) that skip the `awaiting_results` polling stage. `pending` can transition directly to `executing` or `failed` for resume/restart paths. The `pending` -> `analyzing` transition supports the brownfield analysis path, which skips spec generation and task breakdown to directly analyze an existing codebase. `paused` and `failed` have explicit transition targets matching the stages they can resume into. Active stages may transition to `failed` on error; stages with a `stop_after` checkpoint may transition to `paused`.
