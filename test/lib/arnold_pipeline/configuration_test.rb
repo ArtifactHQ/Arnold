@@ -10,7 +10,7 @@ module ArnoldPipeline
 
     test "has sensible defaults" do
       assert_includes Configuration::VALID_LLM_PROVIDERS, @config.llm_provider
-      assert_includes [ "claude-sonnet-4-6", "gpt-4o" ], @config.llm_model
+      assert_includes [ "claude-sonnet-4-6", "gpt-5-mini-2025-08-07" ], @config.llm_model
       assert_equal :github, @config.execution_provider
       assert_equal 3, @config.max_iterations
       assert_nil @config.github_issue_mention
@@ -125,7 +125,7 @@ module ArnoldPipeline
       assert_equal "claude-sonnet-4-6", @config.llm_model
 
       @config.llm_provider = :openai
-      assert_equal "gpt-4o", @config.llm_model
+      assert_equal "gpt-5-mini-2025-08-07", @config.llm_model
     end
 
     test "explicit llm_api_key takes precedence over env" do
@@ -540,6 +540,28 @@ module ArnoldPipeline
 
       error = assert_raises(ConfigurationError) { @config.validate! }
       assert_match(/GitHub token is required/, error.message)
+    end
+
+    # -- Brownfield model defaults --
+
+    test "brownfield_model_for returns gpt-5-mini for parallel agents" do
+      assert_equal "gpt-5-mini-2025-08-07", @config.brownfield_model_for(:data_model)
+      assert_equal "gpt-5-mini-2025-08-07", @config.brownfield_model_for(:business_logic)
+      assert_equal "gpt-5-mini-2025-08-07", @config.brownfield_model_for(:infrastructure)
+    end
+
+    test "brownfield_model_for returns provider-specific model for synthesis" do
+      @config.llm_provider = :openai
+      assert_equal "gpt-5-mini-2025-08-07", @config.brownfield_model_for(:synthesis)
+
+      @config.llm_provider = :anthropic
+      assert_equal "claude-sonnet-4-6", @config.brownfield_model_for(:synthesis)
+    end
+
+    test "brownfield_model_for respects explicit overrides" do
+      @config.brownfield_agent_models = { data_model: "gpt-4o", synthesis: "o3" }
+      assert_equal "gpt-4o", @config.brownfield_model_for(:data_model)
+      assert_equal "o3", @config.brownfield_model_for(:synthesis)
     end
   end
 end

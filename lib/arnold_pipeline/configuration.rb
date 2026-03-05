@@ -9,7 +9,12 @@ module ArnoldPipeline
 
     PROVIDER_DEFAULTS = {
       anthropic: { env_key: "ANTHROPIC_API_KEY", model: "claude-sonnet-4-6" },
-      openai:    { env_key: "OPENAI_API_KEY",    model: "gpt-4o" }
+      openai:    { env_key: "OPENAI_API_KEY",    model: "gpt-5-mini-2025-08-07" }
+    }.freeze
+
+    BROWNFIELD_MODEL_DEFAULTS = {
+      agent:     "gpt-5-mini-2025-08-07",
+      synthesis: { anthropic: "claude-sonnet-4-6", openai: "gpt-5-mini-2025-08-07" }
     }.freeze
 
     attr_accessor :execution_provider, :github_token, :github_repo,
@@ -115,6 +120,17 @@ module ArnoldPipeline
 
     def llm_model
       @llm_model || PROVIDER_DEFAULTS.dig(llm_provider, :model)
+    end
+
+    def brownfield_model_for(agent_key)
+      explicit = @brownfield_agent_models[agent_key]
+      return explicit if explicit
+
+      if agent_key == :synthesis
+        BROWNFIELD_MODEL_DEFAULTS[:synthesis][llm_provider]
+      else
+        BROWNFIELD_MODEL_DEFAULTS[:agent]
+      end
     end
 
     def target_repo_path

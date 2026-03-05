@@ -772,13 +772,9 @@ module ArnoldPipeline
     end
 
     def build_brownfield_agent(agent_class, agent_key)
-      model_override = ArnoldPipeline.configuration.brownfield_agent_models[agent_key]
-      if model_override
-        llm = Providers::Llm.build(model: model_override)
-        agent_class.new(llm:, logger:)
-      else
-        agent_class.new(logger:)
-      end
+      model = ArnoldPipeline.configuration.brownfield_model_for(agent_key)
+      llm = Providers::Llm.build(model: model)
+      agent_class.new(llm:, logger:)
     end
 
     def build_recipe_alignment(agent_results)
