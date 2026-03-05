@@ -53,7 +53,7 @@ module ArnoldPipeline
           framework: @overrides[:framework] || @overrides["framework"],
           version: @overrides[:version] || @overrides["version"],
           confidence: 100,
-          signals_matched: ["manual_override"],
+          signals_matched: [ "manual_override" ],
           ecosystem: {}
         }
       end
@@ -115,7 +115,7 @@ module ArnoldPipeline
           end
         end
 
-        [total_score, matched]
+        [ total_score, matched ]
       end
 
       def signal_matches?(signal, file_index)

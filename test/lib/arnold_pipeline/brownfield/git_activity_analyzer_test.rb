@@ -23,7 +23,7 @@ module ArnoldPipeline
           config/routes.rb
         GIT
 
-        Open3.stubs(:capture3).returns([git_output, "", @success_status])
+        Open3.stubs(:capture3).returns([ git_output, "", @success_status ])
 
         result = GitActivityAnalyzer.call(repo_path: @repo_path)
 
@@ -49,7 +49,7 @@ module ArnoldPipeline
           app/models/user.rb
         GIT
 
-        Open3.stubs(:capture3).returns([git_output, "", @success_status])
+        Open3.stubs(:capture3).returns([ git_output, "", @success_status ])
 
         result = GitActivityAnalyzer.call(repo_path: @repo_path)
 
@@ -71,7 +71,7 @@ module ArnoldPipeline
           app/models/user.rb
         GIT
 
-        Open3.stubs(:capture3).returns([git_output, "", @success_status])
+        Open3.stubs(:capture3).returns([ git_output, "", @success_status ])
 
         result = GitActivityAnalyzer.call(repo_path: @repo_path)
 
@@ -96,7 +96,7 @@ module ArnoldPipeline
           app/models/user.rb
         GIT
 
-        Open3.stubs(:capture3).returns([git_output, "", @success_status])
+        Open3.stubs(:capture3).returns([ git_output, "", @success_status ])
 
         result = GitActivityAnalyzer.call(repo_path: @repo_path)
 
@@ -105,7 +105,7 @@ module ArnoldPipeline
       end
 
       test "returns empty hash on non-git repo (command failure)" do
-        Open3.stubs(:capture3).returns(["", "fatal: not a git repository", @failure_status])
+        Open3.stubs(:capture3).returns([ "", "fatal: not a git repository", @failure_status ])
 
         result = GitActivityAnalyzer.call(repo_path: @repo_path)
 
@@ -121,7 +121,7 @@ module ArnoldPipeline
       end
 
       test "returns empty hash on empty output" do
-        Open3.stubs(:capture3).returns(["", "", @success_status])
+        Open3.stubs(:capture3).returns([ "", "", @success_status ])
 
         result = GitActivityAnalyzer.call(repo_path: @repo_path)
 
@@ -129,7 +129,7 @@ module ArnoldPipeline
       end
 
       test "returns empty hash on whitespace-only output" do
-        Open3.stubs(:capture3).returns(["  \n  \n  ", "", @success_status])
+        Open3.stubs(:capture3).returns([ "  \n  \n  ", "", @success_status ])
 
         result = GitActivityAnalyzer.call(repo_path: @repo_path)
 
@@ -143,7 +143,7 @@ module ArnoldPipeline
           expected_command,
           chdir: @repo_path,
           timeout: 30
-        ).returns(["", "", @success_status])
+        ).returns([ "", "", @success_status ])
 
         GitActivityAnalyzer.call(repo_path: @repo_path, since: "3 months ago")
       end
@@ -155,7 +155,7 @@ module ArnoldPipeline
           expected_command,
           chdir: @repo_path,
           timeout: 30
-        ).returns(["", "", @success_status])
+        ).returns([ "", "", @success_status ])
 
         GitActivityAnalyzer.call(repo_path: @repo_path)
       end
@@ -185,7 +185,7 @@ module ArnoldPipeline
           app/controllers/posts_controller.rb
         GIT
 
-        Open3.stubs(:capture3).returns([git_output, "", @success_status])
+        Open3.stubs(:capture3).returns([ git_output, "", @success_status ])
 
         result = GitActivityAnalyzer.call(repo_path: @repo_path)
 
@@ -193,7 +193,7 @@ module ArnoldPipeline
         assert_equal 1, result["app/models/user.rb"][:commits]
         assert_equal 1, result["app/models/post.rb"][:commits]
         assert_equal 1, result["app/controllers/posts_controller.rb"][:commits]
-        assert_equal ["Alice"], result["app/models/user.rb"][:authors]
+        assert_equal [ "Alice" ], result["app/models/user.rb"][:authors]
         assert_equal "2025-01-15", result["app/models/user.rb"][:last_modified]
       end
 
@@ -204,14 +204,14 @@ module ArnoldPipeline
           config/database.yml
         GIT
 
-        Open3.stubs(:capture3).returns([git_output, "", @success_status])
+        Open3.stubs(:capture3).returns([ git_output, "", @success_status ])
 
         result = GitActivityAnalyzer.call(repo_path: @repo_path)
 
         entry = result["config/database.yml"]
         assert_equal 1, entry[:commits]
         assert_equal "2025-06-01", entry[:last_modified]
-        assert_equal ["Alice"], entry[:authors]
+        assert_equal [ "Alice" ], entry[:authors]
       end
 
       test "handles author names with special characters" do
@@ -221,7 +221,7 @@ module ArnoldPipeline
           README.md
         GIT
 
-        Open3.stubs(:capture3).returns([git_output, "", @success_status])
+        Open3.stubs(:capture3).returns([ git_output, "", @success_status ])
 
         result = GitActivityAnalyzer.call(repo_path: @repo_path)
 
@@ -235,7 +235,7 @@ module ArnoldPipeline
           app/views/home page/index.html.erb
         GIT
 
-        Open3.stubs(:capture3).returns([git_output, "", @success_status])
+        Open3.stubs(:capture3).returns([ git_output, "", @success_status ])
 
         result = GitActivityAnalyzer.call(repo_path: @repo_path)
 

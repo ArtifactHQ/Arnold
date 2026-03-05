@@ -27,7 +27,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_06_165310) do
     t.json "stack_fingerprint"
     t.integer "token_budget_used"
     t.datetime "updated_at", null: false
-    t.index ["pipeline_run_id"], name: "index_arnold_pipeline_codebase_profiles_on_pipeline_run_id"
+    t.index [ "pipeline_run_id" ], name: "index_arnold_pipeline_codebase_profiles_on_pipeline_run_id"
   end
 
   create_table "arnold_pipeline_drift_findings", force: :cascade do |t|
@@ -47,10 +47,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_06_165310) do
     t.text "spec_expectation"
     t.integer "spec_revision_id"
     t.datetime "updated_at", null: false
-    t.index ["pipeline_run_id", "domain"], name: "idx_on_pipeline_run_id_domain_953a5aab63"
-    t.index ["pipeline_run_id", "resolution"], name: "idx_on_pipeline_run_id_resolution_4a120365d1"
-    t.index ["pipeline_run_id"], name: "index_arnold_pipeline_drift_findings_on_pipeline_run_id"
-    t.index ["spec_revision_id"], name: "index_arnold_pipeline_drift_findings_on_spec_revision_id"
+    t.index [ "pipeline_run_id", "domain" ], name: "idx_on_pipeline_run_id_domain_953a5aab63"
+    t.index [ "pipeline_run_id", "resolution" ], name: "idx_on_pipeline_run_id_resolution_4a120365d1"
+    t.index [ "pipeline_run_id" ], name: "index_arnold_pipeline_drift_findings_on_pipeline_run_id"
+    t.index [ "spec_revision_id" ], name: "index_arnold_pipeline_drift_findings_on_spec_revision_id"
   end
 
   create_table "arnold_pipeline_iterations", force: :cascade do |t|
@@ -64,7 +64,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_06_165310) do
     t.integer "pipeline_run_id", null: false
     t.text "reasoning"
     t.datetime "updated_at", null: false
-    t.index ["pipeline_run_id"], name: "index_arnold_pipeline_iterations_on_pipeline_run_id"
+    t.index [ "pipeline_run_id" ], name: "index_arnold_pipeline_iterations_on_pipeline_run_id"
   end
 
   create_table "arnold_pipeline_pipeline_events", force: :cascade do |t|
@@ -78,9 +78,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_06_165310) do
     t.json "summary", null: false
     t.integer "tier_number"
     t.datetime "updated_at", null: false
-    t.index ["pipeline_run_id", "created_at"], name: "idx_pipeline_events_on_run_and_created_at"
-    t.index ["pipeline_run_id", "stage"], name: "idx_pipeline_events_on_run_and_stage"
-    t.index ["pipeline_run_id"], name: "index_arnold_pipeline_pipeline_events_on_pipeline_run_id"
+    t.index [ "pipeline_run_id", "created_at" ], name: "idx_pipeline_events_on_run_and_created_at"
+    t.index [ "pipeline_run_id", "stage" ], name: "idx_pipeline_events_on_run_and_stage"
+    t.index [ "pipeline_run_id" ], name: "index_arnold_pipeline_pipeline_events_on_pipeline_run_id"
   end
 
   create_table "arnold_pipeline_pipeline_runs", force: :cascade do |t|
@@ -102,8 +102,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_06_165310) do
     t.string "section", null: false
     t.integer "specification_id", null: false
     t.datetime "updated_at", null: false
-    t.index ["iteration_id"], name: "index_arnold_pipeline_spec_deltas_on_iteration_id"
-    t.index ["specification_id"], name: "index_arnold_pipeline_spec_deltas_on_specification_id"
+    t.index [ "iteration_id" ], name: "index_arnold_pipeline_spec_deltas_on_iteration_id"
+    t.index [ "specification_id" ], name: "index_arnold_pipeline_spec_deltas_on_specification_id"
   end
 
   create_table "arnold_pipeline_spec_revisions", force: :cascade do |t|
@@ -115,8 +115,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_06_165310) do
     t.json "structured_data"
     t.datetime "updated_at", null: false
     t.integer "version", null: false
-    t.index ["specification_id", "version"], name: "idx_spec_revisions_on_spec_and_version", unique: true
-    t.index ["specification_id"], name: "index_arnold_pipeline_spec_revisions_on_specification_id"
+    t.index [ "specification_id", "version" ], name: "idx_spec_revisions_on_spec_and_version", unique: true
+    t.index [ "specification_id" ], name: "index_arnold_pipeline_spec_revisions_on_specification_id"
   end
 
   create_table "arnold_pipeline_specifications", force: :cascade do |t|
@@ -127,7 +127,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_06_165310) do
     t.json "structured_data"
     t.datetime "updated_at", null: false
     t.integer "version", default: 1, null: false
-    t.index ["pipeline_run_id"], name: "index_arnold_pipeline_specifications_on_pipeline_run_id"
+    t.index [ "pipeline_run_id" ], name: "index_arnold_pipeline_specifications_on_pipeline_run_id"
   end
 
   create_table "arnold_pipeline_tasks", force: :cascade do |t|
@@ -149,7 +149,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_06_165310) do
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.boolean "workflow_active", default: false, null: false
-    t.index ["pipeline_run_id"], name: "index_arnold_pipeline_tasks_on_pipeline_run_id"
+    t.index [ "pipeline_run_id" ], name: "index_arnold_pipeline_tasks_on_pipeline_run_id"
   end
 
   add_foreign_key "arnold_pipeline_codebase_profiles", "arnold_pipeline_pipeline_runs", column: "pipeline_run_id"

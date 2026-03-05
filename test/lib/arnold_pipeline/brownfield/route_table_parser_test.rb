@@ -38,7 +38,7 @@ module ArnoldPipeline
           Controller#Action | users#show
         OUTPUT
 
-        Open3.stubs(:capture3).returns([expanded_output, "", stub(success?: true)])
+        Open3.stubs(:capture3).returns([ expanded_output, "", stub(success?: true) ])
 
         routes = RouteTableParser.call(repo_path: @repo_path, stack_fingerprint: @rails_fingerprint)
 
@@ -69,7 +69,7 @@ module ArnoldPipeline
           Controller#Action | action_cable#connect
         OUTPUT
 
-        Open3.stubs(:capture3).returns([expanded_output, "", stub(success?: true)])
+        Open3.stubs(:capture3).returns([ expanded_output, "", stub(success?: true) ])
 
         routes = RouteTableParser.call(repo_path: @repo_path, stack_fingerprint: @rails_fingerprint)
 
@@ -108,7 +108,7 @@ module ArnoldPipeline
           end
         RUBY
 
-        Open3.stubs(:capture3).returns(["", "", stub(success?: false)])
+        Open3.stubs(:capture3).returns([ "", "", stub(success?: false) ])
 
         routes = RouteTableParser.call(repo_path: @repo_path, stack_fingerprint: @rails_fingerprint)
 
@@ -127,7 +127,7 @@ module ArnoldPipeline
         RUBY
 
         # Command succeeds but output is gibberish/no valid route blocks
-        Open3.stubs(:capture3).returns(["some junk output\nno routes here\n", "", stub(success?: true)])
+        Open3.stubs(:capture3).returns([ "some junk output\nno routes here\n", "", stub(success?: true) ])
 
         routes = RouteTableParser.call(repo_path: @repo_path, stack_fingerprint: @rails_fingerprint)
 
@@ -306,7 +306,7 @@ module ArnoldPipeline
           /api/users/\tapi.views.UserListView\tuser-list
         OUTPUT
 
-        Open3.stubs(:capture3).returns([show_urls_output, "", stub(success?: true)])
+        Open3.stubs(:capture3).returns([ show_urls_output, "", stub(success?: true) ])
 
         routes = RouteTableParser.call(repo_path: @repo_path, stack_fingerprint: @django_fingerprint)
 

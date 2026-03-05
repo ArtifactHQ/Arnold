@@ -56,7 +56,7 @@ module ArnoldPipeline
       end
 
       test "read_batch returns hash of contents" do
-        result = @cache.read_batch(["hello.rb", "sub/nested.rb", "missing.rb"])
+        result = @cache.read_batch([ "hello.rb", "sub/nested.rb", "missing.rb" ])
         assert_equal 2, result.size
         assert_equal "puts 'hello'", result["hello.rb"]
         assert_equal "class Nested; end", result["sub/nested.rb"]

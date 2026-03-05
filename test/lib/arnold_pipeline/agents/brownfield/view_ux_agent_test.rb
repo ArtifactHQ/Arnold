@@ -40,7 +40,7 @@ module ArnoldPipeline
                 "name" => "User List",
                 "path" => "app/views/users/index.html.erb",
                 "description" => "Displays a list of all users",
-                "data_displayed" => ["user names"],
+                "data_displayed" => [ "user names" ],
                 "actions" => [],
                 "role_adaptations" => [],
                 "layout" => "application",

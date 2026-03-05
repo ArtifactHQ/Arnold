@@ -7,17 +7,17 @@ module ArnoldPipeline
       class PythonTest < ActiveSupport::TestCase
         test "extracts class with base class" do
           result = Python.call(content: "class User(models.Model):\n    pass")
-          assert_equal [{ name: "User", superclass: "models.Model", line: 1 }], result[:classes]
+          assert_equal [ { name: "User", superclass: "models.Model", line: 1 } ], result[:classes]
         end
 
         test "extracts class without base class" do
           result = Python.call(content: "class UserService:\n    pass")
-          assert_equal [{ name: "UserService", superclass: nil, line: 1 }], result[:classes]
+          assert_equal [ { name: "UserService", superclass: nil, line: 1 } ], result[:classes]
         end
 
         test "extracts class with empty parens" do
           result = Python.call(content: "class Config():\n    pass")
-          assert_equal [{ name: "Config", superclass: nil, line: 1 }], result[:classes]
+          assert_equal [ { name: "Config", superclass: nil, line: 1 } ], result[:classes]
         end
 
         test "extracts class with multiple inheritance takes first" do

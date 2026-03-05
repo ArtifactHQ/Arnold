@@ -7,22 +7,22 @@ module ArnoldPipeline
       class JavascriptTest < ActiveSupport::TestCase
         test "extracts class declaration" do
           result = Javascript.call(content: "class UserService {\n}")
-          assert_equal [{ name: "UserService", superclass: nil, line: 1 }], result[:classes]
+          assert_equal [ { name: "UserService", superclass: nil, line: 1 } ], result[:classes]
         end
 
         test "extracts class with extends" do
           result = Javascript.call(content: "class Admin extends User {\n}")
-          assert_equal [{ name: "Admin", superclass: "User", line: 1 }], result[:classes]
+          assert_equal [ { name: "Admin", superclass: "User", line: 1 } ], result[:classes]
         end
 
         test "extracts exported class" do
           result = Javascript.call(content: "export class ApiClient extends BaseClient {\n}")
-          assert_equal [{ name: "ApiClient", superclass: "BaseClient", line: 1 }], result[:classes]
+          assert_equal [ { name: "ApiClient", superclass: "BaseClient", line: 1 } ], result[:classes]
         end
 
         test "extracts export default class" do
           result = Javascript.call(content: "export default class App extends Component {\n}")
-          assert_equal [{ name: "App", superclass: "Component", line: 1 }], result[:classes]
+          assert_equal [ { name: "App", superclass: "Component", line: 1 } ], result[:classes]
         end
 
         test "extracts React arrow function component" do

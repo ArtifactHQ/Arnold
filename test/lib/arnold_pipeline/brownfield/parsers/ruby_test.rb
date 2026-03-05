@@ -7,17 +7,17 @@ module ArnoldPipeline
       class RubyTest < ActiveSupport::TestCase
         test "extracts class with superclass" do
           result = Ruby.call(content: "class User < ApplicationRecord\nend")
-          assert_equal [{ name: "User", superclass: "ApplicationRecord", line: 1 }], result[:classes]
+          assert_equal [ { name: "User", superclass: "ApplicationRecord", line: 1 } ], result[:classes]
         end
 
         test "extracts class without superclass" do
           result = Ruby.call(content: "class UserService\nend")
-          assert_equal [{ name: "UserService", superclass: nil, line: 1 }], result[:classes]
+          assert_equal [ { name: "UserService", superclass: nil, line: 1 } ], result[:classes]
         end
 
         test "extracts namespaced class" do
           result = Ruby.call(content: "class Admin::UsersController < ApplicationController\nend")
-          assert_equal [{ name: "Admin::UsersController", superclass: "ApplicationController", line: 1 }], result[:classes]
+          assert_equal [ { name: "Admin::UsersController", superclass: "ApplicationController", line: 1 } ], result[:classes]
         end
 
         test "extracts multiple classes" do
@@ -52,7 +52,7 @@ module ArnoldPipeline
 
         test "extracts namespaced modules" do
           result = Ruby.call(content: "module ArnoldPipeline::Brownfield\nend")
-          assert_equal [{ name: "ArnoldPipeline::Brownfield", line: 1 }], result[:modules]
+          assert_equal [ { name: "ArnoldPipeline::Brownfield", line: 1 } ], result[:modules]
         end
 
         test "extracts instance methods" do
@@ -85,7 +85,7 @@ module ArnoldPipeline
             end
           RUBY
           result = Ruby.call(content: code)
-          assert_equal [{ name: "self.call", line: 2, visibility: "public" }], result[:methods]
+          assert_equal [ { name: "self.call", line: 2, visibility: "public" } ], result[:methods]
         end
 
         test "tracks visibility across sections" do
@@ -121,17 +121,17 @@ module ArnoldPipeline
 
         test "extracts belongs_to association" do
           result = Ruby.call(content: "  belongs_to :user")
-          assert_equal [{ type: "belongs_to", name: "user", options: {} }], result[:associations]
+          assert_equal [ { type: "belongs_to", name: "user", options: {} } ], result[:associations]
         end
 
         test "extracts has_one association" do
           result = Ruby.call(content: "  has_one :profile")
-          assert_equal [{ type: "has_one", name: "profile", options: {} }], result[:associations]
+          assert_equal [ { type: "has_one", name: "profile", options: {} } ], result[:associations]
         end
 
         test "extracts has_and_belongs_to_many association" do
           result = Ruby.call(content: "  has_and_belongs_to_many :tags")
-          assert_equal [{ type: "has_and_belongs_to_many", name: "tags", options: {} }], result[:associations]
+          assert_equal [ { type: "has_and_belongs_to_many", name: "tags", options: {} } ], result[:associations]
         end
 
         test "extracts association with options" do
@@ -172,17 +172,17 @@ module ArnoldPipeline
 
         test "extracts before_save callback" do
           result = Ruby.call(content: "  before_save :normalize_email")
-          assert_equal [{ type: "before_save", method: "normalize_email" }], result[:callbacks]
+          assert_equal [ { type: "before_save", method: "normalize_email" } ], result[:callbacks]
         end
 
         test "extracts after_create callback" do
           result = Ruby.call(content: "  after_create :send_welcome_email")
-          assert_equal [{ type: "after_create", method: "send_welcome_email" }], result[:callbacks]
+          assert_equal [ { type: "after_create", method: "send_welcome_email" } ], result[:callbacks]
         end
 
         test "extracts before_action callback" do
           result = Ruby.call(content: "  before_action :authenticate_user!")
-          assert_equal [{ type: "before_action", method: "authenticate_user!" }], result[:callbacks]
+          assert_equal [ { type: "before_action", method: "authenticate_user!" } ], result[:callbacks]
         end
 
         test "extracts multiple callbacks" do
@@ -220,7 +220,7 @@ module ArnoldPipeline
             end
           RUBY
           result = Ruby.call(content: code)
-          assert_equal ["Authenticatable", "Searchable", "ClassMethods"], result[:includes]
+          assert_equal [ "Authenticatable", "Searchable", "ClassMethods" ], result[:includes]
         end
 
         test "extracts constants" do

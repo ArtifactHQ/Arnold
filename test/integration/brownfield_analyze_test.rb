@@ -40,16 +40,16 @@ module ArnoldPipeline
           { "area" => "web_server", "description" => "Puma", "status" => "configured", "files" => [] }
         ],
         "concerns" => [
-          { "concern_id" => "auth", "status" => "present", "implementation" => "has_secure_password", "files" => ["app/models/user.rb"], "notes" => "Built-in Rails auth" },
-          { "concern_id" => "data_layer", "status" => "present", "implementation" => "active_record", "files" => ["db/schema.rb"], "notes" => "Standard AR" },
-          { "concern_id" => "api_layer", "status" => "present", "implementation" => "rails_controllers", "files" => ["config/routes.rb"], "notes" => "RESTful" }
+          { "concern_id" => "auth", "status" => "present", "implementation" => "has_secure_password", "files" => [ "app/models/user.rb" ], "notes" => "Built-in Rails auth" },
+          { "concern_id" => "data_layer", "status" => "present", "implementation" => "active_record", "files" => [ "db/schema.rb" ], "notes" => "Standard AR" },
+          { "concern_id" => "api_layer", "status" => "present", "implementation" => "rails_controllers", "files" => [ "config/routes.rb" ], "notes" => "RESTful" }
         ]
       }
 
       data_result = {
         "entities" => [
           { "name" => "User", "table" => "users", "file" => "app/models/user.rb",
-            "attributes" => [{ "name" => "email", "type" => "string" }],
+            "attributes" => [ { "name" => "email", "type" => "string" } ],
             "associations" => [], "validations" => [], "callbacks" => [],
             "scopes" => [], "business_methods" => [], "status" => "implemented" }
         ],

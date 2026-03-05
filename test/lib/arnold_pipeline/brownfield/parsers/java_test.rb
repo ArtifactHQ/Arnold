@@ -14,7 +14,7 @@ module ArnoldPipeline
 
         test "extracts class with extends" do
           result = Java.call(content: "public class Admin extends User {\n}")
-          assert_equal [{ name: "Admin", superclass: "User", line: 1 }], result[:classes]
+          assert_equal [ { name: "Admin", superclass: "User", line: 1 } ], result[:classes]
         end
 
         test "extracts class with extends and implements" do

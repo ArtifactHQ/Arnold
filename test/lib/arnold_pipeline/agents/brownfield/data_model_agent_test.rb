@@ -35,12 +35,12 @@ module ArnoldPipeline
                 "name" => "User",
                 "table" => "users",
                 "file" => "app/models/user.rb",
-                "attributes" => [{ "name" => "email", "type" => "string" }],
-                "associations" => [{ "type" => "has_many", "name" => "posts" }],
-                "validations" => ["validates :email, presence: true"],
-                "callbacks" => ["before_save :normalize_email"],
-                "scopes" => ["scope :active, -> { where(active: true) }"],
-                "business_methods" => [{ "name" => "full_name", "description" => "Returns first + last name" }],
+                "attributes" => [ { "name" => "email", "type" => "string" } ],
+                "associations" => [ { "type" => "has_many", "name" => "posts" } ],
+                "validations" => [ "validates :email, presence: true" ],
+                "callbacks" => [ "before_save :normalize_email" ],
+                "scopes" => [ "scope :active, -> { where(active: true) }" ],
+                "business_methods" => [ { "name" => "full_name", "description" => "Returns first + last name" } ],
                 "status" => "implemented"
               }
             ],
@@ -110,7 +110,7 @@ module ArnoldPipeline
         test "includes schema artifact in prompt when not in file_contents" do
           context = build_context(
             file_manifest: {},
-            artifacts: [{ role: "schema", path: "db/schema.rb", content: "create_table :users do |t|\n  t.string :email\nend", format: "ruby" }]
+            artifacts: [ { role: "schema", path: "db/schema.rb", content: "create_table :users do |t|\n  t.string :email\nend", format: "ruby" } ]
           )
 
           prompt_text = nil
@@ -157,7 +157,7 @@ module ArnoldPipeline
             "status" => "stubbed"
           }
 
-          @llm.expects(:chat_json).once.returns({ "entities" => [entity], "relationships" => [] })
+          @llm.expects(:chat_json).once.returns({ "entities" => [ entity ], "relationships" => [] })
 
           result = @agent.call(context:, file_cache: @file_cache)
 

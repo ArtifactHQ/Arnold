@@ -69,7 +69,7 @@ module ArnoldPipeline
                     from: { type: "string" },
                     to: { type: "string" },
                     type: { type: "string" },
-                    through: { anyOf: [{ type: "string" }, { type: "null" }] }
+                    through: { anyOf: [ { type: "string" }, { type: "null" } ] }
                   }
                 }
               }
@@ -81,7 +81,7 @@ module ArnoldPipeline
           files = Prompts::Brownfield::DataModel.select_files(context)
           contents = file_cache.read_batch(files)
           prompt = Prompts::Brownfield::DataModel.prompt(context:, file_contents: contents)
-          result = chat_json(messages: [{ role: "user", content: prompt }], schema: SCHEMA)
+          result = chat_json(messages: [ { role: "user", content: prompt } ], schema: SCHEMA)
           tokens_used = estimate_tokens(prompt, result)
           { data: result, tokens_used: }
         end

@@ -47,14 +47,14 @@ module ArnoldPipeline
         ctx = AnalysisContext.new(
           repo_path: "/repo",
           stack_fingerprint: { language: "python" },
-          artifacts: [{ role: "schema" }],
+          artifacts: [ { role: "schema" } ],
           overlay: { "auth" => {} },
           file_manifest: { "app.py" => {} },
-          route_table: [{ verb: "GET", path: "/" }],
+          route_table: [ { verb: "GET", path: "/" } ],
           git_activity: { "app.py" => { commits: 5 } },
-          test_names: { "auth" => ["test_login"] },
+          test_names: { "auth" => [ "test_login" ] },
           concerns: { "auth" => { "status" => "present" } },
-          reference_materials: [{ path: "README.md" }],
+          reference_materials: [ { path: "README.md" } ],
           change_request: "add oauth"
         )
 

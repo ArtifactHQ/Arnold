@@ -40,10 +40,10 @@ module ArnoldPipeline
               "configuration_approach" => "env vars"
             },
             "infrastructure" => [
-              { "area" => "database", "description" => "SQLite3 configured", "status" => "configured", "files" => ["config/database.yml"] }
+              { "area" => "database", "description" => "SQLite3 configured", "status" => "configured", "files" => [ "config/database.yml" ] }
             ],
             "concerns" => [
-              { "concern_id" => "data_layer", "status" => "present", "implementation" => "ActiveRecord", "files" => ["config/database.yml"], "notes" => "SQLite3 adapter" }
+              { "concern_id" => "data_layer", "status" => "present", "implementation" => "ActiveRecord", "files" => [ "config/database.yml" ], "notes" => "SQLite3 adapter" }
             ]
           }
 
@@ -163,8 +163,8 @@ module ArnoldPipeline
         test "includes overlay and artifacts in prompt" do
           context = build_context(
             file_manifest: {},
-            overlay: { "auth" => { "expected_locations" => ["app/models/user.rb"], "typical_implementations" => ["Devise"] } },
-            artifacts: [{ role: "schema", path: "db/schema.rb", content: "create_table :users", format: "ruby" }]
+            overlay: { "auth" => { "expected_locations" => [ "app/models/user.rb" ], "typical_implementations" => [ "Devise" ] } },
+            artifacts: [ { role: "schema", path: "db/schema.rb", content: "create_table :users", format: "ruby" } ]
           )
 
           prompt_text = nil

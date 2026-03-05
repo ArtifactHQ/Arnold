@@ -38,7 +38,7 @@ module ArnoldPipeline
             "stacks" => {
               "ruby_rails" => {
                 "auth" => {
-                  "typical_implementations" => ["Custom JWT"],
+                  "typical_implementations" => [ "Custom JWT" ],
                   "custom_field" => "user_value"
                 }
               }
@@ -51,7 +51,7 @@ module ArnoldPipeline
           overlay = OverlayResolver.call(stack_fingerprint: fingerprint, additional_path: path)
 
           # User's auth implementations should replace built-in
-          assert_equal ["Custom JWT"], overlay["auth"]["typical_implementations"]
+          assert_equal [ "Custom JWT" ], overlay["auth"]["typical_implementations"]
           # User's custom field should be present
           assert_equal "user_value", overlay["auth"]["custom_field"]
           # Other concerns from built-in should still be present

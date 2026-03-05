@@ -22,7 +22,7 @@ module ArnoldPipeline
         output = @agent.call(
           as_built_spec: "# Spec\n## Purpose\nA test app",
           change_request: "Add OAuth",
-          concern_ids: ["auth", "data_layer"]
+          concern_ids: [ "auth", "data_layer" ]
         )
 
         assert_equal 1, output["delta_concerns"].size
@@ -41,7 +41,7 @@ module ArnoldPipeline
         output = @agent.call(
           as_built_spec: "# Spec",
           change_request: "Minor docs update",
-          concern_ids: ["auth"]
+          concern_ids: [ "auth" ]
         )
 
         assert_empty output["delta_concerns"]
@@ -58,7 +58,7 @@ module ArnoldPipeline
         @agent.call(
           as_built_spec: "# Spec",
           change_request: "Add feature",
-          concern_ids: ["auth"]
+          concern_ids: [ "auth" ]
         )
       end
     end

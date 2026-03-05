@@ -138,7 +138,7 @@ module ArnoldPipeline
               next unless result
 
               current = JSON.pretty_generate(result.output).length rescue 0
-              reduced = [current / 2, 3000].max
+              reduced = [ current / 2, 3000 ].max
               budget[name] = reduced
               total_chars -= (current - reduced)
             end

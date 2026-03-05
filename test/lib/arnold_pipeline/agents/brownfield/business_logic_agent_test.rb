@@ -35,11 +35,11 @@ module ArnoldPipeline
                 "name" => "OrderProcessor",
                 "file" => "app/services/order_processor.rb",
                 "purpose" => "Processes incoming orders",
-                "rules" => ["Order must have items"],
-                "state_transitions" => ["order: pending -> processing"],
-                "side_effects" => ["Sends confirmation email"],
+                "rules" => [ "Order must have items" ],
+                "state_transitions" => [ "order: pending -> processing" ],
+                "side_effects" => [ "Sends confirmation email" ],
                 "error_handling" => "Raises OrderError on failure",
-                "dependencies" => ["Order", "NotificationMailer"],
+                "dependencies" => [ "Order", "NotificationMailer" ],
                 "status" => "implemented"
               }
             ]
@@ -139,7 +139,7 @@ module ArnoldPipeline
         test "includes test_names in prompt" do
           context = build_context(
             file_manifest: {},
-            test_names: { "payments" => ["test charges the card", "test refunds on cancellation"] }
+            test_names: { "payments" => [ "test charges the card", "test refunds on cancellation" ] }
           )
 
           prompt_text = nil
@@ -169,7 +169,7 @@ module ArnoldPipeline
             "status" => "stubbed"
           }
 
-          @llm.expects(:chat_json).once.returns({ "services" => [service] })
+          @llm.expects(:chat_json).once.returns({ "services" => [ service ] })
 
           result = @agent.call(context:, file_cache: @file_cache)
 

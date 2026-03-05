@@ -75,7 +75,7 @@ module ArnoldPipeline
             concerns: @concerns,
             stack_fingerprint: @stack_fingerprint,
             project_name: "MyApp",
-            reference_materials: [{ path: "README.md", content: "# My App\nA great app." }]
+            reference_materials: [ { path: "README.md", content: "# My App\nA great app." } ]
           )
         end
 

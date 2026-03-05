@@ -175,7 +175,7 @@ module ArnoldPipeline
       end
 
       test "returns empty result when command output is empty" do
-        Open3.stubs(:capture3).returns(["", "", stub(success?: true)])
+        Open3.stubs(:capture3).returns([ "", "", stub(success?: true) ])
 
         result = TestNameCollector.call(
           repo_path: @repo_path,

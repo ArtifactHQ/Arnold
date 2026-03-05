@@ -258,13 +258,13 @@ module ArnoldPipeline
       test "repairs truncated array inside object" do
         text = '{"items": [1, 2'
         result = @agent.parse_json(text)
-        assert_equal({ "items" => [1, 2] }, result)
+        assert_equal({ "items" => [ 1, 2 ] }, result)
       end
 
       test "repairs truncated nested structure" do
         text = '{"outer": {"inner": [1, 2, 3'
         result = @agent.parse_json(text)
-        assert_equal({ "outer" => { "inner" => [1, 2, 3] } }, result)
+        assert_equal({ "outer" => { "inner" => [ 1, 2, 3 ] } }, result)
       end
 
       test "repairs truncated object with trailing comma" do
@@ -275,7 +275,7 @@ module ArnoldPipeline
 
       test "does not repair non-truncation parse errors" do
         assert_raises(ArnoldPipeline::Agents::LlmParseError) do
-          @agent.parse_json('{invalid token}')
+          @agent.parse_json("{invalid token}")
         end
       end
 
@@ -291,7 +291,7 @@ module ArnoldPipeline
         schema = { name: "test", schema: { type: "object" } }
         expected = { "key" => "value" }
         @llm.expects(:chat_json).with { |kwargs|
-          kwargs[:messages] == [{ role: :user, content: "Hi" }] &&
+          kwargs[:messages] == [ { role: :user, content: "Hi" } ] &&
             kwargs[:system].nil? &&
             kwargs[:schema][:name] == "test"
         }.returns(expected)
@@ -311,14 +311,14 @@ module ArnoldPipeline
           schema: {
             type: "object",
             required: %w[a],
-            properties: { a: { type: "string" }, b: { anyOf: [{ type: "string" }, { type: "null" }] } }
+            properties: { a: { type: "string" }, b: { anyOf: [ { type: "string" }, { type: "null" } ] } }
           }
         }
         @llm.expects(:chat_json).with { |kwargs|
           inner = kwargs[:schema][:schema]
           inner[:required].sort == %w[a b] && inner[:additionalProperties] == false
         }.returns({})
-        @agent.chat_json(messages: [{ role: :user, content: "x" }], schema: schema)
+        @agent.chat_json(messages: [ { role: :user, content: "x" } ], schema: schema)
       end
 
       test "normalize_schema recurses into nested objects and items" do
@@ -335,7 +335,7 @@ module ArnoldPipeline
                   required: %w[id],
                   properties: {
                     id: { type: "string" },
-                    meta: { anyOf: [{ type: "string" }, { type: "null" }] }
+                    meta: { anyOf: [ { type: "string" }, { type: "null" } ] }
                   }
                 }
               }
@@ -346,7 +346,7 @@ module ArnoldPipeline
           items = kwargs[:schema][:schema][:properties][:list][:items]
           items[:required].sort == %w[id meta]
         }.returns({})
-        @agent.chat_json(messages: [{ role: :user, content: "x" }], schema: schema)
+        @agent.chat_json(messages: [ { role: :user, content: "x" } ], schema: schema)
       end
 
       test "normalize_schema does not mutate the original schema" do
@@ -359,7 +359,7 @@ module ArnoldPipeline
           }
         }
         @llm.stubs(:chat_json).returns({})
-        @agent.chat_json(messages: [{ role: :user, content: "x" }], schema: schema)
+        @agent.chat_json(messages: [ { role: :user, content: "x" } ], schema: schema)
         assert_equal %w[a], schema[:schema][:required]
       end
     end

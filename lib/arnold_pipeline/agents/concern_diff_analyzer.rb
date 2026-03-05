@@ -12,7 +12,7 @@ module ArnoldPipeline
         )
 
         result = chat_json(
-          messages: [{ role: "user", content: prompt }],
+          messages: [ { role: "user", content: prompt } ],
           schema: Prompts::ConcernDiff.schema
         )
 

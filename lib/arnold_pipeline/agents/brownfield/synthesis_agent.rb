@@ -14,7 +14,7 @@ module ArnoldPipeline
             reference_materials:
           )
 
-          response = chat(messages: [{ role: "user", content: prompt }])
+          response = chat(messages: [ { role: "user", content: prompt } ])
           structured_data = extract_structured_data(response)
           tokens_used = estimate_tokens(prompt, response)
 

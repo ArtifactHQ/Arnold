@@ -9,7 +9,7 @@ module ArnoldPipeline
           name: "business_logic_analysis",
           schema: {
             type: "object", additionalProperties: false,
-            required: ["services"],
+            required: [ "services" ],
             properties: {
               services: {
                 type: "array",
@@ -37,7 +37,7 @@ module ArnoldPipeline
           files = Prompts::Brownfield::BusinessLogic.select_files(context)
           contents = file_cache.read_batch(files)
           prompt = Prompts::Brownfield::BusinessLogic.prompt(context:, file_contents: contents)
-          result = chat_json(messages: [{ role: "user", content: prompt }], schema: SCHEMA)
+          result = chat_json(messages: [ { role: "user", content: prompt } ], schema: SCHEMA)
           tokens_used = estimate_tokens(prompt, result)
           { data: result, tokens_used: }
         end

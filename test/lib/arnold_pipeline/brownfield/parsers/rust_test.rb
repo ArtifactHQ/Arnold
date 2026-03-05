@@ -14,7 +14,7 @@ module ArnoldPipeline
 
         test "extracts private struct" do
           result = Rust.call(content: "struct Internal {\n}")
-          assert_equal [{ name: "Internal", superclass: nil, line: 1 }], result[:classes]
+          assert_equal [ { name: "Internal", superclass: nil, line: 1 } ], result[:classes]
         end
 
         test "extracts enum" do

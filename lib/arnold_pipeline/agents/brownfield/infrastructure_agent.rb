@@ -45,7 +45,7 @@ module ArnoldPipeline
                   properties: {
                     concern_id: { type: "string" },
                     status: { type: "string", enum: %w[present partial absent] },
-                    implementation: { anyOf: [{ type: "string" }, { type: "null" }] },
+                    implementation: { anyOf: [ { type: "string" }, { type: "null" } ] },
                     files: { type: "array", items: { type: "string" } },
                     notes: { type: "string" }
                   }
@@ -59,7 +59,7 @@ module ArnoldPipeline
           files = Prompts::Brownfield::Infrastructure.select_files(context)
           contents = file_cache.read_batch(files)
           prompt = Prompts::Brownfield::Infrastructure.prompt(context:, file_contents: contents)
-          result = chat_json(messages: [{ role: "user", content: prompt }], schema: SCHEMA)
+          result = chat_json(messages: [ { role: "user", content: prompt } ], schema: SCHEMA)
           tokens_used = estimate_tokens(prompt, result)
           { data: result, tokens_used: }
         end

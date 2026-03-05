@@ -14,7 +14,7 @@ module ArnoldPipeline
     test "analyze command requires valid directory" do
       cli = Cli.new
       assert_raises(SystemExit) do
-        cli.invoke(:analyze, ["/nonexistent/path/foo"])
+        cli.invoke(:analyze, [ "/nonexistent/path/foo" ])
       end
     end
 
@@ -28,7 +28,7 @@ module ArnoldPipeline
         profile.stubs(:confidence).returns(85)
         profile.stubs(:health_baseline).returns({ "summary" => "3 passed, 0 failed" })
         profile.stubs(:recipe_alignment).returns({ "concerns" => { "auth" => { "status" => "present" } } })
-        profile.stubs(:feature_inventories).returns([{ "features" => [{ "name" => "Login" }] }])
+        profile.stubs(:feature_inventories).returns([ { "features" => [ { "name" => "Login" } ] } ])
         profile.stubs(:pipeline_run_id).returns(1)
         profile.stubs(:conventions).returns({})
         profile.stubs(:documentation_fidelity).returns(nil)
@@ -46,7 +46,7 @@ module ArnoldPipeline
         ArnoldPipeline::Orchestrator.stubs(:new).returns(orchestrator)
 
         cli = Cli.new([], { quiet: true })
-        cli.invoke(:analyze, [dir])
+        cli.invoke(:analyze, [ dir ])
       end
     end
   end
