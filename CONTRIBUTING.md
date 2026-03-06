@@ -11,7 +11,7 @@ Thank you for considering contributing to Arnold Pipeline.
 ## Setup
 
 ```bash
-git clone https://github.com/arnold-pipeline/arnold_pipeline.git
+git clone https://github.com/ArtifactHQ/Arnold.git
 cd arnold_pipeline
 bundle install
 ```

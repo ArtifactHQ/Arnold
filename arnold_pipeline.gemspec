@@ -5,7 +5,7 @@ Gem::Specification.new do |spec|
   spec.version     = ArnoldPipeline::VERSION
   spec.authors     = [ "Arnold Pipeline Contributors" ]
   spec.email       = [ "arnold@example.com" ]
-  spec.homepage    = "https://github.com/arnold-pipeline/arnold_pipeline"
+  spec.homepage    = "https://github.com/ArtifactHQ/Arnold"
   spec.summary     = "Agentic workflow system that transforms natural language into executable code"
   spec.description = "A Rails 8 mountable engine that orchestrates AI agents to generate specs, break down tasks, execute via GitHub, and iteratively refine code from natural language descriptions."
   spec.license     = "MIT"
