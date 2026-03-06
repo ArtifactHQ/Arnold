@@ -112,7 +112,8 @@ module ArnoldPipeline
             description: data["description"]&.strip,
             framework: data["framework"] || {},
             sections: data["sections"] || [],
-            verification: data["verification"] || {}
+            verification: data["verification"] || {},
+            finalization: data["finalization"] || {}
           )
         end
       end
