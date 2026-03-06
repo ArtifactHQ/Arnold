@@ -186,6 +186,7 @@ module ArnoldPipeline
       logger.info { "[Arnold] Merging tier results..." }
       executor.merge_results(pipeline_run:, tasks: tier_tasks)
       dedup_migration_timestamps!
+      resolve_duplicate_create_tables!
     rescue => e
       raise unless recoverable_merge_error?(e)
       logger.warn { "[Arnold] Tier merge failed (non-fatal): #{e.message}" }
@@ -234,6 +235,65 @@ module ArnoldPipeline
       system("git", "commit", "-m", "fix: deduplicate migration timestamps after parallel merge", "--no-verify", chdir: repo_path)
     rescue => e
       logger.warn { "[Arnold] Migration dedup failed (non-fatal): #{e.message}" }
+    end
+
+    # Detect and patch duplicate create_table calls across migration files.
+    # Parallel worktree tasks can independently create migrations for the same
+    # table. After sequential merge, the second create_table fails with
+    # "table already exists". Patching with if_not_exists: true makes
+    # duplicate creates idempotent without removing the migration (which may
+    # also create other unique tables).
+    CREATE_TABLE_PATTERN = /^(\s*create_table\s+[:"]\w+)(.*)$/
+
+    def resolve_duplicate_create_tables!
+      repo_path = ArnoldPipeline.configuration.claude_code_repo_path
+      return unless repo_path
+
+      migrate_dir = File.join(repo_path, "db", "migrate")
+      return unless Dir.exist?(migrate_dir)
+
+      files = Dir.glob("*.rb", base: migrate_dir).sort
+      seen_tables = Set.new
+      patched_files = []
+
+      files.each do |filename|
+        path = File.join(migrate_dir, filename)
+        content = File.read(path)
+        modified = false
+
+        new_content = content.gsub(CREATE_TABLE_PATTERN) do |match|
+          prefix = $1
+          rest = $2
+          table_name = prefix[/[:"]([\w]+)\s*\z/, 1]
+
+          if table_name && seen_tables.include?(table_name) && !rest.include?("if_not_exists")
+            modified = true
+            "#{prefix}, if_not_exists: true#{rest}"
+          else
+            seen_tables.add(table_name) if table_name
+            match
+          end
+        end
+
+        if modified
+          File.write(path, new_content)
+          patched_files << filename
+          logger.info { "[Arnold] Patched duplicate create_table in #{filename} with if_not_exists: true" }
+        else
+          # Still track tables from unmodified files
+          content.scan(/create_table\s+[:"]([\w]+)/).flatten.each { |t| seen_tables.add(t) }
+        end
+      end
+
+      return if patched_files.empty?
+
+      logger.warn { "[Arnold] Patched #{patched_files.size} migration(s) with duplicate create_table calls" }
+      patched_files.each do |filename|
+        system("git", "add", File.join("db", "migrate", filename), chdir: repo_path)
+      end
+      system("git", "commit", "-m", "fix: add if_not_exists to duplicate create_table migrations", "--no-verify", chdir: repo_path)
+    rescue => e
+      logger.warn { "[Arnold] Duplicate create_table resolution failed (non-fatal): #{e.message}" }
     end
 
     def gate_check_needed?

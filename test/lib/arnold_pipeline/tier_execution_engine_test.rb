@@ -210,6 +210,159 @@ module ArnoldPipeline
       end
     end
 
+    # --- resolve_duplicate_create_tables! ---
+
+    test "resolve_duplicate_create_tables! patches duplicate create_table in later migration" do
+      Dir.mktmpdir("dup_create_table") do |tmpdir|
+        system("git", "init", chdir: tmpdir, out: File::NULL, err: File::NULL)
+        system("git", "-C", tmpdir, "commit", "--allow-empty", "-m", "init", out: File::NULL, err: File::NULL)
+
+        migrate_dir = File.join(tmpdir, "db", "migrate")
+        FileUtils.mkdir_p(migrate_dir)
+
+        first = <<~RUBY
+          class CreateAccounts < ActiveRecord::Migration[8.1]
+            def change
+              create_table :accounts do |t|
+                t.string :name
+                t.timestamps
+              end
+            end
+          end
+        RUBY
+
+        second = <<~RUBY
+          class CreateCardWorkflowTables < ActiveRecord::Migration[8.1]
+            def change
+              create_table :accounts do |t|
+                t.string :name, null: false
+                t.timestamps
+              end
+            end
+          end
+        RUBY
+
+        File.write(File.join(migrate_dir, "20260306011142_create_accounts.rb"), first)
+        File.write(File.join(migrate_dir, "20260306011252_create_card_workflow_tables.rb"), second)
+        system("git", "-C", tmpdir, "add", ".", out: File::NULL)
+        system("git", "-C", tmpdir, "commit", "-m", "add migrations", out: File::NULL, err: File::NULL)
+
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+
+        @engine.send(:resolve_duplicate_create_tables!)
+
+        first_content = File.read(File.join(migrate_dir, "20260306011142_create_accounts.rb"))
+        second_content = File.read(File.join(migrate_dir, "20260306011252_create_card_workflow_tables.rb"))
+
+        refute_includes first_content, "if_not_exists", "First migration should be unchanged"
+        assert_includes second_content, "if_not_exists: true", "Second migration should be patched"
+      end
+    end
+
+    test "resolve_duplicate_create_tables! handles monolithic migration with mixed tables" do
+      Dir.mktmpdir("dup_monolithic") do |tmpdir|
+        system("git", "init", chdir: tmpdir, out: File::NULL, err: File::NULL)
+        system("git", "-C", tmpdir, "commit", "--allow-empty", "-m", "init", out: File::NULL, err: File::NULL)
+
+        migrate_dir = File.join(tmpdir, "db", "migrate")
+        FileUtils.mkdir_p(migrate_dir)
+
+        File.write(File.join(migrate_dir, "20260306011142_create_accounts.rb"),
+          "class CreateAccounts < ActiveRecord::Migration[8.1]\n  def change\n    create_table :accounts do |t|\n      t.timestamps\n    end\n  end\nend\n")
+
+        monolithic = <<~RUBY
+          class CreateCardWorkflowTables < ActiveRecord::Migration[8.1]
+            def change
+              create_table :accounts do |t|
+                t.string :name, null: false
+                t.timestamps
+              end
+
+              create_table :columns do |t|
+                t.string :name
+                t.timestamps
+              end
+
+              create_table :closures do |t|
+                t.timestamps
+              end
+            end
+          end
+        RUBY
+
+        File.write(File.join(migrate_dir, "20260306011252_create_card_workflow_tables.rb"), monolithic)
+        system("git", "-C", tmpdir, "add", ".", out: File::NULL)
+        system("git", "-C", tmpdir, "commit", "-m", "migrations", out: File::NULL, err: File::NULL)
+
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+
+        @engine.send(:resolve_duplicate_create_tables!)
+
+        content = File.read(File.join(migrate_dir, "20260306011252_create_card_workflow_tables.rb"))
+        assert_includes content, "create_table :accounts, if_not_exists: true"
+        assert_match(/create_table :columns do/, content)
+        assert_match(/create_table :closures do/, content)
+        refute_includes content.sub(/create_table :accounts.*$/, ""), "if_not_exists",
+          "Only :accounts should be patched"
+      end
+    end
+
+    test "resolve_duplicate_create_tables! is a no-op when no duplicate tables" do
+      Dir.mktmpdir("dup_noop") do |tmpdir|
+        system("git", "init", chdir: tmpdir, out: File::NULL, err: File::NULL)
+        system("git", "-C", tmpdir, "commit", "--allow-empty", "-m", "init", out: File::NULL, err: File::NULL)
+
+        migrate_dir = File.join(tmpdir, "db", "migrate")
+        FileUtils.mkdir_p(migrate_dir)
+        File.write(File.join(migrate_dir, "20260306011001_create_users.rb"),
+          "class CreateUsers < ActiveRecord::Migration[8.1]\n  def change\n    create_table :users do |t|\n      t.timestamps\n    end\n  end\nend\n")
+        File.write(File.join(migrate_dir, "20260306011002_create_posts.rb"),
+          "class CreatePosts < ActiveRecord::Migration[8.1]\n  def change\n    create_table :posts do |t|\n      t.timestamps\n    end\n  end\nend\n")
+        system("git", "-C", tmpdir, "add", ".", out: File::NULL)
+        system("git", "-C", tmpdir, "commit", "-m", "migrations", out: File::NULL, err: File::NULL)
+
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+
+        before_sha, = Open3.capture2("git", "-C", tmpdir, "rev-parse", "HEAD")
+        @engine.send(:resolve_duplicate_create_tables!)
+        after_sha, = Open3.capture2("git", "-C", tmpdir, "rev-parse", "HEAD")
+
+        assert_equal before_sha, after_sha, "No commit should be created when no duplicates exist"
+      end
+    end
+
+    test "resolve_duplicate_create_tables! handles missing db/migrate directory" do
+      Dir.mktmpdir("dup_missing") do |tmpdir|
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+        assert_nothing_raised { @engine.send(:resolve_duplicate_create_tables!) }
+      end
+    end
+
+    test "resolve_duplicate_create_tables! skips tables already having if_not_exists" do
+      Dir.mktmpdir("dup_skip") do |tmpdir|
+        system("git", "init", chdir: tmpdir, out: File::NULL, err: File::NULL)
+        system("git", "-C", tmpdir, "commit", "--allow-empty", "-m", "init", out: File::NULL, err: File::NULL)
+
+        migrate_dir = File.join(tmpdir, "db", "migrate")
+        FileUtils.mkdir_p(migrate_dir)
+
+        File.write(File.join(migrate_dir, "20260306011001_create_accounts.rb"),
+          "class CreateAccounts < ActiveRecord::Migration[8.1]\n  def change\n    create_table :accounts do |t|\n      t.timestamps\n    end\n  end\nend\n")
+        File.write(File.join(migrate_dir, "20260306011002_create_accounts_again.rb"),
+          "class CreateAccountsAgain < ActiveRecord::Migration[8.1]\n  def change\n    create_table :accounts, if_not_exists: true do |t|\n      t.timestamps\n    end\n  end\nend\n")
+        system("git", "-C", tmpdir, "add", ".", out: File::NULL)
+        system("git", "-C", tmpdir, "commit", "-m", "migrations", out: File::NULL, err: File::NULL)
+
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+
+        before_sha, = Open3.capture2("git", "-C", tmpdir, "rev-parse", "HEAD")
+        @engine.send(:resolve_duplicate_create_tables!)
+        after_sha, = Open3.capture2("git", "-C", tmpdir, "rev-parse", "HEAD")
+
+        assert_equal before_sha, after_sha, "No commit needed when duplicate already has if_not_exists"
+      end
+    end
+
     # --- run_tier_gate! ---
 
     test "run_tier_gate! logs warning with backtrace on error" do

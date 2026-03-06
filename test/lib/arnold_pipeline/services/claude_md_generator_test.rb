@@ -195,6 +195,69 @@ module ArnoldPipeline
         end
       end
 
+      test "includes migration guidance when schema.rb has tables" do
+        Dir.mktmpdir do |dir|
+          FileUtils.mkdir_p(File.join(dir, "db"))
+          File.write(File.join(dir, "db", "schema.rb"), <<~SCHEMA)
+            ActiveRecord::Schema[8.0].define(version: 2026_02_21) do
+              create_table "users", force: :cascade do |t|
+                t.string "email"
+                t.timestamps
+              end
+
+              create_table "posts", force: :cascade do |t|
+                t.string "title"
+                t.timestamps
+              end
+            end
+          SCHEMA
+
+          result = ClaudeMdGenerator.call(
+            persona: @persona, recipe: @recipe, domain_type: @domain_type,
+            repo_path: dir
+          )
+          assert_includes result, "## Migration Rules"
+          assert_includes result, "- `users`"
+          assert_includes result, "- `posts`"
+          assert_includes result, "DO NOT"
+        end
+      end
+
+      test "omits migration guidance when schema.rb is absent" do
+        Dir.mktmpdir do |dir|
+          result = ClaudeMdGenerator.call(
+            persona: @persona, recipe: @recipe, domain_type: @domain_type,
+            repo_path: dir
+          )
+          refute_includes result, "Migration Rules"
+        end
+      end
+
+      test "omits migration guidance when schema.rb has no tables" do
+        Dir.mktmpdir do |dir|
+          FileUtils.mkdir_p(File.join(dir, "db"))
+          File.write(File.join(dir, "db", "schema.rb"), <<~SCHEMA)
+            ActiveRecord::Schema[8.0].define(version: 2026_02_21) do
+              enable_extension "plpgsql"
+            end
+          SCHEMA
+
+          result = ClaudeMdGenerator.call(
+            persona: @persona, recipe: @recipe, domain_type: @domain_type,
+            repo_path: dir
+          )
+          refute_includes result, "Migration Rules"
+        end
+      end
+
+      test "omits migration guidance when repo_path is nil" do
+        result = ClaudeMdGenerator.call(
+          persona: @persona, recipe: @recipe, domain_type: @domain_type,
+          repo_path: nil
+        )
+        refute_includes result, "Migration Rules"
+      end
+
       test "omits project state sections when repo_path is nil" do
         result = ClaudeMdGenerator.call(
           persona: @persona, recipe: @recipe, domain_type: @domain_type,

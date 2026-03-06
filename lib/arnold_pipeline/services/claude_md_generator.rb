@@ -22,6 +22,7 @@ module ArnoldPipeline
         sections << terminology_section
         sections << watch_for_section
         sections << schema_section
+        sections << migration_guidance_section
         sections << routes_section
         sections << gemfile_section
 
@@ -121,6 +122,32 @@ module ArnoldPipeline
         return nil if cleaned.empty?
 
         "## Current Database Schema\n\n```ruby\n#{cleaned}\n```"
+      end
+
+      def migration_guidance_section
+        return nil unless @repo_path
+
+        schema_path = File.join(@repo_path, "db", "schema.rb")
+        return nil unless File.exist?(schema_path)
+
+        content = File.read(schema_path)
+        existing_tables = content.scan(/create_table\s+[":](\w+)/).flatten
+
+        return nil if existing_tables.empty?
+
+        table_list = existing_tables.map { |t| "- `#{t}`" }.join("\n")
+        <<~SECTION.strip
+          ## Migration Rules
+
+          The following tables already exist in the database schema:
+          #{table_list}
+
+          **DO NOT** create migrations with `create_table` for any table listed above.
+          If you need to modify an existing table, use `add_column`, `change_column`,
+          `add_index`, or `add_reference` instead.
+
+          Only create `create_table` migrations for tables that are NOT in this list.
+        SECTION
       end
 
       def routes_section
