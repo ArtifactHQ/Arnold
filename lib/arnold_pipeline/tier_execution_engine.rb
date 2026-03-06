@@ -16,13 +16,14 @@ require "open3"
 
 module ArnoldPipeline
   class TierExecutionEngine
-    attr_reader :executor, :tier_gate_check, :logger, :event_recorder
+    attr_reader :executor, :tier_gate_check, :logger, :event_recorder, :library_manager
 
-    def initialize(executor:, tier_gate_check:, logger:, event_recorder: nil)
+    def initialize(executor:, tier_gate_check:, logger:, event_recorder: nil, library_manager: nil)
       @executor = executor
       @tier_gate_check = tier_gate_check
       @logger = logger
       @event_recorder = event_recorder
+      @library_manager = library_manager
     end
 
     def execute_tiers!(pipeline_run, iteration_number: nil)

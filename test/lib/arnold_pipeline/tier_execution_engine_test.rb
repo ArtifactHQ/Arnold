@@ -4,6 +4,7 @@ require "faraday"
 require "arnold_pipeline/tier_execution_engine"
 require "arnold_pipeline/corrective_task_generator"
 require "arnold_pipeline/pipeline_event_recorder"
+require "arnold_pipeline/library/manager"
 
 module ArnoldPipeline
   class TierExecutionEngineTest < ActiveSupport::TestCase
@@ -38,6 +39,19 @@ module ArnoldPipeline
 
     teardown do
       ArnoldPipeline.reset_configuration!
+    end
+
+    # --- library_manager ---
+
+    test "accepts library_manager in constructor" do
+      manager = Library::Manager.new
+      engine = TierExecutionEngine.new(
+        executor: @executor,
+        tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL),
+        library_manager: manager
+      )
+      assert_equal manager, engine.library_manager
     end
 
     # --- tier_task_resolved? ---

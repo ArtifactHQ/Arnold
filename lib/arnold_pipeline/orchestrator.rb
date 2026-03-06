@@ -40,7 +40,7 @@ module ArnoldPipeline
       @tier_gate_check = tier_gate_check || Agents::TierGateCheck.new(logger: @logger)
       @spec_iterator = spec_iterator || Agents::SpecIterator.new(logger: @logger)
       @delta_merger = DeltaMerger.new(logger: @logger)
-      @tier_execution_engine = TierExecutionEngine.new(executor: @executor, tier_gate_check: @tier_gate_check, logger: @logger)
+      @tier_execution_engine = TierExecutionEngine.new(executor: @executor, tier_gate_check: @tier_gate_check, logger: @logger, library_manager: @library_manager)
     end
 
     def call(nl_input:, stop_after: nil, pipeline_run: nil)
@@ -174,7 +174,7 @@ module ArnoldPipeline
       @event_recorder = PipelineEventRecorder.new(pipeline_run:)
       @tier_execution_engine = TierExecutionEngine.new(
         executor: @executor, tier_gate_check: @tier_gate_check, logger: @logger,
-        event_recorder: @event_recorder
+        event_recorder: @event_recorder, library_manager: @library_manager
       )
       start_index = STAGES.index(from)
       @current_stage = nil
