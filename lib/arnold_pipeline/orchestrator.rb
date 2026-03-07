@@ -40,7 +40,7 @@ module ArnoldPipeline
       @tier_gate_check = tier_gate_check || Agents::TierGateCheck.new(logger: @logger)
       @spec_iterator = spec_iterator || Agents::SpecIterator.new(logger: @logger)
       @delta_merger = DeltaMerger.new(logger: @logger)
-      @tier_execution_engine = TierExecutionEngine.new(executor: @executor, tier_gate_check: @tier_gate_check, logger: @logger)
+      @tier_execution_engine = TierExecutionEngine.new(executor: @executor, tier_gate_check: @tier_gate_check, logger: @logger, library_manager: @library_manager)
     end
 
     def call(nl_input:, stop_after: nil, pipeline_run: nil)
@@ -174,7 +174,7 @@ module ArnoldPipeline
       @event_recorder = PipelineEventRecorder.new(pipeline_run:)
       @tier_execution_engine = TierExecutionEngine.new(
         executor: @executor, tier_gate_check: @tier_gate_check, logger: @logger,
-        event_recorder: @event_recorder
+        event_recorder: @event_recorder, library_manager: @library_manager
       )
       start_index = STAGES.index(from)
       @current_stage = nil
@@ -201,6 +201,8 @@ module ArnoldPipeline
           event_type: :pipeline_completed, stage: "lifecycle",
           summary: build_completion_summary(pipeline_run)
         )
+
+        finalize!(pipeline_run) if ArnoldPipeline.configuration.finalization_enabled
       rescue TierGateError => e
         @event_recorder&.record(
           event_type: :pipeline_paused, stage: "lifecycle",
@@ -395,6 +397,164 @@ module ArnoldPipeline
       pipeline_run.update!(metadata: metadata.merge("baseline_commit_sha" => sha.strip))
     rescue => e
       logger.warn { "[Arnold] Failed to capture baseline SHA: #{e.message}" }
+    end
+
+    def finalize!(pipeline_run)
+      logger.info { "[Arnold] Running post-pipeline finalization..." }
+      config = ArnoldPipeline.configuration
+      repo_path = config.target_repo_path
+      return unless repo_path && Dir.exist?(repo_path)
+
+      cleanup_stale_worktrees!(repo_path)
+      run_recipe_finalization!(pipeline_run, repo_path)
+      run_finalization_hooks!(repo_path, config)
+      run_final_verification!(pipeline_run, repo_path, config)
+
+      @event_recorder&.record(
+        event_type: :pipeline_finalized, stage: "lifecycle",
+        summary: { status: "finalized" }
+      )
+    rescue => e
+      logger.warn { "[Arnold] Finalization failed (non-fatal): #{e.message}" }
+    end
+
+    def cleanup_stale_worktrees!(repo_path)
+      worktrees_dir = File.join(repo_path, ".worktrees")
+      return unless Dir.exist?(worktrees_dir)
+
+      system("git", "-C", repo_path, "worktree", "prune")
+      FileUtils.rm_rf(worktrees_dir)
+      logger.info { "[Arnold] Cleaned up stale worktrees" }
+    end
+
+    def run_recipe_finalization!(pipeline_run, repo_path)
+      recipe = resolve_primary_recipe(pipeline_run)
+      return unless recipe
+
+      commands = recipe.finalization.fetch("commands", [])
+      return if commands.empty?
+
+      hooks = commands.each_with_index.map do |cmd, i|
+        PostMergeHook.new(
+          name: "recipe_#{recipe.type}_#{i}",
+          trigger_paths: [],
+          command: cmd
+        )
+      end
+
+      results = PostMergeHookRunner.call(
+        repo_path: repo_path, changed_files: [], hooks: hooks,
+        logger: logger, force_all: true
+      )
+
+      triggered = results.select { |r| r[:triggered] }
+      passed = triggered.count { |r| r[:success] }
+      logger.info { "[Arnold] Recipe finalization (#{recipe.type}): #{passed}/#{triggered.size} passed" }
+
+      @event_recorder&.record(
+        event_type: :finalization_setup, stage: "lifecycle",
+        summary: {
+          recipe_type: recipe.type,
+          commands_run: triggered.size,
+          commands_passed: passed,
+          details: triggered.map { |r| { name: r[:name], success: r[:success] } }
+        }
+      )
+    end
+
+    def resolve_primary_recipe(pipeline_run)
+      recipe_type = pipeline_run.specification&.structured_data&.dig("recipe_type")
+      return nil unless recipe_type
+
+      library_manager.all_recipes.find { |r| r.type == recipe_type }
+    end
+
+    def run_finalization_hooks!(repo_path, config)
+      hooks = build_finalization_hooks(config)
+      return if hooks.empty?
+
+      results = PostMergeHookRunner.call(
+        repo_path: repo_path, changed_files: [], hooks: hooks,
+        logger: logger, force_all: true
+      )
+
+      triggered = results.select { |r| r[:triggered] }
+      passed = triggered.count { |r| r[:success] }
+      logger.info { "[Arnold] Finalization hooks: #{passed}/#{triggered.size} passed" }
+    end
+
+    def run_final_verification!(pipeline_run, repo_path, config)
+      checks = build_finalization_checks(config, pipeline_run)
+      return if checks.empty?
+
+      results = VerificationRunner.call(repo_path: repo_path, checks: checks, logger: logger)
+
+      if results[:all_passed]
+        logger.info { "[Arnold] Final verification: all checks passed" }
+      else
+        failed = results[:checks].select { |c| !c[:success] }.map { |c| c[:name] }
+        logger.warn { "[Arnold] Final verification: #{failed.join(', ')} failed" }
+      end
+
+      @event_recorder&.record(
+        event_type: :finalization_verification, stage: "lifecycle",
+        summary: { all_passed: results[:all_passed], summary: results[:summary] }
+      )
+    end
+
+    def build_finalization_hooks(config)
+      return [] unless config.post_merge_hooks.present?
+
+      config.post_merge_hooks.map do |h|
+        PostMergeHook.new(
+          name: h["name"] || h[:name],
+          trigger_paths: h["trigger_paths"] || h[:trigger_paths],
+          command: h["command"] || h[:command],
+          commit_paths: h["commit_paths"] || h[:commit_paths] || [],
+          commit_message: h["commit_message"] || h[:commit_message]
+        )
+      end
+    end
+
+    def build_finalization_checks(config, pipeline_run = nil)
+      recipe_checks = resolve_recipe_finalization_checks(pipeline_run)
+      config_checks = resolve_config_finalization_checks(config)
+
+      # Merge: recipe first, config overlays by name
+      merged = {}
+      recipe_checks.each { |c| merged[c.name] = c }
+      config_checks.each { |c| merged[c.name] = c }
+
+      # Filter: only checks eligible for finalization
+      merged.values.select(&:eligible_for_finalization?)
+    end
+
+    def resolve_recipe_finalization_checks(pipeline_run)
+      recipe = resolve_primary_recipe(pipeline_run)
+      return [] unless recipe
+
+      raw_checks = recipe.finalization.fetch("checks", [])
+      raw_checks.map do |c|
+        VerificationCheck.new(
+          name: c["name"] || c[:name],
+          command: c["command"] || c[:command],
+          type: c["type"] || c[:type] || :custom,
+          required: c["required"] || c[:required] || false
+        )
+      end
+    end
+
+    def resolve_config_finalization_checks(config)
+      return [] unless config.verification_checks.present?
+
+      config.verification_checks.map do |c|
+        VerificationCheck.new(
+          name: c["name"] || c[:name],
+          command: c["command"] || c[:command],
+          type: c["type"] || c[:type] || :custom,
+          required: c["required"] || c[:required] || false
+        )
+      end
     end
 
     def build_completion_summary(pipeline_run)

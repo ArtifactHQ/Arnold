@@ -16,13 +16,14 @@ require "open3"
 
 module ArnoldPipeline
   class TierExecutionEngine
-    attr_reader :executor, :tier_gate_check, :logger, :event_recorder
+    attr_reader :executor, :tier_gate_check, :logger, :event_recorder, :library_manager
 
-    def initialize(executor:, tier_gate_check:, logger:, event_recorder: nil)
+    def initialize(executor:, tier_gate_check:, logger:, event_recorder: nil, library_manager: nil)
       @executor = executor
       @tier_gate_check = tier_gate_check
       @logger = logger
       @event_recorder = event_recorder
+      @library_manager = library_manager
     end
 
     def execute_tiers!(pipeline_run, iteration_number: nil)
@@ -96,7 +97,7 @@ module ArnoldPipeline
         run_post_merge_hooks(tier_tasks, tier_num)
 
         # Run verification checks after hooks (before gate)
-        verification_results = run_verification_checks(tier_num)
+        verification_results = run_verification_checks(tier_num, pipeline_run:)
 
         # Run spec test generation after bootstrap tier (tier 0.5) if enabled
         if tier_num == 0 && spec_test_generation_enabled?
@@ -186,6 +187,7 @@ module ArnoldPipeline
       logger.info { "[Arnold] Merging tier results..." }
       executor.merge_results(pipeline_run:, tasks: tier_tasks)
       dedup_migration_timestamps!
+      resolve_duplicate_create_tables!
     rescue => e
       raise unless recoverable_merge_error?(e)
       logger.warn { "[Arnold] Tier merge failed (non-fatal): #{e.message}" }
@@ -234,6 +236,65 @@ module ArnoldPipeline
       system("git", "commit", "-m", "fix: deduplicate migration timestamps after parallel merge", "--no-verify", chdir: repo_path)
     rescue => e
       logger.warn { "[Arnold] Migration dedup failed (non-fatal): #{e.message}" }
+    end
+
+    # Detect and patch duplicate create_table calls across migration files.
+    # Parallel worktree tasks can independently create migrations for the same
+    # table. After sequential merge, the second create_table fails with
+    # "table already exists". Patching with if_not_exists: true makes
+    # duplicate creates idempotent without removing the migration (which may
+    # also create other unique tables).
+    CREATE_TABLE_PATTERN = /^(\s*create_table\s+[:"]\w+)(.*)$/
+
+    def resolve_duplicate_create_tables!
+      repo_path = ArnoldPipeline.configuration.claude_code_repo_path
+      return unless repo_path
+
+      migrate_dir = File.join(repo_path, "db", "migrate")
+      return unless Dir.exist?(migrate_dir)
+
+      files = Dir.glob("*.rb", base: migrate_dir).sort
+      seen_tables = Set.new
+      patched_files = []
+
+      files.each do |filename|
+        path = File.join(migrate_dir, filename)
+        content = File.read(path)
+        modified = false
+
+        new_content = content.gsub(CREATE_TABLE_PATTERN) do |match|
+          prefix = $1
+          rest = $2
+          table_name = prefix[/[:"]([\w]+)\s*\z/, 1]
+
+          if table_name && seen_tables.include?(table_name) && !rest.include?("if_not_exists")
+            modified = true
+            "#{prefix}, if_not_exists: true#{rest}"
+          else
+            seen_tables.add(table_name) if table_name
+            match
+          end
+        end
+
+        if modified
+          File.write(path, new_content)
+          patched_files << filename
+          logger.info { "[Arnold] Patched duplicate create_table in #{filename} with if_not_exists: true" }
+        else
+          # Still track tables from unmodified files
+          content.scan(/create_table\s+[:"]([\w]+)/).flatten.each { |t| seen_tables.add(t) }
+        end
+      end
+
+      return if patched_files.empty?
+
+      logger.warn { "[Arnold] Patched #{patched_files.size} migration(s) with duplicate create_table calls" }
+      patched_files.each do |filename|
+        system("git", "add", File.join("db", "migrate", filename), chdir: repo_path)
+      end
+      system("git", "commit", "-m", "fix: add if_not_exists to duplicate create_table migrations", "--no-verify", chdir: repo_path)
+    rescue => e
+      logger.warn { "[Arnold] Duplicate create_table resolution failed (non-fatal): #{e.message}" }
     end
 
     def gate_check_needed?
@@ -607,7 +668,7 @@ module ArnoldPipeline
         # Re-run empirical checks and gate check
         all_tier_tasks = pipeline_run.tasks.in_tier(tier_num).to_a
         acceptance_criteria_summary = run_criteria_check!(pipeline_run, all_tier_tasks, tier_num)
-        retry_verification_results = run_verification_checks(tier_num)
+        retry_verification_results = run_verification_checks(tier_num, pipeline_run:)
         verification_results = retry_verification_results
         gate_result = run_tier_gate!(pipeline_run, tier_num, all_tier_tasks,
                                      acceptance_criteria_summary:,
@@ -824,10 +885,10 @@ module ArnoldPipeline
       []
     end
 
-    def run_verification_checks(tier_number = nil)
+    def run_verification_checks(tier_number = nil, pipeline_run: nil)
       config = ArnoldPipeline.configuration
       repo_path = config.claude_code_repo_path
-      checks = build_checks
+      checks = build_checks(pipeline_run:, tier_number:)
       return nil if repo_path.nil? || checks.empty?
 
       results = if event_recorder
@@ -881,7 +942,44 @@ module ArnoldPipeline
       end
     end
 
-    def build_checks
+    def build_checks(pipeline_run: nil, tier_number: nil)
+      recipe_checks = resolve_recipe_checks(pipeline_run)
+      config_checks = resolve_config_checks
+
+      # Merge: recipe checks first, then config overlays by name
+      merged = {}
+      recipe_checks.each { |c| merged[c.name] = c }
+      config_checks.each { |c| merged[c.name] = c }
+
+      checks = merged.values
+
+      # Filter by tier if tier_number provided
+      checks = checks.select { |c| c.scheduled_for_tier?(tier_number) } if tier_number
+
+      checks
+    end
+
+    def resolve_recipe_checks(pipeline_run)
+      return [] unless library_manager && pipeline_run
+
+      recipe_type = pipeline_run.specification&.structured_data&.dig("recipe_type")
+      return [] unless recipe_type
+
+      recipe = library_manager.all_recipes.find { |r| r.type == recipe_type }
+      return [] unless recipe
+
+      raw_checks = recipe.verification.fetch("checks", [])
+      raw_checks.map do |c|
+        VerificationCheck.new(
+          name: c["name"] || c[:name],
+          command: c["command"] || c[:command],
+          type: c["type"] || c[:type] || :custom,
+          required: c["required"] || c[:required] || false
+        )
+      end
+    end
+
+    def resolve_config_checks
       config = ArnoldPipeline.configuration
       return [] unless config.verification_checks.present?
 

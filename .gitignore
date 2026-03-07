@@ -51,3 +51,6 @@ research/
 
 # Bundled dependencies
 vendor/bundle
+
+# Git worktrees
+.worktrees/

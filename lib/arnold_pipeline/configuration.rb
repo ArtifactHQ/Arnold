@@ -32,7 +32,8 @@ module ArnoldPipeline
                   :test_timeout,
                   :post_merge_hooks, :verification_checks,
                   :spec_test_generation_enabled, :spec_test_directory, :spec_test_persona,
-                  :criteria_check_mode
+                  :criteria_check_mode,
+                  :finalization_enabled
     attr_writer   :llm_provider, :llm_api_key, :llm_model
 
     def initialize
@@ -82,6 +83,7 @@ module ArnoldPipeline
       @spec_test_directory                       = "test/spec_integration"
       @spec_test_persona                         = "testing_specialist"
       @criteria_check_mode                         = :advisory
+      @finalization_enabled                        = true
     end
 
     def llm_provider

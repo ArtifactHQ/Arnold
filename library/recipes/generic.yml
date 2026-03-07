@@ -21,6 +21,16 @@ framework:
   frontend: Hotwire (Turbo + Stimulus)
   deployment: Kamal 2
 
+finalization:
+  commands:
+    - bundle install
+    - bin/rails db:prepare
+  checks:
+    - name: Boot check
+      command: "bin/rails runner 'puts Rails.version'"
+      type: custom
+      required: true
+
 verification:
   setup_commands:
     - bin/setup

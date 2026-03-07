@@ -4,6 +4,7 @@ require "faraday"
 require "arnold_pipeline/tier_execution_engine"
 require "arnold_pipeline/corrective_task_generator"
 require "arnold_pipeline/pipeline_event_recorder"
+require "arnold_pipeline/library/manager"
 
 module ArnoldPipeline
   class TierExecutionEngineTest < ActiveSupport::TestCase
@@ -38,6 +39,142 @@ module ArnoldPipeline
 
     teardown do
       ArnoldPipeline.reset_configuration!
+    end
+
+    # --- library_manager ---
+
+    test "accepts library_manager in constructor" do
+      manager = Library::Manager.new
+      engine = TierExecutionEngine.new(
+        executor: @executor,
+        tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL),
+        library_manager: manager
+      )
+      assert_equal manager, engine.library_manager
+    end
+
+    # --- build_checks (recipe merge) ---
+
+    test "build_checks includes recipe verification checks when library_manager available" do
+      manager = Library::Manager.new
+      engine = TierExecutionEngine.new(
+        executor: @executor,
+        tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL),
+        library_manager: manager
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build a web app")
+      pipeline_run.create_specification!(
+        content: "# Spec", version: 1,
+        structured_data: { "recipe_type" => "web_app" }
+      )
+
+      ArnoldPipeline.configure { |c| c.verification_checks = [] }
+
+      checks = engine.send(:build_checks, pipeline_run:)
+      solid_stack = checks.find { |c| c.type == :solid_stack }
+      assert_not_nil solid_stack, "Should include solid_stack from web_app recipe"
+      assert solid_stack.required?
+    end
+
+    test "build_checks merges config checks with recipe checks" do
+      manager = Library::Manager.new
+      engine = TierExecutionEngine.new(
+        executor: @executor,
+        tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL),
+        library_manager: manager
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build a web app")
+      pipeline_run.create_specification!(
+        content: "# Spec", version: 1,
+        structured_data: { "recipe_type" => "web_app" }
+      )
+
+      ArnoldPipeline.configure do |c|
+        c.verification_checks = [
+          { "name" => "Custom check", "command" => "echo ok", "type" => "custom" }
+        ]
+      end
+
+      checks = engine.send(:build_checks, pipeline_run:)
+      names = checks.map(&:name)
+      assert_includes names, "Solid stack"
+      assert_includes names, "Custom check"
+    end
+
+    test "build_checks user config overrides recipe check by name" do
+      manager = Library::Manager.new
+      engine = TierExecutionEngine.new(
+        executor: @executor,
+        tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL),
+        library_manager: manager
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build a web app")
+      pipeline_run.create_specification!(
+        content: "# Spec", version: 1,
+        structured_data: { "recipe_type" => "web_app" }
+      )
+
+      ArnoldPipeline.configure do |c|
+        c.verification_checks = [
+          { "name" => "Solid stack", "type" => "solid_stack", "required" => false }
+        ]
+      end
+
+      checks = engine.send(:build_checks, pipeline_run:)
+      solid_stacks = checks.select { |c| c.name == "Solid stack" }
+      assert_equal 1, solid_stacks.size, "Should deduplicate by name"
+      refute solid_stacks.first.required?, "User override should win"
+    end
+
+    test "build_checks works without library_manager (backward compatible)" do
+      ArnoldPipeline.configure do |c|
+        c.verification_checks = [
+          { "name" => "boot", "command" => "echo ok", "type" => "boot" }
+        ]
+      end
+
+      checks = @engine.send(:build_checks)
+      assert_equal 1, checks.size
+      assert_equal "boot", checks.first.name
+    end
+
+    test "build_checks returns empty when no recipe and no config checks" do
+      ArnoldPipeline.configure { |c| c.verification_checks = [] }
+      checks = @engine.send(:build_checks)
+      assert_empty checks
+    end
+
+    test "build_checks filters by tier when tier_number provided" do
+      manager = Library::Manager.new
+      engine = TierExecutionEngine.new(
+        executor: @executor,
+        tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL),
+        library_manager: manager
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build a web app")
+      pipeline_run.create_specification!(
+        content: "# Spec", version: 1,
+        structured_data: { "recipe_type" => "web_app" }
+      )
+
+      ArnoldPipeline.configure { |c| c.verification_checks = [] }
+
+      # Tier 0: solid_stack should be included
+      checks_t0 = engine.send(:build_checks, pipeline_run:, tier_number: 0)
+      assert checks_t0.any? { |c| c.type == :solid_stack }
+
+      # Tier 3: solid_stack should be excluded (default_tier = 0)
+      checks_t3 = engine.send(:build_checks, pipeline_run:, tier_number: 3)
+      refute checks_t3.any? { |c| c.type == :solid_stack }
     end
 
     # --- tier_task_resolved? ---
@@ -207,6 +344,159 @@ module ArnoldPipeline
       Dir.mktmpdir("dedup_missing") do |tmpdir|
         ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
         assert_nothing_raised { @engine.send(:dedup_migration_timestamps!) }
+      end
+    end
+
+    # --- resolve_duplicate_create_tables! ---
+
+    test "resolve_duplicate_create_tables! patches duplicate create_table in later migration" do
+      Dir.mktmpdir("dup_create_table") do |tmpdir|
+        system("git", "init", chdir: tmpdir, out: File::NULL, err: File::NULL)
+        system("git", "-C", tmpdir, "commit", "--allow-empty", "-m", "init", out: File::NULL, err: File::NULL)
+
+        migrate_dir = File.join(tmpdir, "db", "migrate")
+        FileUtils.mkdir_p(migrate_dir)
+
+        first = <<~RUBY
+          class CreateAccounts < ActiveRecord::Migration[8.1]
+            def change
+              create_table :accounts do |t|
+                t.string :name
+                t.timestamps
+              end
+            end
+          end
+        RUBY
+
+        second = <<~RUBY
+          class CreateCardWorkflowTables < ActiveRecord::Migration[8.1]
+            def change
+              create_table :accounts do |t|
+                t.string :name, null: false
+                t.timestamps
+              end
+            end
+          end
+        RUBY
+
+        File.write(File.join(migrate_dir, "20260306011142_create_accounts.rb"), first)
+        File.write(File.join(migrate_dir, "20260306011252_create_card_workflow_tables.rb"), second)
+        system("git", "-C", tmpdir, "add", ".", out: File::NULL)
+        system("git", "-C", tmpdir, "commit", "-m", "add migrations", out: File::NULL, err: File::NULL)
+
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+
+        @engine.send(:resolve_duplicate_create_tables!)
+
+        first_content = File.read(File.join(migrate_dir, "20260306011142_create_accounts.rb"))
+        second_content = File.read(File.join(migrate_dir, "20260306011252_create_card_workflow_tables.rb"))
+
+        refute_includes first_content, "if_not_exists", "First migration should be unchanged"
+        assert_includes second_content, "if_not_exists: true", "Second migration should be patched"
+      end
+    end
+
+    test "resolve_duplicate_create_tables! handles monolithic migration with mixed tables" do
+      Dir.mktmpdir("dup_monolithic") do |tmpdir|
+        system("git", "init", chdir: tmpdir, out: File::NULL, err: File::NULL)
+        system("git", "-C", tmpdir, "commit", "--allow-empty", "-m", "init", out: File::NULL, err: File::NULL)
+
+        migrate_dir = File.join(tmpdir, "db", "migrate")
+        FileUtils.mkdir_p(migrate_dir)
+
+        File.write(File.join(migrate_dir, "20260306011142_create_accounts.rb"),
+          "class CreateAccounts < ActiveRecord::Migration[8.1]\n  def change\n    create_table :accounts do |t|\n      t.timestamps\n    end\n  end\nend\n")
+
+        monolithic = <<~RUBY
+          class CreateCardWorkflowTables < ActiveRecord::Migration[8.1]
+            def change
+              create_table :accounts do |t|
+                t.string :name, null: false
+                t.timestamps
+              end
+
+              create_table :columns do |t|
+                t.string :name
+                t.timestamps
+              end
+
+              create_table :closures do |t|
+                t.timestamps
+              end
+            end
+          end
+        RUBY
+
+        File.write(File.join(migrate_dir, "20260306011252_create_card_workflow_tables.rb"), monolithic)
+        system("git", "-C", tmpdir, "add", ".", out: File::NULL)
+        system("git", "-C", tmpdir, "commit", "-m", "migrations", out: File::NULL, err: File::NULL)
+
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+
+        @engine.send(:resolve_duplicate_create_tables!)
+
+        content = File.read(File.join(migrate_dir, "20260306011252_create_card_workflow_tables.rb"))
+        assert_includes content, "create_table :accounts, if_not_exists: true"
+        assert_match(/create_table :columns do/, content)
+        assert_match(/create_table :closures do/, content)
+        refute_includes content.sub(/create_table :accounts.*$/, ""), "if_not_exists",
+          "Only :accounts should be patched"
+      end
+    end
+
+    test "resolve_duplicate_create_tables! is a no-op when no duplicate tables" do
+      Dir.mktmpdir("dup_noop") do |tmpdir|
+        system("git", "init", chdir: tmpdir, out: File::NULL, err: File::NULL)
+        system("git", "-C", tmpdir, "commit", "--allow-empty", "-m", "init", out: File::NULL, err: File::NULL)
+
+        migrate_dir = File.join(tmpdir, "db", "migrate")
+        FileUtils.mkdir_p(migrate_dir)
+        File.write(File.join(migrate_dir, "20260306011001_create_users.rb"),
+          "class CreateUsers < ActiveRecord::Migration[8.1]\n  def change\n    create_table :users do |t|\n      t.timestamps\n    end\n  end\nend\n")
+        File.write(File.join(migrate_dir, "20260306011002_create_posts.rb"),
+          "class CreatePosts < ActiveRecord::Migration[8.1]\n  def change\n    create_table :posts do |t|\n      t.timestamps\n    end\n  end\nend\n")
+        system("git", "-C", tmpdir, "add", ".", out: File::NULL)
+        system("git", "-C", tmpdir, "commit", "-m", "migrations", out: File::NULL, err: File::NULL)
+
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+
+        before_sha, = Open3.capture2("git", "-C", tmpdir, "rev-parse", "HEAD")
+        @engine.send(:resolve_duplicate_create_tables!)
+        after_sha, = Open3.capture2("git", "-C", tmpdir, "rev-parse", "HEAD")
+
+        assert_equal before_sha, after_sha, "No commit should be created when no duplicates exist"
+      end
+    end
+
+    test "resolve_duplicate_create_tables! handles missing db/migrate directory" do
+      Dir.mktmpdir("dup_missing") do |tmpdir|
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+        assert_nothing_raised { @engine.send(:resolve_duplicate_create_tables!) }
+      end
+    end
+
+    test "resolve_duplicate_create_tables! skips tables already having if_not_exists" do
+      Dir.mktmpdir("dup_skip") do |tmpdir|
+        system("git", "init", chdir: tmpdir, out: File::NULL, err: File::NULL)
+        system("git", "-C", tmpdir, "commit", "--allow-empty", "-m", "init", out: File::NULL, err: File::NULL)
+
+        migrate_dir = File.join(tmpdir, "db", "migrate")
+        FileUtils.mkdir_p(migrate_dir)
+
+        File.write(File.join(migrate_dir, "20260306011001_create_accounts.rb"),
+          "class CreateAccounts < ActiveRecord::Migration[8.1]\n  def change\n    create_table :accounts do |t|\n      t.timestamps\n    end\n  end\nend\n")
+        File.write(File.join(migrate_dir, "20260306011002_create_accounts_again.rb"),
+          "class CreateAccountsAgain < ActiveRecord::Migration[8.1]\n  def change\n    create_table :accounts, if_not_exists: true do |t|\n      t.timestamps\n    end\n  end\nend\n")
+        system("git", "-C", tmpdir, "add", ".", out: File::NULL)
+        system("git", "-C", tmpdir, "commit", "-m", "migrations", out: File::NULL, err: File::NULL)
+
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+
+        before_sha, = Open3.capture2("git", "-C", tmpdir, "rev-parse", "HEAD")
+        @engine.send(:resolve_duplicate_create_tables!)
+        after_sha, = Open3.capture2("git", "-C", tmpdir, "rev-parse", "HEAD")
+
+        assert_equal before_sha, after_sha, "No commit needed when duplicate already has if_not_exists"
       end
     end
 
@@ -1929,7 +2219,7 @@ module ArnoldPipeline
       ArnoldPipeline.configure do |c|
         c.claude_code_repo_path = "/tmp/test-repo"
         c.verification_checks = [
-          { name: "boot", command: "bin/rails runner 'true'", type: :boot }
+          { name: "lint", command: "rubocop", type: :custom }
         ]
       end
 
@@ -1940,9 +2230,9 @@ module ArnoldPipeline
       )
 
       ArnoldPipeline::VerificationRunner.stubs(:call).returns({
-        checks: [ { name: "boot", type: :boot, success: true } ],
+        checks: [ { name: "lint", type: :custom, success: true } ],
         all_passed: true,
-        summary: "1 passed, 0 failed: boot=OK"
+        summary: "1 passed, 0 failed: lint=OK"
       })
 
       engine.send(:run_verification_checks, 3)

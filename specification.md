@@ -360,6 +360,25 @@ After each tier completes, results are merged before the next tier begins.
 - AND it selects the `evaluate_with_llm` path when no verification checks ran (fallback to LLM judgment).
 - AND the selected evaluation path is recorded as `decision_source` in the pipeline event metadata, with values: `verification_tests_passed`, `verification_tests_failed`, `verification_required_failed`, or `llm_judgment`.
 
+#### Scenario: Duplicate create_table Migration Resolution [SPEC-TIER-010]
+- GIVEN parallel worktree tasks that each create migrations containing `create_table` for the same table name.
+- WHEN the tier's task branches are merged sequentially into the main branch.
+- THEN the system SHALL scan all migrations in `db/migrate/` for duplicate `create_table` calls targeting the same table.
+- AND for each duplicate (second or later occurrence), it SHALL patch the migration file to add `if_not_exists: true` to the `create_table` call.
+- AND it SHALL commit the patched files with a descriptive commit message.
+- AND the original (first) migration creating each table SHALL remain unchanged.
+- AND this operation SHALL be non-fatal — errors are logged but do not crash the pipeline.
+
+#### Scenario: Recipe-Driven Verification Checks [SPEC-TIER-011]
+- GIVEN a recipe with `verification.checks` (e.g., `solid_stack`) and `finalization.checks` (e.g., boot check).
+- WHEN the pipeline executes tier gates and finalization.
+- THEN recipe checks are automatically included without manual config.yml setup.
+- AND recipe checks are defaults; user `config.verification_checks` overrides by name.
+- AND the check type registry maps each type to a default tier (e.g., solid_stack → tier 0).
+- AND `scheduled_for_tier?` filters checks so solid_stack only runs at tier 0.
+- AND `eligible_for_finalization?` excludes test_suite from finalization.
+- AND `library_manager` is injected into TierExecutionEngine for recipe resolution.
+
 #### Scenario: Tier Gate Retry Exhaustion
 - GIVEN a tier that has failed the gate check max_tier_retries times.
 - WHEN the retry limit is reached.

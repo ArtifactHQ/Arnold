@@ -24,6 +24,10 @@ framework:
     ActiveSupport for core extensions and utilities
   packaging: RubyGems or self-contained executable via Traveling Ruby
 
+finalization:
+  commands:
+    - bundle install
+
 verification:
   setup_commands:
     - bundle install

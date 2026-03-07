@@ -25,7 +25,10 @@ module ArnoldPipeline
       test_execution: 17,
       spec_test_execution: 18,
       post_merge_hooks: 19,
-      verification_checks: 20
+      verification_checks: 20,
+      pipeline_finalized: 21,
+      finalization_verification: 22,
+      finalization_setup: 23
     }
 
     belongs_to :pipeline_run

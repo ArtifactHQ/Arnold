@@ -5,15 +5,16 @@ module ArnoldPipeline
   class PostMergeHookRunner
     MAX_OUTPUT_CHARS = 2000
 
-    def self.call(repo_path:, changed_files:, hooks:, logger: nil)
-      new(repo_path: repo_path, changed_files: changed_files, hooks: hooks, logger: logger).call
+    def self.call(repo_path:, changed_files:, hooks:, logger: nil, force_all: false)
+      new(repo_path: repo_path, changed_files: changed_files, hooks: hooks, logger: logger, force_all: force_all).call
     end
 
-    def initialize(repo_path:, changed_files:, hooks:, logger: nil)
+    def initialize(repo_path:, changed_files:, hooks:, logger: nil, force_all: false)
       @repo_path = repo_path
       @changed_files = changed_files
       @hooks = hooks
       @logger = logger
+      @force_all = force_all
     end
 
     def call
@@ -23,7 +24,7 @@ module ArnoldPipeline
     private
 
     def run_hook(hook)
-      unless hook.triggered_by?(@changed_files)
+      unless @force_all || hook.triggered_by?(@changed_files)
         return { name: hook.name, triggered: false, success: nil, stdout: nil, stderr: nil, exit_code: nil }
       end
 
