@@ -21,6 +21,11 @@ framework:
   frontend: Hotwire (Turbo + Stimulus)
   deployment: Kamal 2
 
+finalization:
+  commands:
+    - bundle install
+    - bin/rails db:prepare
+
 verification:
   setup_commands:
     - bin/setup

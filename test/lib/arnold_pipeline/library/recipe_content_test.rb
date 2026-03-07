@@ -9,6 +9,19 @@ module ArnoldPipeline
         @recipes = @manager.all_recipes
       end
 
+      test "every recipe has a non-empty finalization block with commands" do
+        @recipes.each do |recipe|
+          assert_kind_of Hash, recipe.finalization, "#{recipe.name} finalization should be a Hash"
+          refute_empty recipe.finalization, "#{recipe.name} should have a non-empty finalization block"
+          commands = recipe.finalization["commands"]
+          assert_kind_of Array, commands, "#{recipe.name} finalization.commands should be an Array"
+          refute_empty commands, "#{recipe.name} should have at least one finalization command"
+          commands.each do |cmd|
+            assert_kind_of String, cmd, "#{recipe.name} finalization commands should all be Strings"
+          end
+        end
+      end
+
       test "every recipe has a non-empty verification block" do
         @recipes.each do |recipe|
           assert_kind_of Hash, recipe.verification, "#{recipe.name} verification should be a Hash"

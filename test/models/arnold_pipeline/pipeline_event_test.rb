@@ -51,6 +51,7 @@ module ArnoldPipeline
         pipeline_paused pipeline_failed pipeline_completed repo_context_scanned
         criteria_check verification_execution test_execution spec_test_execution
         post_merge_hooks verification_checks
+        pipeline_finalized finalization_verification finalization_setup
       ]
       assert_equal expected, PipelineEvent.event_types.keys
     end

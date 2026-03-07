@@ -26,6 +26,11 @@ framework:
   css: Tailwind CSS via tailwindcss-rails
   deployment: Kamal 2 (or static export if purely static)
 
+finalization:
+  commands:
+    - bundle install
+    - bin/rails db:prepare
+
 verification:
   setup_commands:
     - bin/setup

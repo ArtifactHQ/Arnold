@@ -28,6 +28,7 @@ module ArnoldPipeline
     def execute_tiers!(pipeline_run, iteration_number: nil)
       @current_iteration_number = iteration_number
       pipeline_run.update!(status: :executing)
+      clear_tier_retries!(pipeline_run)
       logger.info { "[Arnold] Publishing tasks..." }
 
       max_tier = pipeline_run.tasks.maximum(:tier) || 0
@@ -97,6 +98,13 @@ module ArnoldPipeline
 
         # Run verification checks after hooks (before gate)
         verification_results = run_verification_checks(tier_num)
+
+        # Remediation pass: if required checks failed, re-run all hooks and re-verify once
+        if verification_results && has_failed_required_checks?(verification_results)
+          logger.info { "[Arnold] Required checks failed — attempting remediation pass..." }
+          run_post_merge_hooks(tier_tasks, tier_num, force_all: true)
+          verification_results = run_verification_checks(tier_num)
+        end
 
         # Run spec test generation after bootstrap tier (tier 0.5) if enabled
         if tier_num == 0 && spec_test_generation_enabled?
@@ -240,10 +248,12 @@ module ArnoldPipeline
     # Detect and patch duplicate create_table calls across migration files.
     # Parallel worktree tasks can independently create migrations for the same
     # table. After sequential merge, the second create_table fails with
-    # "table already exists". Patching with if_not_exists: true makes
-    # duplicate creates idempotent without removing the migration (which may
-    # also create other unique tables).
-    CREATE_TABLE_PATTERN = /^(\s*create_table\s+[:"]\w+)(.*)$/
+    # "table already exists". We use force: :cascade on the later duplicate so
+    # it drops and recreates with the fuller schema. This is safe during initial
+    # builds (no real data) and avoids the if_not_exists pitfall where the CREATE
+    # TABLE is skipped but separate CREATE INDEX / ADD FOREIGN KEY statements
+    # still fire against the old schema's missing columns.
+    CREATE_TABLE_PATTERN = /^(\s*create_table\s+(?::\w+|"\w+"))(.*)$/
 
     def resolve_duplicate_create_tables!
       repo_path = ArnoldPipeline.configuration.claude_code_repo_path
@@ -264,11 +274,11 @@ module ArnoldPipeline
         new_content = content.gsub(CREATE_TABLE_PATTERN) do |match|
           prefix = $1
           rest = $2
-          table_name = prefix[/[:"]([\w]+)\s*\z/, 1]
+          table_name = prefix[/[:"]([\w]+)"?\s*\z/, 1]
 
-          if table_name && seen_tables.include?(table_name) && !rest.include?("if_not_exists")
+          if table_name && seen_tables.include?(table_name) && !rest.include?("force:") && !rest.include?("if_not_exists")
             modified = true
-            "#{prefix}, if_not_exists: true#{rest}"
+            "#{prefix}, force: :cascade#{rest}"
           else
             seen_tables.add(table_name) if table_name
             match
@@ -278,7 +288,7 @@ module ArnoldPipeline
         if modified
           File.write(path, new_content)
           patched_files << filename
-          logger.info { "[Arnold] Patched duplicate create_table in #{filename} with if_not_exists: true" }
+          logger.info { "[Arnold] Patched duplicate create_table in #{filename} with force: :cascade" }
         else
           # Still track tables from unmodified files
           content.scan(/create_table\s+[:"]([\w]+)/).flatten.each { |t| seen_tables.add(t) }
@@ -291,7 +301,7 @@ module ArnoldPipeline
       patched_files.each do |filename|
         system("git", "add", File.join("db", "migrate", filename), chdir: repo_path)
       end
-      system("git", "commit", "-m", "fix: add if_not_exists to duplicate create_table migrations", "--no-verify", chdir: repo_path)
+      system("git", "commit", "-m", "fix: force-recreate duplicate create_table migrations", "--no-verify", chdir: repo_path)
     rescue => e
       logger.warn { "[Arnold] Duplicate create_table resolution failed (non-fatal): #{e.message}" }
     end
@@ -583,6 +593,7 @@ module ArnoldPipeline
       metadata = pipeline_run.metadata || {}
       tier_retries = metadata["tier_retries"] || {}
       retry_count = tier_retries[tier_num.to_s] || 0
+      last_hook_results = nil
 
       while retry_count < max_retries
         # Increment retry count
@@ -602,13 +613,21 @@ module ArnoldPipeline
         corrective_tasks = gate_result["corrective_tasks"] || []
         max_position = pipeline_run.tasks.maximum(:position) || 0
 
-        created_tasks = corrective_tasks.each_with_index.map do |td, i|
+        existing_titles = pipeline_run.tasks.in_tier(tier_num).pluck(:title).to_set
+
+        created_tasks = corrective_tasks.each_with_index.filter_map do |td, i|
+          if existing_titles.include?(td["title"])
+            logger.info { "[Arnold] Skipping duplicate corrective task: #{td["title"]}" }
+            next
+          end
+
           enriched_desc = build_corrective_description(
             base_description: td["description"],
             gate_issues: gate_issues,
             original_tier_tasks: tier_tasks,
             acceptance_criteria_summary: acceptance_criteria_summary,
-            verification_output: extract_verification_output(verification_results)
+            verification_output: extract_verification_output(verification_results),
+            hook_results: last_hook_results
           )
 
           pipeline_run.tasks.create!(
@@ -661,7 +680,7 @@ module ArnoldPipeline
 
           merge_tier_results!(pipeline_run, [ task ])
           task.reload
-          run_post_merge_hooks([ task ], tier_num)
+          last_hook_results = run_post_merge_hooks([ task ], tier_num, force_all: true)
         end
 
         # Re-run empirical checks and gate check
@@ -708,6 +727,12 @@ module ArnoldPipeline
 
     def load_accumulated_context(pipeline_run)
       (pipeline_run.metadata || {})["tier_contexts"] || []
+    end
+
+    def clear_tier_retries!(pipeline_run)
+      metadata = pipeline_run.metadata || {}
+      return unless metadata.key?("tier_retries")
+      pipeline_run.update!(metadata: metadata.except("tier_retries"))
     end
 
     def spec_test_generation_enabled?
@@ -843,7 +868,7 @@ module ArnoldPipeline
       nil
     end
 
-    def run_post_merge_hooks(tier_tasks, tier_number = nil)
+    def run_post_merge_hooks(tier_tasks, tier_number = nil, force_all: false)
       config = ArnoldPipeline.configuration
       repo_path = config.claude_code_repo_path
       hooks = build_hooks
@@ -872,10 +897,10 @@ module ArnoldPipeline
           tier_number: tier_number,
           iteration_number: @current_iteration_number
         ) do
-          PostMergeHookRunner.call(repo_path:, changed_files:, hooks:, logger:)
+          PostMergeHookRunner.call(repo_path:, changed_files:, hooks:, logger:, force_all:)
         end
       else
-        PostMergeHookRunner.call(repo_path:, changed_files:, hooks:, logger:)
+        PostMergeHookRunner.call(repo_path:, changed_files:, hooks:, logger:, force_all:)
       end
 
       results
@@ -1078,6 +1103,19 @@ module ArnoldPipeline
       "## Prior Implementation Context\n\n#{lines.join("\n\n")}"
     end
 
+    def format_hook_failures(hook_results)
+      return nil unless hook_results.is_a?(Array)
+
+      failed = hook_results.select { |r| r[:triggered] && r[:success] == false }
+      return nil if failed.empty?
+
+      failed.map do |r|
+        output = [ r[:stderr], r[:stdout] ].compact.reject(&:empty?).join("\n")
+        line = "Hook '#{r[:name]}' FAILED (exit code: #{r[:exit_code]})"
+        output.strip.empty? ? line : "#{line}:\n```\n#{output}\n```"
+      end.join("\n\n")
+    end
+
     def extract_verification_output(verification_results)
       return nil unless verification_results
 
@@ -1097,7 +1135,8 @@ module ArnoldPipeline
       sections.join("\n\n")
     end
 
-    def build_corrective_description(base_description:, gate_issues: [], original_tier_tasks: [], acceptance_criteria_summary: nil, verification_output: nil)
+    def build_corrective_description(base_description:, gate_issues: [], original_tier_tasks: [],
+                                      acceptance_criteria_summary: nil, verification_output: nil, hook_results: nil)
       sections = [ base_description ]
 
       if gate_issues.present?
@@ -1120,6 +1159,11 @@ module ArnoldPipeline
 
       if verification_output.present?
         sections << "## Verification Output\n```\n#{verification_output}\n```"
+      end
+
+      hook_failure_text = format_hook_failures(hook_results)
+      if hook_failure_text
+        sections << "## Hook Results\n#{hook_failure_text}"
       end
 
       return base_description if sections.size == 1

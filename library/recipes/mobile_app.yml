@@ -28,6 +28,11 @@ framework:
   deployment_backend: Kamal 2
   deployment_mobile: App Store / Google Play
 
+finalization:
+  commands:
+    - bundle install
+    - bin/rails db:prepare
+
 verification:
   setup_commands:
     - bin/setup

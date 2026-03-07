@@ -842,6 +842,292 @@ module ArnoldPipeline
       assert_match(/No deltas generated/, error.message)
     end
 
+    # --- finalize! tests ---
+
+    test "finalize! runs recipe finalization commands from primary recipe" do
+      repo_path = Dir.mktmpdir
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.target_repo_path = repo_path
+        c.finalization_enabled = true
+      end
+
+      stub_spec_generation!(recipe_type: "web_app")
+      stub_task_breakdown!(times: 1)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      call_seq = sequence("finalize_calls")
+      PostMergeHookRunner.expects(:call).with { |kwargs|
+        kwargs[:force_all] == true &&
+          kwargs[:hooks].size == 2 &&
+          kwargs[:hooks].first.name == "recipe_web_app_0" &&
+          kwargs[:hooks].first.command == "bundle install" &&
+          kwargs[:hooks].last.command == "bin/rails db:prepare"
+      }.in_sequence(call_seq).returns([
+        { name: "recipe_web_app_0", triggered: true, success: true },
+        { name: "recipe_web_app_1", triggered: true, success: true }
+      ])
+
+      result = @orchestrator.call(nl_input: "Build a todo app")
+      assert_equal "completed", result.status
+
+      event = result.pipeline_events.find_by(event_type: :finalization_setup)
+      assert_not_nil event
+      assert_equal "web_app", event.summary["recipe_type"]
+      assert_equal 2, event.summary["commands_run"]
+      assert_equal 2, event.summary["commands_passed"]
+    ensure
+      FileUtils.rm_rf(repo_path) if repo_path
+    end
+
+    test "finalize! skips recipe finalization when no recipe_type in structured_data" do
+      repo_path = Dir.mktmpdir
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.target_repo_path = repo_path
+        c.finalization_enabled = true
+      end
+
+      stub_spec_generation!  # no recipe_type
+      stub_task_breakdown!(times: 1)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      PostMergeHookRunner.expects(:call).never
+
+      result = @orchestrator.call(nl_input: "Build a todo app")
+      assert_equal "completed", result.status
+      assert_nil result.pipeline_events.find_by(event_type: :finalization_setup)
+    ensure
+      FileUtils.rm_rf(repo_path) if repo_path
+    end
+
+    test "finalize! runs recipe commands before user-configured hooks" do
+      repo_path = Dir.mktmpdir
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.target_repo_path = repo_path
+        c.finalization_enabled = true
+        c.post_merge_hooks = [
+          { "name" => "user_hook", "trigger_paths" => [ "Gemfile" ], "command" => "echo user" }
+        ]
+      end
+
+      stub_spec_generation!(recipe_type: "cli_tool")
+      stub_task_breakdown!(times: 1)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      call_seq = sequence("ordering")
+      # Recipe finalization first
+      PostMergeHookRunner.expects(:call).with { |kwargs|
+        kwargs[:hooks].any? { |h| h.name.start_with?("recipe_cli_tool") }
+      }.in_sequence(call_seq).returns([
+        { name: "recipe_cli_tool_0", triggered: true, success: true }
+      ])
+      # User hooks second
+      PostMergeHookRunner.expects(:call).with { |kwargs|
+        kwargs[:hooks].any? { |h| h.name == "user_hook" }
+      }.in_sequence(call_seq).returns([
+        { name: "user_hook", triggered: true, success: true }
+      ])
+
+      result = @orchestrator.call(nl_input: "Build a todo app")
+      assert_equal "completed", result.status
+    ensure
+      FileUtils.rm_rf(repo_path) if repo_path
+    end
+
+    test "finalize! runs hooks with force_all after pipeline completion" do
+      repo_path = Dir.mktmpdir
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.target_repo_path = repo_path
+        c.finalization_enabled = true
+        c.post_merge_hooks = [
+          { "name" => "bundle_install", "trigger_paths" => [ "Gemfile" ], "command" => "echo ok" }
+        ]
+      end
+
+      stub_spec_generation!
+      stub_task_breakdown!(times: 1)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      PostMergeHookRunner.expects(:call).with { |kwargs|
+        kwargs[:force_all] == true &&
+          kwargs[:repo_path] == repo_path &&
+          kwargs[:hooks].size == 1 &&
+          kwargs[:hooks].first.name == "bundle_install"
+      }.returns([{ name: "bundle_install", triggered: true, success: true }])
+
+      result = @orchestrator.call(nl_input: "Build a todo app")
+      assert_equal "completed", result.status
+
+      event = result.pipeline_events.find_by(event_type: :pipeline_finalized)
+      assert_not_nil event
+      assert_equal "finalized", event.summary["status"]
+    ensure
+      FileUtils.rm_rf(repo_path) if repo_path
+    end
+
+    test "finalize! cleans up stale worktrees" do
+      repo_path = Dir.mktmpdir
+      worktrees_dir = File.join(repo_path, ".worktrees")
+      FileUtils.mkdir_p(worktrees_dir)
+      FileUtils.mkdir_p(File.join(worktrees_dir, "task-1"))
+
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.target_repo_path = repo_path
+        c.finalization_enabled = true
+      end
+
+      stub_spec_generation!
+      stub_task_breakdown!(times: 1)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      @orchestrator.call(nl_input: "Build a todo app")
+
+      refute Dir.exist?(worktrees_dir), "Expected .worktrees directory to be removed"
+    ensure
+      FileUtils.rm_rf(repo_path) if repo_path
+    end
+
+    test "finalize! runs final verification and records event" do
+      repo_path = Dir.mktmpdir
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.target_repo_path = repo_path
+        c.finalization_enabled = true
+        c.verification_checks = [
+          { "name" => "boot_check", "command" => "echo ok", "type" => "custom", "required" => true }
+        ]
+      end
+
+      stub_spec_generation!
+      stub_task_breakdown!(times: 1)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      VerificationRunner.expects(:call).with { |kwargs|
+        kwargs[:repo_path] == repo_path &&
+          kwargs[:checks].size == 1 &&
+          kwargs[:checks].first.name == "boot_check"
+      }.returns({ checks: [{ name: "boot_check", success: true }], all_passed: true, summary: "1 passed, 0 failed: boot_check=OK" })
+
+      result = @orchestrator.call(nl_input: "Build a todo app")
+
+      event = result.pipeline_events.find_by(event_type: :finalization_verification)
+      assert_not_nil event
+      assert event.summary["all_passed"]
+    ensure
+      FileUtils.rm_rf(repo_path) if repo_path
+    end
+
+    test "finalize! skipped when finalization_enabled is false" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.finalization_enabled = false
+      end
+
+      stub_spec_generation!
+      stub_task_breakdown!(times: 1)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      PostMergeHookRunner.expects(:call).never
+      VerificationRunner.expects(:call).never
+
+      result = @orchestrator.call(nl_input: "Build a todo app")
+      assert_equal "completed", result.status
+      assert_nil result.pipeline_events.find_by(event_type: :pipeline_finalized)
+    end
+
+    test "finalize! skipped when target_repo_path is nil" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.finalization_enabled = true
+        c.claude_code_repo_path = nil
+        c.post_merge_hooks = [
+          { "name" => "bundle_install", "trigger_paths" => [ "Gemfile" ], "command" => "bundle install" }
+        ]
+      end
+
+      stub_spec_generation!
+      stub_task_breakdown!(times: 1)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      PostMergeHookRunner.expects(:call).never
+
+      result = @orchestrator.call(nl_input: "Build a todo app")
+      assert_equal "completed", result.status
+      assert_nil result.pipeline_events.find_by(event_type: :pipeline_finalized)
+    end
+
+    test "finalize! failure is non-fatal and does not change pipeline status" do
+      repo_path = Dir.mktmpdir
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.target_repo_path = repo_path
+        c.finalization_enabled = true
+        c.post_merge_hooks = [
+          { "name" => "broken", "trigger_paths" => [ "*" ], "command" => "false" }
+        ]
+      end
+
+      stub_spec_generation!
+      stub_task_breakdown!(times: 1)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      PostMergeHookRunner.expects(:call).raises(RuntimeError, "something broke")
+
+      result = @orchestrator.call(nl_input: "Build a todo app")
+      assert_equal "completed", result.status
+    ensure
+      FileUtils.rm_rf(repo_path) if repo_path
+    end
+
     private
 
     def stub_spec_generation!(recipe_type: nil, supporting_recipe_types: nil)

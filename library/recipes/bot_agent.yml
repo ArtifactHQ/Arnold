@@ -27,6 +27,11 @@ framework:
   realtime: Action Cable (for web-based chat widget)
   deployment: Kamal 2
 
+finalization:
+  commands:
+    - bundle install
+    - bin/rails db:prepare
+
 verification:
   setup_commands:
     - bin/setup

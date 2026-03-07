@@ -25,6 +25,11 @@ framework:
   docs: Rswag (OpenAPI/Swagger) or manual OpenAPI spec
   deployment: Kamal 2
 
+finalization:
+  commands:
+    - bundle install
+    - bin/rails db:prepare
+
 verification:
   setup_commands:
     - bin/setup
