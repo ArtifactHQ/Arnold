@@ -54,6 +54,129 @@ module ArnoldPipeline
       assert_equal manager, engine.library_manager
     end
 
+    # --- build_checks (recipe merge) ---
+
+    test "build_checks includes recipe verification checks when library_manager available" do
+      manager = Library::Manager.new
+      engine = TierExecutionEngine.new(
+        executor: @executor,
+        tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL),
+        library_manager: manager
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build a web app")
+      pipeline_run.create_specification!(
+        content: "# Spec", version: 1,
+        structured_data: { "recipe_type" => "web_app" }
+      )
+
+      ArnoldPipeline.configure { |c| c.verification_checks = [] }
+
+      checks = engine.send(:build_checks, pipeline_run:)
+      solid_stack = checks.find { |c| c.type == :solid_stack }
+      assert_not_nil solid_stack, "Should include solid_stack from web_app recipe"
+      assert solid_stack.required?
+    end
+
+    test "build_checks merges config checks with recipe checks" do
+      manager = Library::Manager.new
+      engine = TierExecutionEngine.new(
+        executor: @executor,
+        tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL),
+        library_manager: manager
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build a web app")
+      pipeline_run.create_specification!(
+        content: "# Spec", version: 1,
+        structured_data: { "recipe_type" => "web_app" }
+      )
+
+      ArnoldPipeline.configure do |c|
+        c.verification_checks = [
+          { "name" => "Custom check", "command" => "echo ok", "type" => "custom" }
+        ]
+      end
+
+      checks = engine.send(:build_checks, pipeline_run:)
+      names = checks.map(&:name)
+      assert_includes names, "Solid stack"
+      assert_includes names, "Custom check"
+    end
+
+    test "build_checks user config overrides recipe check by name" do
+      manager = Library::Manager.new
+      engine = TierExecutionEngine.new(
+        executor: @executor,
+        tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL),
+        library_manager: manager
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build a web app")
+      pipeline_run.create_specification!(
+        content: "# Spec", version: 1,
+        structured_data: { "recipe_type" => "web_app" }
+      )
+
+      ArnoldPipeline.configure do |c|
+        c.verification_checks = [
+          { "name" => "Solid stack", "type" => "solid_stack", "required" => false }
+        ]
+      end
+
+      checks = engine.send(:build_checks, pipeline_run:)
+      solid_stacks = checks.select { |c| c.name == "Solid stack" }
+      assert_equal 1, solid_stacks.size, "Should deduplicate by name"
+      refute solid_stacks.first.required?, "User override should win"
+    end
+
+    test "build_checks works without library_manager (backward compatible)" do
+      ArnoldPipeline.configure do |c|
+        c.verification_checks = [
+          { "name" => "boot", "command" => "echo ok", "type" => "boot" }
+        ]
+      end
+
+      checks = @engine.send(:build_checks)
+      assert_equal 1, checks.size
+      assert_equal "boot", checks.first.name
+    end
+
+    test "build_checks returns empty when no recipe and no config checks" do
+      ArnoldPipeline.configure { |c| c.verification_checks = [] }
+      checks = @engine.send(:build_checks)
+      assert_empty checks
+    end
+
+    test "build_checks filters by tier when tier_number provided" do
+      manager = Library::Manager.new
+      engine = TierExecutionEngine.new(
+        executor: @executor,
+        tier_gate_check: @tier_gate_check,
+        logger: Logger.new(File::NULL),
+        library_manager: manager
+      )
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build a web app")
+      pipeline_run.create_specification!(
+        content: "# Spec", version: 1,
+        structured_data: { "recipe_type" => "web_app" }
+      )
+
+      ArnoldPipeline.configure { |c| c.verification_checks = [] }
+
+      # Tier 0: solid_stack should be included
+      checks_t0 = engine.send(:build_checks, pipeline_run:, tier_number: 0)
+      assert checks_t0.any? { |c| c.type == :solid_stack }
+
+      # Tier 3: solid_stack should be excluded (default_tier = 0)
+      checks_t3 = engine.send(:build_checks, pipeline_run:, tier_number: 3)
+      refute checks_t3.any? { |c| c.type == :solid_stack }
+    end
+
     # --- tier_task_resolved? ---
 
     test "tier_task_resolved? returns false when workflow_active is true" do
@@ -2096,7 +2219,7 @@ module ArnoldPipeline
       ArnoldPipeline.configure do |c|
         c.claude_code_repo_path = "/tmp/test-repo"
         c.verification_checks = [
-          { name: "boot", command: "bin/rails runner 'true'", type: :boot }
+          { name: "lint", command: "rubocop", type: :custom }
         ]
       end
 
@@ -2107,9 +2230,9 @@ module ArnoldPipeline
       )
 
       ArnoldPipeline::VerificationRunner.stubs(:call).returns({
-        checks: [ { name: "boot", type: :boot, success: true } ],
+        checks: [ { name: "lint", type: :custom, success: true } ],
         all_passed: true,
-        summary: "1 passed, 0 failed: boot=OK"
+        summary: "1 passed, 0 failed: lint=OK"
       })
 
       engine.send(:run_verification_checks, 3)
