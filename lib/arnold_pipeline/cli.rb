@@ -569,6 +569,7 @@ module ArnoldPipeline
         c.spec_test_generation_enabled = yaml_config[:spec_test_generation_enabled] unless yaml_config[:spec_test_generation_enabled].nil?
         c.spec_test_directory = yaml_config[:spec_test_directory] if yaml_config[:spec_test_directory]
         c.spec_test_persona = yaml_config[:spec_test_persona] if yaml_config[:spec_test_persona]
+        c.finalization_enabled = yaml_config[:finalization_enabled] unless yaml_config[:finalization_enabled].nil?
         c.event_logging_enabled = yaml_config[:event_logging_enabled] unless yaml_config[:event_logging_enabled].nil?
         c.verbose_event_logging = yaml_config[:verbose_event_logging] unless yaml_config[:verbose_event_logging].nil?
         if yaml_config[:workflow_branch_pattern]
