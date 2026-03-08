@@ -391,8 +391,57 @@ module ArnoldPipeline
         first_content = File.read(File.join(migrate_dir, "20260306011142_create_accounts.rb"))
         second_content = File.read(File.join(migrate_dir, "20260306011252_create_card_workflow_tables.rb"))
 
-        refute_includes first_content, "if_not_exists", "First migration should be unchanged"
-        assert_includes second_content, "if_not_exists: true", "Second migration should be patched"
+        refute_includes first_content, "force:", "First migration should be unchanged"
+        assert_includes second_content, "force: :cascade", "Second migration should be patched"
+      end
+    end
+
+    test "resolve_duplicate_create_tables! patches double-quoted table names correctly" do
+      Dir.mktmpdir("dup_quoted") do |tmpdir|
+        system("git", "init", chdir: tmpdir, out: File::NULL, err: File::NULL)
+        system("git", "-C", tmpdir, "commit", "--allow-empty", "-m", "init", out: File::NULL, err: File::NULL)
+
+        migrate_dir = File.join(tmpdir, "db", "migrate")
+        FileUtils.mkdir_p(migrate_dir)
+
+        first = <<~RUBY
+          class CreateAccounts < ActiveRecord::Migration[8.1]
+            def change
+              create_table "accounts" do |t|
+                t.timestamps
+              end
+            end
+          end
+        RUBY
+
+        second = <<~RUBY
+          class CreateAuthTables < ActiveRecord::Migration[8.1]
+            def change
+              create_table "accounts" do |t|
+                t.string :name, null: false
+                t.timestamps
+              end
+            end
+          end
+        RUBY
+
+        File.write(File.join(migrate_dir, "20260306011142_create_accounts.rb"), first)
+        File.write(File.join(migrate_dir, "20260306011252_create_auth_tables.rb"), second)
+        system("git", "-C", tmpdir, "add", ".", out: File::NULL)
+        system("git", "-C", tmpdir, "commit", "-m", "add migrations", out: File::NULL, err: File::NULL)
+
+        ArnoldPipeline.configure { |c| c.claude_code_repo_path = tmpdir }
+
+        @engine.send(:resolve_duplicate_create_tables!)
+
+        first_content = File.read(File.join(migrate_dir, "20260306011142_create_accounts.rb"))
+        second_content = File.read(File.join(migrate_dir, "20260306011252_create_auth_tables.rb"))
+
+        refute_includes first_content, "force:", "First migration should be unchanged"
+        assert_includes second_content, 'create_table "accounts", force: :cascade',
+          "Second migration should be patched with valid Ruby (closing quote before comma)"
+        refute_includes second_content, 'create_table "accounts,',
+          "Comma must not appear inside the string literal"
       end
     end
 
@@ -436,10 +485,10 @@ module ArnoldPipeline
         @engine.send(:resolve_duplicate_create_tables!)
 
         content = File.read(File.join(migrate_dir, "20260306011252_create_card_workflow_tables.rb"))
-        assert_includes content, "create_table :accounts, if_not_exists: true"
+        assert_includes content, "create_table :accounts, force: :cascade"
         assert_match(/create_table :columns do/, content)
         assert_match(/create_table :closures do/, content)
-        refute_includes content.sub(/create_table :accounts.*$/, ""), "if_not_exists",
+        refute_includes content.sub(/create_table :accounts.*$/, ""), "force:",
           "Only :accounts should be patched"
       end
     end
@@ -475,7 +524,7 @@ module ArnoldPipeline
       end
     end
 
-    test "resolve_duplicate_create_tables! skips tables already having if_not_exists" do
+    test "resolve_duplicate_create_tables! skips tables already having force or if_not_exists" do
       Dir.mktmpdir("dup_skip") do |tmpdir|
         system("git", "init", chdir: tmpdir, out: File::NULL, err: File::NULL)
         system("git", "-C", tmpdir, "commit", "--allow-empty", "-m", "init", out: File::NULL, err: File::NULL)
@@ -486,7 +535,7 @@ module ArnoldPipeline
         File.write(File.join(migrate_dir, "20260306011001_create_accounts.rb"),
           "class CreateAccounts < ActiveRecord::Migration[8.1]\n  def change\n    create_table :accounts do |t|\n      t.timestamps\n    end\n  end\nend\n")
         File.write(File.join(migrate_dir, "20260306011002_create_accounts_again.rb"),
-          "class CreateAccountsAgain < ActiveRecord::Migration[8.1]\n  def change\n    create_table :accounts, if_not_exists: true do |t|\n      t.timestamps\n    end\n  end\nend\n")
+          "class CreateAccountsAgain < ActiveRecord::Migration[8.1]\n  def change\n    create_table :accounts, force: :cascade do |t|\n      t.timestamps\n    end\n  end\nend\n")
         system("git", "-C", tmpdir, "add", ".", out: File::NULL)
         system("git", "-C", tmpdir, "commit", "-m", "migrations", out: File::NULL, err: File::NULL)
 
@@ -496,7 +545,7 @@ module ArnoldPipeline
         @engine.send(:resolve_duplicate_create_tables!)
         after_sha, = Open3.capture2("git", "-C", tmpdir, "rev-parse", "HEAD")
 
-        assert_equal before_sha, after_sha, "No commit needed when duplicate already has if_not_exists"
+        assert_equal before_sha, after_sha, "No commit needed when duplicate already has force:"
       end
     end
 
@@ -2901,6 +2950,318 @@ module ArnoldPipeline
       assert_not_nil corrective
       assert_includes corrective.description, "## Verification Output"
       assert_includes corrective.description, "FAIL UserTest#test_validates_email"
+    end
+
+    # --- tier_retries reset ---
+
+    test "clear_tier_retries! removes tier_retries from metadata on execute_tiers! entry" do
+      pipeline_run = PipelineRun.create!(
+        nl_input: "Build an app",
+        metadata: { "tier_retries" => { "0" => 3 }, "other_key" => "preserved" }
+      )
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      @engine.execute_tiers!(pipeline_run)
+
+      pipeline_run.reload
+      refute pipeline_run.metadata.key?("tier_retries"), "tier_retries should be cleared"
+      assert_equal "preserved", pipeline_run.metadata["other_key"], "other metadata should be preserved"
+    end
+
+    test "tier_retries reset allows full retries on resume" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 2
+        c.tier_gate_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      # Simulate a pipeline that was paused with exhausted retries
+      pipeline_run = PipelineRun.create!(
+        nl_input: "Build an app",
+        metadata: { "tier_retries" => { "0" => 2 } }
+      )
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      gate_fail = {
+        "pass" => false,
+        "issues" => [ "test failure" ],
+        "corrective_tasks" => [ { "title" => "Fix test", "description" => "fix" } ],
+        "context_summary" => "context"
+      }
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @tier_gate_check.stubs(:call).returns(gate_fail)
+
+      # execute_tiers! should clear tier_retries, giving full retry budget
+      assert_raises(TierGateError) do
+        @engine.execute_tiers!(pipeline_run)
+      end
+
+      pipeline_run.reload
+      # Should have exhausted 2 retries (not 0 — the counter was reset, not carried over)
+      assert_equal 2, pipeline_run.metadata.dig("tier_retries", "0")
+    end
+
+    # --- force_all hooks in corrective loop ---
+
+    test "corrective loop force-triggers hooks regardless of changed_files" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 1
+        c.tier_gate_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = "/tmp/test-repo"
+        c.post_merge_hooks = [
+          { name: "schema", trigger_paths: [ "db/migrate/**" ], command: "bin/rails db:prepare" }
+        ]
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      gate_fail = {
+        "pass" => false,
+        "issues" => [ "migration issue" ],
+        "corrective_tasks" => [
+          { "title" => "Fix migration", "description" => "fix" }
+        ],
+        "context_summary" => "context"
+      }
+      gate_pass = { "pass" => true, "issues" => [], "context_summary" => "Fixed.", "corrective_tasks" => [] }
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @tier_gate_check.stubs(:call).returns(gate_pass)
+
+      force_all_seen = false
+      ArnoldPipeline::PostMergeHookRunner.stubs(:call).with { |**kwargs|
+        force_all_seen = true if kwargs[:force_all]
+        true
+      }.returns([])
+
+      @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [], gate_fail, [])
+
+      assert force_all_seen, "PostMergeHookRunner should be called with force_all: true in corrective loop"
+    end
+
+    # --- Remediation pass ---
+
+    test "remediation pass re-runs hooks and verification when required checks fail" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = "/tmp/test_repo"
+        c.verification_checks = [
+          { name: "boot", command: "bin/rails runner 'true'", type: :boot, required: true }
+        ]
+        c.post_merge_hooks = [
+          { name: "schema", trigger_paths: [ "db/migrate/**" ], command: "bin/rails db:prepare" }
+        ]
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      # First verification fails, second (after remediation) passes
+      verification_call_count = 0
+      ArnoldPipeline::VerificationRunner.stubs(:call).with { |**|
+        verification_call_count += 1
+        true
+      }.returns(
+        { all_passed: false, checks: [ { name: "boot", type: :boot, required: true, success: false, exit_code: 1, stdout: "", stderr: "PendingMigrationError" } ] },
+        { all_passed: true, checks: [ { name: "boot", type: :boot, required: true, success: true, exit_code: 0, stdout: "", stderr: "" } ] }
+      )
+
+      hook_call_count = 0
+      ArnoldPipeline::PostMergeHookRunner.stubs(:call).with { |**|
+        hook_call_count += 1
+        true
+      }.returns([])
+
+      @engine.execute_tiers!(pipeline_run)
+
+      assert_equal 2, verification_call_count, "Verification should run twice (initial + remediation)"
+      assert_equal 2, hook_call_count, "Hooks should run twice (initial + remediation force_all)"
+    end
+
+    test "remediation pass skipped when all required checks pass" do
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+        c.claude_code_repo_path = "/tmp/test_repo"
+        c.verification_checks = [
+          { name: "boot", command: "bin/rails runner 'true'", type: :boot, required: true }
+        ]
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+
+      verification_call_count = 0
+      ArnoldPipeline::VerificationRunner.stubs(:call).with { |**|
+        verification_call_count += 1
+        true
+      }.returns(
+        { all_passed: true, checks: [ { name: "boot", type: :boot, required: true, success: true, exit_code: 0, stdout: "", stderr: "" } ] }
+      )
+
+      @engine.execute_tiers!(pipeline_run)
+
+      assert_equal 1, verification_call_count, "Verification should only run once when all required checks pass"
+    end
+
+    # --- Hook failures in corrective task descriptions ---
+
+    test "build_corrective_description includes hook failures when present" do
+      hook_results = [
+        { name: "schema", triggered: true, success: false, exit_code: 1, stdout: "", stderr: "migration error" },
+        { name: "lint", triggered: true, success: true, exit_code: 0, stdout: "ok", stderr: "" }
+      ]
+
+      result = @engine.send(:build_corrective_description,
+        base_description: "Fix the build",
+        gate_issues: [],
+        original_tier_tasks: [],
+        hook_results: hook_results
+      )
+
+      assert_includes result, "## Hook Results"
+      assert_includes result, "Hook 'schema' FAILED (exit code: 1)"
+      assert_includes result, "migration error"
+      refute_includes result, "Hook 'lint'", "Successful hooks should not appear"
+    end
+
+    test "build_corrective_description omits hook results when nil" do
+      result = @engine.send(:build_corrective_description,
+        base_description: "Fix the build",
+        gate_issues: [],
+        original_tier_tasks: [],
+        hook_results: nil
+      )
+
+      refute_includes result, "## Hook Results"
+    end
+
+    test "build_corrective_description omits hook results when all hooks succeeded" do
+      hook_results = [
+        { name: "schema", triggered: true, success: true, exit_code: 0, stdout: "ok", stderr: "" }
+      ]
+
+      result = @engine.send(:build_corrective_description,
+        base_description: "Fix the build",
+        gate_issues: [],
+        original_tier_tasks: [],
+        hook_results: hook_results
+      )
+
+      refute_includes result, "## Hook Results"
+    end
+
+    # --- Corrective task deduplication ---
+
+    test "duplicate corrective tasks skipped by title" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 2
+        c.tier_gate_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+      # Pre-existing corrective task from a previous retry
+      pipeline_run.tasks.create!(title: "Fix application boot failure", position: 1, tier: 0)
+
+      gate_fail = {
+        "pass" => false,
+        "issues" => [ "boot failure" ],
+        "corrective_tasks" => [
+          { "title" => "Fix application boot failure", "description" => "fix boot" },
+          { "title" => "Fix new issue", "description" => "fix new" }
+        ],
+        "context_summary" => "context"
+      }
+      gate_pass = { "pass" => true, "issues" => [], "context_summary" => "Fixed.", "corrective_tasks" => [] }
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @tier_gate_check.stubs(:call).returns(gate_pass)
+
+      @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [], gate_fail, [])
+
+      # "Fix application boot failure" should NOT be duplicated
+      boot_tasks = pipeline_run.tasks.where(title: "Fix application boot failure")
+      assert_equal 1, boot_tasks.count, "Duplicate corrective task should not be created"
+
+      # "Fix new issue" should be created
+      new_tasks = pipeline_run.tasks.where(title: "Fix new issue")
+      assert_equal 1, new_tasks.count, "Non-duplicate corrective task should be created"
+    end
+
+    test "non-duplicate corrective tasks still created alongside duplicates" do
+      ArnoldPipeline.configure do |c|
+        c.max_iterations = 3
+        c.max_tier_retries = 1
+        c.tier_gate_enabled = true
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      pipeline_run = PipelineRun.create!(nl_input: "Build an app")
+      pipeline_run.tasks.create!(title: "Setup DB", position: 0, tier: 0)
+      pipeline_run.tasks.create!(title: "Existing fix", position: 1, tier: 0)
+
+      gate_fail = {
+        "pass" => false,
+        "issues" => [ "issues" ],
+        "corrective_tasks" => [
+          { "title" => "Existing fix", "description" => "dup" },
+          { "title" => "Brand new fix A", "description" => "new a" },
+          { "title" => "Brand new fix B", "description" => "new b" }
+        ],
+        "context_summary" => "context"
+      }
+      gate_pass = { "pass" => true, "issues" => [], "context_summary" => "Fixed.", "corrective_tasks" => [] }
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @tier_gate_check.stubs(:call).returns(gate_pass)
+
+      @engine.send(:handle_tier_gate_failure!, pipeline_run, 0, [], gate_fail, [])
+
+      # Only the 2 new tasks should be created (not the duplicate)
+      tier_0_tasks = pipeline_run.tasks.where(tier: 0)
+      assert_equal 4, tier_0_tasks.count, "Should have 2 original + 2 new (not 3 corrective)"
+
+      assert pipeline_run.tasks.exists?(title: "Brand new fix A")
+      assert pipeline_run.tasks.exists?(title: "Brand new fix B")
     end
 
     private

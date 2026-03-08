@@ -16,7 +16,8 @@ module ArnoldPipeline
     STANDALONE_DB_PATH = File.join(STANDALONE_DB_DIR, "pipeline.sqlite3")
     USER_CONFIG_PATH = File.join(STANDALONE_DB_DIR, "config.yml")
 
-    desc "run DESCRIPTION", "Run the full pipeline from a natural language description"
+    desc "run [DESCRIPTION]", "Run the full pipeline from a natural language description"
+    option :file, type: :string, aliases: "-f", desc: "Read description from a file instead of argument"
     option :config, type: :string, desc: "Path to YAML config file"
     option :provider, type: :string, desc: "LLM provider (anthropic or openai)"
     option :model, type: :string, desc: "LLM model name"
@@ -32,13 +33,14 @@ module ArnoldPipeline
     option :stop_after, type: :string, desc: "Stop after stage: spec, tasks, executed"
     option :preview, type: :boolean, default: false, aliases: [ "--dry-run" ], desc: "Generate spec and tasks without publishing to execution provider. Note: makes LLM API calls and creates local database records."
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
-    def run_pipeline(description)
+    def run_pipeline(description = nil)
       if description == "--help" || description == "-h"
         invoke :help, [ "run" ]
         return
       end
-      if description.strip.empty?
-        say_error "Description cannot be empty", :red
+      description = resolve_description(description, options[:file])
+      if description.nil? || description.strip.empty?
+        say_error "Provide a description argument or use --file/-f", :red
         raise SystemExit.new(1)
       end
       with_error_handling do
@@ -597,6 +599,18 @@ module ArnoldPipeline
       end
 
       value.to_sym
+    end
+
+    def resolve_description(argument, file_path)
+      if file_path
+        unless File.exist?(file_path)
+          say_error "File not found: #{file_path}", :red
+          raise SystemExit.new(1)
+        end
+        File.read(file_path).strip
+      else
+        argument
+      end
     end
 
     def with_error_handling

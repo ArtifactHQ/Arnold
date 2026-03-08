@@ -1,4 +1,5 @@
 require "test_helper"
+require "tempfile"
 require "arnold_pipeline/cli"
 require "arnold_pipeline/orchestrator"
 require "arnold_pipeline/delta_presenter"
@@ -369,7 +370,45 @@ module ArnoldPipeline
 
     test "run with empty description shows error message on stderr" do
       stderr_output = capture_stderr_through_exit { Cli.start([ "run", "" ]) }
-      assert_match(/Description cannot be empty/, stderr_output)
+      assert_match(/Provide a description argument or use --file/, stderr_output)
+    end
+
+    test "run with no argument and no --file shows error message on stderr" do
+      stderr_output = capture_stderr_through_exit { Cli.start([ "run" ]) }
+      assert_match(/Provide a description argument or use --file/, stderr_output)
+    end
+
+    test "run --file reads description from file" do
+      tmpfile = Tempfile.new([ "arnold_desc", ".txt" ])
+      tmpfile.write("Build a recipe sharing platform")
+      tmpfile.close
+
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      orchestrator_mock = mock("orchestrator")
+      orchestrator_mock.expects(:call).with(nl_input: "Build a recipe sharing platform", stop_after: nil).returns(
+        PipelineRun.create!(nl_input: "Build a recipe sharing platform", status: :completed)
+      )
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(orchestrator_mock)
+
+      capture_output { Cli.start([ "run", "--file", tmpfile.path ]) }
+    ensure
+      tmpfile&.unlink
+    end
+
+    test "run --file with nonexistent file exits with error" do
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start([ "run", "--file", "/tmp/no_such_file_arnold.txt" ]) }
+      end
+    end
+
+    test "run --file with nonexistent file shows error message" do
+      stderr_output = capture_stderr_through_exit { Cli.start([ "run", "--file", "/tmp/no_such_file_arnold.txt" ]) }
+      assert_match(/File not found/, stderr_output)
     end
 
     test "tasks outputs task list" do

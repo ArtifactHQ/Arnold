@@ -318,6 +318,46 @@ module ArnoldPipeline
       assert_includes status_output, "preexisting.txt"
     end
 
+    test "force_all: true triggers hooks regardless of changed_files" do
+      hook = PostMergeHook.new(
+        name: "schema",
+        trigger_paths: [ "db/migrate/**" ],
+        command: "echo force_triggered"
+      )
+
+      # changed_files don't match trigger_paths, but force_all overrides
+      results = PostMergeHookRunner.call(
+        repo_path: @tmpdir,
+        changed_files: [ "app/models/user.rb" ],
+        hooks: [ hook ],
+        force_all: true
+      )
+
+      result = results.first
+      assert_equal "schema", result[:name]
+      assert result[:triggered], "Hook should be triggered with force_all: true"
+      assert result[:success]
+      assert_includes result[:stdout], "force_triggered"
+    end
+
+    test "force_all: false respects trigger_paths (default behavior)" do
+      hook = PostMergeHook.new(
+        name: "schema",
+        trigger_paths: [ "db/migrate/**" ],
+        command: "echo should_not_run"
+      )
+
+      results = PostMergeHookRunner.call(
+        repo_path: @tmpdir,
+        changed_files: [ "app/models/user.rb" ],
+        hooks: [ hook ],
+        force_all: false
+      )
+
+      result = results.first
+      refute result[:triggered], "Hook should not be triggered when force_all is false and paths don't match"
+    end
+
     test "no auto-commit when hook leaves no new dirty files" do
       hook = PostMergeHook.new(
         name: "clean",
