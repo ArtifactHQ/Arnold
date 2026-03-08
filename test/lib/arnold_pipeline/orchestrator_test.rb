@@ -976,7 +976,7 @@ module ArnoldPipeline
           kwargs[:repo_path] == repo_path &&
           kwargs[:hooks].size == 1 &&
           kwargs[:hooks].first.name == "bundle_install"
-      }.returns([{ name: "bundle_install", triggered: true, success: true }])
+      }.returns([ { name: "bundle_install", triggered: true, success: true } ])
 
       result = @orchestrator.call(nl_input: "Build a todo app")
       assert_equal "completed", result.status
@@ -1040,7 +1040,7 @@ module ArnoldPipeline
         kwargs[:repo_path] == repo_path &&
           kwargs[:checks].size == 1 &&
           kwargs[:checks].first.name == "boot_check"
-      }.returns({ checks: [{ name: "boot_check", success: true }], all_passed: true, summary: "1 passed, 0 failed: boot_check=OK" })
+      }.returns({ checks: [ { name: "boot_check", success: true } ], all_passed: true, summary: "1 passed, 0 failed: boot_check=OK" })
 
       result = @orchestrator.call(nl_input: "Build a todo app")
 
