@@ -1128,6 +1128,93 @@ module ArnoldPipeline
       FileUtils.rm_rf(repo_path) if repo_path
     end
 
+    # --- build_finalization_checks (recipe merge) ---
+
+    test "build_finalization_checks includes recipe finalization checks" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build a web app")
+      pipeline_run.create_specification!(
+        content: "# Spec", version: 1,
+        structured_data: { "recipe_type" => "web_app" }
+      )
+
+      config = ArnoldPipeline.configuration
+      config.verification_checks = []
+
+      checks = @orchestrator.send(:build_finalization_checks, config, pipeline_run)
+      boot = checks.find { |c| c.name == "Boot check" }
+      assert_not_nil boot, "Should include Boot check from web_app recipe finalization"
+      assert_equal :custom, boot.type
+    end
+
+    test "build_finalization_checks merges recipe and config checks" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build a web app")
+      pipeline_run.create_specification!(
+        content: "# Spec", version: 1,
+        structured_data: { "recipe_type" => "web_app" }
+      )
+
+      config = ArnoldPipeline.configuration
+      config.verification_checks = [
+        { "name" => "Custom final", "command" => "echo custom", "type" => "custom" }
+      ]
+
+      checks = @orchestrator.send(:build_finalization_checks, config, pipeline_run)
+      names = checks.map(&:name)
+      assert_includes names, "Boot check"
+      assert_includes names, "Custom final"
+    end
+
+    test "build_finalization_checks user config overrides recipe check by name" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build a web app")
+      pipeline_run.create_specification!(
+        content: "# Spec", version: 1,
+        structured_data: { "recipe_type" => "web_app" }
+      )
+
+      config = ArnoldPipeline.configuration
+      config.verification_checks = [
+        { "name" => "Boot check", "command" => "echo override", "type" => "custom", "required" => false }
+      ]
+
+      checks = @orchestrator.send(:build_finalization_checks, config, pipeline_run)
+      boot_checks = checks.select { |c| c.name == "Boot check" }
+      assert_equal 1, boot_checks.size, "Should deduplicate by name"
+      assert_equal "echo override", boot_checks.first.command, "User override should win"
+    end
+
+    test "build_finalization_checks excludes test_suite type" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build a web app")
+      pipeline_run.create_specification!(
+        content: "# Spec", version: 1,
+        structured_data: { "recipe_type" => "web_app" }
+      )
+
+      config = ArnoldPipeline.configuration
+      config.verification_checks = [
+        { "name" => "Tests", "command" => "bin/rails test", "type" => "test_suite" }
+      ]
+
+      checks = @orchestrator.send(:build_finalization_checks, config, pipeline_run)
+      refute checks.any? { |c| c.type == :test_suite }, "test_suite should be excluded from finalization"
+    end
+
+    test "build_finalization_checks works without recipe" do
+      pipeline_run = PipelineRun.create!(nl_input: "Build something")
+      pipeline_run.create_specification!(
+        content: "# Spec", version: 1,
+        structured_data: {}
+      )
+
+      config = ArnoldPipeline.configuration
+      config.verification_checks = [
+        { "name" => "Custom", "command" => "echo ok", "type" => "custom" }
+      ]
+
+      checks = @orchestrator.send(:build_finalization_checks, config, pipeline_run)
+      assert_equal 1, checks.size
+      assert_equal "Custom", checks.first.name
+    end
+
     private
 
     def stub_spec_generation!(recipe_type: nil, supporting_recipe_types: nil)

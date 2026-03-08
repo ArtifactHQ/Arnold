@@ -11,10 +11,6 @@ require "arnold_pipeline/analysis_loop"
 require "arnold_pipeline/resume_inferrer"
 require "arnold_pipeline/pipeline_event_recorder"
 require "arnold_pipeline/delta_merger"
-require "arnold_pipeline/post_merge_hook"
-require "arnold_pipeline/post_merge_hook_runner"
-require "arnold_pipeline/verification_check"
-require "arnold_pipeline/verification_runner"
 require "open3"
 
 module ArnoldPipeline
@@ -44,7 +40,7 @@ module ArnoldPipeline
       @tier_gate_check = tier_gate_check || Agents::TierGateCheck.new(logger: @logger)
       @spec_iterator = spec_iterator || Agents::SpecIterator.new(logger: @logger)
       @delta_merger = DeltaMerger.new(logger: @logger)
-      @tier_execution_engine = TierExecutionEngine.new(executor: @executor, tier_gate_check: @tier_gate_check, logger: @logger)
+      @tier_execution_engine = TierExecutionEngine.new(executor: @executor, tier_gate_check: @tier_gate_check, logger: @logger, library_manager: @library_manager)
     end
 
     def call(nl_input:, stop_after: nil, pipeline_run: nil)
@@ -178,7 +174,7 @@ module ArnoldPipeline
       @event_recorder = PipelineEventRecorder.new(pipeline_run:)
       @tier_execution_engine = TierExecutionEngine.new(
         executor: @executor, tier_gate_check: @tier_gate_check, logger: @logger,
-        event_recorder: @event_recorder
+        event_recorder: @event_recorder, library_manager: @library_manager
       )
       start_index = STAGES.index(from)
       @current_stage = nil
@@ -488,7 +484,7 @@ module ArnoldPipeline
     end
 
     def run_final_verification!(pipeline_run, repo_path, config)
-      checks = build_finalization_checks(config)
+      checks = build_finalization_checks(config, pipeline_run)
       return if checks.empty?
 
       results = VerificationRunner.call(repo_path: repo_path, checks: checks, logger: logger)
@@ -520,7 +516,35 @@ module ArnoldPipeline
       end
     end
 
-    def build_finalization_checks(config)
+    def build_finalization_checks(config, pipeline_run = nil)
+      recipe_checks = resolve_recipe_finalization_checks(pipeline_run)
+      config_checks = resolve_config_finalization_checks(config)
+
+      # Merge: recipe first, config overlays by name
+      merged = {}
+      recipe_checks.each { |c| merged[c.name] = c }
+      config_checks.each { |c| merged[c.name] = c }
+
+      # Filter: only checks eligible for finalization
+      merged.values.select(&:eligible_for_finalization?)
+    end
+
+    def resolve_recipe_finalization_checks(pipeline_run)
+      recipe = resolve_primary_recipe(pipeline_run)
+      return [] unless recipe
+
+      raw_checks = recipe.finalization.fetch("checks", [])
+      raw_checks.map do |c|
+        VerificationCheck.new(
+          name: c["name"] || c[:name],
+          command: c["command"] || c[:command],
+          type: c["type"] || c[:type] || :custom,
+          required: c["required"] || c[:required] || false
+        )
+      end
+    end
+
+    def resolve_config_finalization_checks(config)
       return [] unless config.verification_checks.present?
 
       config.verification_checks.map do |c|

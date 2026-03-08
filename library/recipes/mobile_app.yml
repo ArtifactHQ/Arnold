@@ -32,8 +32,17 @@ finalization:
   commands:
     - bundle install
     - bin/rails db:prepare
+  checks:
+    - name: Boot check
+      command: "bin/rails runner 'puts Rails.version'"
+      type: custom
+      required: true
 
 verification:
+  checks:
+    - name: Solid stack
+      type: solid_stack
+      required: true
   setup_commands:
     - bin/setup
   boot_command: bin/rails server -p 3000 -d

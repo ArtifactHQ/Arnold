@@ -70,6 +70,36 @@ module ArnoldPipeline
         end
       end
 
+      test "web_app recipe has verification checks including solid_stack" do
+        recipe = @recipes.find { |r| r.type == "web_app" }
+        checks = recipe.verification.fetch("checks", [])
+        solid_stack = checks.find { |c| c["type"] == "solid_stack" }
+        assert_not_nil solid_stack, "web_app recipe should have solid_stack check"
+        assert solid_stack["required"], "solid_stack should be required"
+      end
+
+      test "web_app recipe has finalization checks including boot" do
+        recipe = @recipes.find { |r| r.type == "web_app" }
+        checks = recipe.finalization.fetch("checks", [])
+        boot = checks.find { |c| c["type"] == "custom" }
+        assert_not_nil boot, "web_app recipe should have a finalization boot check"
+      end
+
+      test "cli_tool recipe has no verification checks" do
+        recipe = @recipes.find { |r| r.type == "cli_tool" }
+        checks = recipe.verification.fetch("checks", [])
+        assert_empty checks, "cli_tool recipe should have no verification checks"
+      end
+
+      test "all recipes with solid_stack check mark it as required" do
+        @recipes.each do |recipe|
+          checks = recipe.verification.fetch("checks", [])
+          solid_stack = checks.find { |c| c["type"] == "solid_stack" }
+          next unless solid_stack
+          assert solid_stack["required"], "#{recipe.type}: solid_stack check should be required"
+        end
+      end
+
       test "no section has an unrecognized phase value" do
         recognized_phases = [ nil, "pipeline", "post_pipeline" ]
 
