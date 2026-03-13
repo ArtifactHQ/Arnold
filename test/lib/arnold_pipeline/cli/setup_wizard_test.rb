@@ -572,7 +572,7 @@ module ArnoldPipeline
 
       # --- reconcile_model_with_provider ---
 
-      test "model updates to gpt-4o when provider changes to openai" do
+      test "model updates to gpt-5-mini-2025-08-07 when provider changes to openai" do
         wizard = SetupWizard.new(output: StringIO.new)
 
         settings = [
@@ -582,7 +582,7 @@ module ArnoldPipeline
 
         result = wizard.send(:reconcile_model_with_provider, settings)
         model = result.find { |s| s.key == :llm_model }
-        assert_equal "gpt-4o", model.value
+        assert_equal "gpt-5-mini-2025-08-07", model.value
         assert_equal :default, model.source
       end
 
@@ -591,7 +591,7 @@ module ArnoldPipeline
 
         settings = [
           SetupWizard::Setting.new(key: :llm_provider, label: "Planning AI (llm_provider)", value: "anthropic", source: :user_input),
-          SetupWizard::Setting.new(key: :llm_model, label: "AI model (llm_model)", value: "gpt-4o", source: :default)
+          SetupWizard::Setting.new(key: :llm_model, label: "AI model (llm_model)", value: "gpt-5-mini-2025-08-07", source: :default)
         ]
 
         result = wizard.send(:reconcile_model_with_provider, settings)
@@ -678,7 +678,7 @@ module ArnoldPipeline
 
         result = wizard.confirm_and_save!(settings)
         model = result.find { |s| s.key == :llm_model }
-        assert_equal "gpt-4o", model.value
+        assert_equal "gpt-5-mini-2025-08-07", model.value
       ensure
         FileUtils.rm_rf(config_dir)
       end
@@ -716,7 +716,7 @@ module ArnoldPipeline
 
         saved = YAML.safe_load_file(config_path, symbolize_names: true)
         assert_equal "openai", saved[:llm_provider]
-        assert_equal "gpt-4o", saved[:llm_model], "Model should be gpt-4o after user selected OpenAI provider"
+        assert_equal "gpt-5-mini-2025-08-07", saved[:llm_model], "Model should be gpt-5-mini-2025-08-07 after user selected OpenAI provider"
       ensure
         FileUtils.rm_rf(config_dir)
       end
