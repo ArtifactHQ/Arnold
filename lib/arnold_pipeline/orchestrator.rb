@@ -598,7 +598,6 @@ module ArnoldPipeline
       logger.warn { "[Arnold] Failed to capture baseline SHA: #{e.message}" }
     end
 
-<<<<<<< HEAD
     def finalize!(pipeline_run)
       logger.info { "[Arnold] Running post-pipeline finalization..." }
       config = ArnoldPipeline.configuration
