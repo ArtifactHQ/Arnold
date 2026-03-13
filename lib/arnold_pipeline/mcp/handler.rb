@@ -16,6 +16,7 @@ require_relative "tools/explain_recipe"
 require_relative "tools/detect_drift"
 require_relative "tools/resolve_drift"
 require_relative "tools/create_product"
+require_relative "tools/init_project"
 require_relative "tools/explore_persona"
 require_relative "tools/explore_capability"
 require_relative "tools/what_if"
@@ -86,6 +87,7 @@ module ArnoldPipeline
         register(Tools::DetectDrift)
         register(Tools::ResolveDrift)
         register(Tools::CreateProduct)
+        register(Tools::InitProject)
         register(Tools::ExplorePersona)
         register(Tools::ExploreCapability)
         register(Tools::WhatIf)
