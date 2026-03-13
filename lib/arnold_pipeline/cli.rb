@@ -317,7 +317,7 @@ module ArnoldPipeline
         raise SystemExit.new(1)
       end
 
-      spec = run_record.specification
+      spec = run_record.specification || run_record.as_built_specification
       unless spec
         say_error "No specification found for pipeline run ##{id}", :yellow
         raise SystemExit.new(1)
@@ -460,7 +460,7 @@ module ArnoldPipeline
         profile = orchestrator.analyze_codebase!(
           repo_path:,
           description:,
-          reference_materials: options[:reference_materials] || []
+          reference_materials: options[:reference_materials] || ArnoldPipeline.configuration.reference_materials
         )
 
         if options[:json]

@@ -185,6 +185,19 @@ module ArnoldPipeline
         assert_equal [], result[:test_names]
       end
 
+      test "returns empty result on timeout" do
+        Open3.stubs(:capture3).raises(Timeout::Error.new("execution expired"))
+
+        result = TestNameCollector.call(
+          repo_path: @repo_path,
+          stack_fingerprint: @rails_fingerprint
+        )
+
+        assert_equal [], result[:test_names]
+        assert_equal({}, result[:grouped_by_concern])
+        assert_nil result[:framework]
+      end
+
       test "handles string keys in stack_fingerprint" do
         collector = TestNameCollector.new(
           repo_path: @repo_path,

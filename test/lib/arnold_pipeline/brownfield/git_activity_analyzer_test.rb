@@ -141,8 +141,7 @@ module ArnoldPipeline
           "git", "log", "--name-only",
           "--format=---COMMIT---%H %aI %an",
           "--since=3 months ago",
-          chdir: @repo_path,
-          timeout: 30
+          chdir: @repo_path
         ).returns([ "", "", @success_status ])
 
         GitActivityAnalyzer.call(repo_path: @repo_path, since: "3 months ago")
@@ -153,8 +152,7 @@ module ArnoldPipeline
           "git", "log", "--name-only",
           "--format=---COMMIT---%H %aI %an",
           "--since=6 months ago",
-          chdir: @repo_path,
-          timeout: 30
+          chdir: @repo_path
         ).returns([ "", "", @success_status ])
 
         GitActivityAnalyzer.call(repo_path: @repo_path)

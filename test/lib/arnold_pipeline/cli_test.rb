@@ -101,6 +101,20 @@ module ArnoldPipeline
       end
     end
 
+    test "spec falls back to as_built_specification for brownfield runs" do
+      run_record = PipelineRun.create!(nl_input: "Analyze existing app", status: :completed)
+      run_record.create_as_built_specification!(
+        content: "# As-Built Spec\n\nExisting features.",
+        spec_type: "as_built",
+        version: 1
+      )
+
+      output = capture_output { Cli.start([ "spec", run_record.id.to_s ]) }
+
+      assert_match(/# As-Built Spec/, output)
+      assert_match(/Existing features/, output)
+    end
+
     test "version shows version string" do
       output = capture_output { Cli.start([ "version" ]) }
       assert_match(/arnold_pipeline #{ArnoldPipeline::VERSION}/, output)

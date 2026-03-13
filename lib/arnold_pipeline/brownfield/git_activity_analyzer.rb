@@ -1,4 +1,5 @@
 require "open3"
+require "timeout"
 
 module ArnoldPipeline
   module Brownfield
@@ -28,17 +29,18 @@ module ArnoldPipeline
       COMMIT_DELIMITER = "---COMMIT---"
 
       def run_git_log
-        stdout, _stderr, status = Open3.capture3(
-          "git", "log", "--name-only",
-          "--format=#{COMMIT_DELIMITER}%H %aI %an",
-          "--since=#{@since}",
-          chdir: @repo_path,
-          timeout: TIMEOUT
-        )
+        stdout, _stderr, status = Timeout.timeout(TIMEOUT) do
+          Open3.capture3(
+            "git", "log", "--name-only",
+            "--format=#{COMMIT_DELIMITER}%H %aI %an",
+            "--since=#{@since}",
+            chdir: @repo_path
+          )
+        end
         return nil unless status.success?
 
         stdout
-      rescue => e
+      rescue Timeout::Error, Errno::ENOENT, Errno::EACCES => e
         nil
       end
 

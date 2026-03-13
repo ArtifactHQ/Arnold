@@ -1,4 +1,5 @@
 require "open3"
+require "timeout"
 
 module ArnoldPipeline
   module Brownfield
@@ -76,15 +77,11 @@ module ArnoldPipeline
       end
 
       def run_command(command)
-        stdout, _stderr, status = Open3.capture3(
-          command,
-          chdir: @repo_path,
-          timeout: TIMEOUT
-        )
+        stdout, _stderr, status = Timeout.timeout(TIMEOUT) do
+          Open3.capture3("sh", "-c", command, chdir: @repo_path)
+        end
         stdout
-      rescue Errno::ENOENT, Errno::EACCES
-        nil
-      rescue => e
+      rescue Timeout::Error, Errno::ENOENT, Errno::EACCES => e
         nil
       end
 

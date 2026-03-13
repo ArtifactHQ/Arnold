@@ -574,6 +574,14 @@ module ArnoldPipeline
         assert_equal [], routes
       end
 
+      test "returns empty array on timeout" do
+        Open3.stubs(:capture3).raises(Timeout::Error.new("execution expired"))
+
+        routes = RouteTableParser.call(repo_path: @repo_path, stack_fingerprint: @rails_fingerprint)
+
+        assert_equal [], routes
+      end
+
       # --- String keys in fingerprint ---
 
       test "handles string keys in stack_fingerprint" do
