@@ -74,7 +74,20 @@ module ArnoldPipeline
         raise ArgumentError, "Cannot resume a #{pipeline_run.status} pipeline run"
       end
 
+      previous_status = pipeline_run.status
       stage = ResumeInferrer.call(pipeline_run)
+
+      event_recorder = PipelineEventRecorder.new(pipeline_run:)
+      event_recorder.record(
+        event_type: :pipeline_resumed,
+        stage: "lifecycle",
+        summary: {
+          resumed_from_stage: stage.to_s,
+          previous_status: previous_status.to_s,
+          task_count: pipeline_run.tasks.count
+        }
+      )
+
       run_pipeline!(pipeline_run, from: stage, stop_after:)
     end
 

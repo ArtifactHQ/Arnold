@@ -39,7 +39,8 @@ module ArnoldPipeline
       file_manifest_built: 31,
       route_table_parsed: 32,
       git_activity_analyzed: 33,
-      parallel_agents_completed: 34
+      parallel_agents_completed: 34,
+      pipeline_resumed: 35
     }
 
     belongs_to :pipeline_run

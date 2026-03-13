@@ -26,6 +26,7 @@ module ArnoldPipeline
                   :claude_code_max_budget_usd,
                   :claude_code_tools, :claude_code_allowed_tools, :claude_code_disallowed_tools,
                   :claude_code_task_timeout,
+                  :claude_code_merge_timeout,
                   :max_iterations, :analysis_done_threshold, :library_path,
                   :polling_interval, :polling_timeout, :polling_max_interval,
                   :tier_gate_enabled, :context_propagation_enabled, :max_tier_retries,
@@ -67,6 +68,7 @@ module ArnoldPipeline
       @claude_code_allowed_tools   = nil
       @claude_code_disallowed_tools = nil
       @claude_code_task_timeout    = 30
+      @claude_code_merge_timeout   = 10
       @max_iterations     = 3
       @analysis_done_threshold = nil
       @library_path       = nil
@@ -152,6 +154,7 @@ module ArnoldPipeline
       validate_test_timeout!
       validate_criteria_check_mode!
       validate_claude_code_task_timeout!
+      validate_claude_code_merge_timeout!
       validate_claude_code_max_budget_usd!
       validate_claude_code_tool_restrictions!
       validate_brownfield_config!
@@ -239,6 +242,13 @@ module ArnoldPipeline
       return if @claude_code_task_timeout.is_a?(Numeric) && @claude_code_task_timeout > 0
 
       raise ConfigurationError, "claude_code_task_timeout must be nil or a positive number (minutes)."
+    end
+
+    def validate_claude_code_merge_timeout!
+      return if @claude_code_merge_timeout.nil?
+      return if @claude_code_merge_timeout.is_a?(Numeric) && @claude_code_merge_timeout > 0
+
+      raise ConfigurationError, "claude_code_merge_timeout must be nil or a positive number (minutes)."
     end
 
     def validate_claude_code_max_budget_usd!

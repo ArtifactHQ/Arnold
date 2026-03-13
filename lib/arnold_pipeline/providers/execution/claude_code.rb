@@ -299,6 +299,14 @@ module ArnoldPipeline
           ArnoldPipeline.configuration.claude_code_task_timeout
         end
 
+        def merge_conflict_timeout
+          ArnoldPipeline.configuration.claude_code_merge_timeout || 10
+        end
+
+        def agent_subprocess_env
+          { "CLAUDECODE" => nil, "CI" => "true", "ARNOLD_NONINTERACTIVE" => "1" }
+        end
+
         # Spawns a shell command in its own process group with an optional timeout.
         # Returns [output_string, Process::Status] on normal completion, or
         # [output_string, nil] when the process is killed due to timeout.
@@ -306,7 +314,7 @@ module ArnoldPipeline
           stdout_r, stdout_w = IO.pipe
 
           pid = Process.spawn(
-            { "CLAUDECODE" => nil },
+            agent_subprocess_env,
             cmd,
             chdir: worktree_path,
             pgroup: true,
@@ -410,7 +418,7 @@ module ArnoldPipeline
         end
 
         def system_prompt
-          <<~SYSTEM.strip
+          base = <<~SYSTEM.strip
             You are an implementation agent in an automated pipeline.
             Complete the task fully without asking questions.
             Make reasonable decisions and document assumptions in code comments.
@@ -421,6 +429,27 @@ module ArnoldPipeline
             If scaffolding a Rails app, use `rails new . --force` (dot = current dir).
             Commit all changes when finished.
           SYSTEM
+
+          base + "\n" + pipeline_safety_instructions
+        end
+
+        def pipeline_safety_instructions
+          recipe = @library_selections&.dig(:recipe)
+          verification = recipe&.verification || {}
+          test_cmd = verification["test_command"]
+          boot_cmd = verification["boot_command"]
+
+          parts = []
+          parts << "To verify changes, run: `#{test_cmd}`" if test_cmd
+          parts << "NEVER run commands that start long-lived server processes. These block the pipeline indefinitely and will be killed."
+
+          if boot_cmd
+            parts << "Specifically, do NOT run: bin/setup (starts a server), bin/dev, #{boot_cmd.split.first(2).join(' ')}, puma, foreman start, overmind start, or any command that listens on a port."
+          else
+            parts << "Do NOT run: bin/setup, bin/dev, puma, foreman start, overmind start, npm start, or any command that listens on a port."
+          end
+
+          parts.join("\n")
         end
 
         def tool_restriction_flags
@@ -581,7 +610,12 @@ module ArnoldPipeline
 
           cmd = build_cli_command(prompt)
           _output, status = Bundler.with_unbundled_env do
-            Open3.capture2({ "CLAUDECODE" => nil }, cmd, chdir: repo_path, stdin_data: "")
+            spawn_with_timeout(cmd, worktree_path: repo_path, timeout_minutes: merge_conflict_timeout)
+          end
+
+          if status.nil?
+            abort_merge_if_needed
+            raise MergeError, "Merge conflict resolution timed out after #{merge_conflict_timeout} minutes for '#{branch}'"
           end
 
           unless status.success?

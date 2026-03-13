@@ -59,7 +59,7 @@ module ArnoldPipeline
             events: [ event ]
           }
           next
-        when "pipeline_completed", "pipeline_failed", "pipeline_paused"
+        when "pipeline_completed", "pipeline_failed", "pipeline_paused", "pipeline_resumed"
           blocks << current_block unless current_block[:events].empty?
           blocks << { type: :terminal, events: [ event ] }
           current_block = { type: :preamble, events: [] }
@@ -349,6 +349,10 @@ module ArnoldPipeline
         "\n #{bg_red(' ✗ PIPELINE FAILED ')}#{stage}\n  #{error}#{provider}#{exec}#{task_info}#{duration}#{excerpt}"
       when "pipeline_paused"
         "\n #{c(bold(' ⏸ PIPELINE PAUSED '), :yellow)}  #{s['reason']}"
+      when "pipeline_resumed"
+        stage = s["resumed_from_stage"] ? "from #{s['resumed_from_stage']}" : ""
+        prev = s["previous_status"] ? " (was #{s['previous_status']})" : ""
+        "\n #{c(bold(' ▶ PIPELINE RESUMED '), :cyan)}  #{stage}#{prev}"
       end
     end
 
