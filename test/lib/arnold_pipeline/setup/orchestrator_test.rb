@@ -423,6 +423,34 @@ module ArnoldPipeline
 
         refute result.needs_input?
       end
+
+      test "openai env key auto-detects provider when no provider specified" do
+        ENV.delete("ANTHROPIC_API_KEY")
+        ENV["OPENAI_API_KEY"] = "sk-openai-test"
+
+        request = Request.new(
+          project_path: @project_path,
+          description: "a todo app with user auth"
+        )
+        result = Orchestrator.new.call(request)
+
+        refute result.needs_input?
+      end
+
+      test "both env keys with no provider prefers anthropic" do
+        ENV["ANTHROPIC_API_KEY"] = "sk-anthropic-test"
+        ENV["OPENAI_API_KEY"] = "sk-openai-test"
+
+        request = Request.new(
+          project_path: @project_path,
+          description: "a todo app with user auth"
+        )
+        result = Orchestrator.new.call(request)
+
+        refute result.needs_input?
+        # Verify anthropic was selected by checking the configured provider
+        assert_equal :anthropic, ArnoldPipeline.configuration.llm_provider
+      end
     end
   end
 end

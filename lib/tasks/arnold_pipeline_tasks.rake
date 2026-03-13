@@ -5,8 +5,7 @@ namespace :arnold do
 
     request = ArnoldPipeline::Setup::Request.new(
       project_path: args[:path],
-      description: args[:description],
-      llm_api_key: ENV["ANTHROPIC_API_KEY"] || ENV["OPENAI_API_KEY"]
+      description: args[:description]
     )
 
     orchestrator = ArnoldPipeline::Setup::Orchestrator.new

@@ -64,6 +64,20 @@ module ArnoldPipeline
         missing
       end
 
+      def resolve_provider(request)
+        return request.llm_provider if request.llm_provider && !request.llm_provider.strip.empty?
+
+        # Check existing config
+        if File.exist?(CONFIG_PATH)
+          config = YAML.safe_load_file(CONFIG_PATH) || {}
+          provider = config["llm_provider"]
+          return provider if provider && !provider.strip.empty?
+        end
+
+        # Auto-detect from env vars
+        ArnoldPipeline::Configuration.new.send(:detect_provider).to_s
+      end
+
       def resolved_api_key(request)
         return request.llm_api_key if request.llm_api_key && !request.llm_api_key.strip.empty?
 
@@ -75,7 +89,7 @@ module ArnoldPipeline
         end
 
         # Check env vars
-        provider = request.llm_provider || "anthropic"
+        provider = resolve_provider(request)
         env_key = ArnoldPipeline::Configuration::PROVIDER_DEFAULTS.dig(provider.to_sym, :env_key)
         env_val = ENV[env_key.to_s] if env_key
         return env_val if env_val && !env_val.empty?
@@ -167,7 +181,7 @@ module ArnoldPipeline
 
       def configure_arnold!(request)
         api_key = resolved_api_key(request)
-        provider = (request.llm_provider || "anthropic").to_sym
+        provider = resolve_provider(request).to_sym
 
         ArnoldPipeline.configure do |c|
           c.llm_provider = provider
