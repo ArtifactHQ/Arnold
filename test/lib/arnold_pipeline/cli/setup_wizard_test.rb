@@ -270,6 +270,17 @@ module ArnoldPipeline
         assert_match(/export OPENAI_API_KEY/, text)
       end
 
+      test "display_api_key_instructions shows openrouter env var for openrouter provider" do
+        output = StringIO.new
+        wizard = SetupWizard.new(output: output)
+
+        wizard.display_api_key_instructions("openrouter")
+        text = output.string
+
+        assert_match(/OPENROUTER_API_KEY is not set/, text)
+        assert_match(/export OPENROUTER_API_KEY/, text)
+      end
+
       test "display_api_key_instructions detects bash profile" do
         ENV["SHELL"] = "/bin/bash"
         output = StringIO.new
@@ -436,6 +447,27 @@ module ArnoldPipeline
 
         content = File.read(config_path)
         assert_match(/OPENAI_API_KEY/, content)
+      ensure
+        FileUtils.rm_rf(config_dir)
+      end
+
+      test "write_config! uses openrouter env var in comments for openrouter provider" do
+        config_dir = File.join(Dir.tmpdir, "arnold_openrouter_test_#{SecureRandom.hex(4)}")
+        config_path = File.join(config_dir, "config.yml")
+
+        SetupWizard.stubs(:config_path).returns(config_path)
+
+        output = StringIO.new
+        wizard = SetupWizard.new(output: output)
+
+        settings = [
+          SetupWizard::Setting.new(key: :llm_provider, label: "LLM provider", value: "openrouter", source: :user_input)
+        ]
+
+        wizard.send(:write_config!, settings)
+
+        content = File.read(config_path)
+        assert_match(/OPENROUTER_API_KEY/, content)
       ensure
         FileUtils.rm_rf(config_dir)
       end
