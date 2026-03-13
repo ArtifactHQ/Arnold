@@ -432,6 +432,14 @@ module ArnoldPipeline
       say "arnold_pipeline #{ArnoldPipeline::VERSION}"
     end
 
+    desc "setup", "Configure Arnold for first use (interactive)"
+    def setup
+      require "arnold_pipeline/cli/setup_wizard"
+
+      wizard = CliModule::SetupWizard.new
+      wizard.run!
+    end
+
     desc "doctor", "Check environment health and dependencies"
     def doctor
       require "arnold_pipeline"
