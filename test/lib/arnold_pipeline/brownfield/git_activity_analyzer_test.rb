@@ -12,12 +12,12 @@ module ArnoldPipeline
 
       test "parses git log output correctly" do
         git_output = <<~GIT
-          abc123|Alice|2025-01-15T10:30:00+00:00
+          ---COMMIT---abc123 2025-01-15T10:30:00+00:00 Alice
 
           app/models/user.rb
           app/controllers/users_controller.rb
 
-          def456|Bob|2025-02-01T14:00:00+00:00
+          ---COMMIT---def456 2025-02-01T14:00:00+00:00 Bob
 
           app/models/user.rb
           config/routes.rb
@@ -36,15 +36,15 @@ module ArnoldPipeline
 
       test "aggregates multiple commits for same file" do
         git_output = <<~GIT
-          abc123|Alice|2025-01-15T10:30:00+00:00
+          ---COMMIT---abc123 2025-01-15T10:30:00+00:00 Alice
 
           app/models/user.rb
 
-          def456|Bob|2025-02-01T14:00:00+00:00
+          ---COMMIT---def456 2025-02-01T14:00:00+00:00 Bob
 
           app/models/user.rb
 
-          ghi789|Alice|2025-03-10T09:00:00+00:00
+          ---COMMIT---ghi789 2025-03-10T09:00:00+00:00 Alice
 
           app/models/user.rb
         GIT
@@ -58,15 +58,15 @@ module ArnoldPipeline
 
       test "tracks unique authors per file" do
         git_output = <<~GIT
-          abc123|Alice|2025-01-15T10:30:00+00:00
+          ---COMMIT---abc123 2025-01-15T10:30:00+00:00 Alice
 
           app/models/user.rb
 
-          def456|Bob|2025-02-01T14:00:00+00:00
+          ---COMMIT---def456 2025-02-01T14:00:00+00:00 Bob
 
           app/models/user.rb
 
-          ghi789|Alice|2025-03-10T09:00:00+00:00
+          ---COMMIT---ghi789 2025-03-10T09:00:00+00:00 Alice
 
           app/models/user.rb
         GIT
@@ -83,15 +83,15 @@ module ArnoldPipeline
 
       test "returns most recent modification date" do
         git_output = <<~GIT
-          abc123|Alice|2025-01-15T10:30:00+00:00
+          ---COMMIT---abc123 2025-01-15T10:30:00+00:00 Alice
 
           app/models/user.rb
 
-          def456|Bob|2025-03-20T14:00:00+00:00
+          ---COMMIT---def456 2025-03-20T14:00:00+00:00 Bob
 
           app/models/user.rb
 
-          ghi789|Carol|2025-02-10T09:00:00+00:00
+          ---COMMIT---ghi789 2025-02-10T09:00:00+00:00 Carol
 
           app/models/user.rb
         GIT
@@ -137,10 +137,10 @@ module ArnoldPipeline
       end
 
       test "custom since parameter is passed to git command" do
-        expected_command = 'git log --name-only --format="%H|%an|%aI" --since="3 months ago"'
-
         Open3.expects(:capture3).with(
-          expected_command,
+          "git", "log", "--name-only",
+          "--format=---COMMIT---%H %aI %an",
+          "--since=3 months ago",
           chdir: @repo_path,
           timeout: 30
         ).returns([ "", "", @success_status ])
@@ -149,10 +149,10 @@ module ArnoldPipeline
       end
 
       test "uses default since of 6 months ago when not specified" do
-        expected_command = 'git log --name-only --format="%H|%an|%aI" --since="6 months ago"'
-
         Open3.expects(:capture3).with(
-          expected_command,
+          "git", "log", "--name-only",
+          "--format=---COMMIT---%H %aI %an",
+          "--since=6 months ago",
           chdir: @repo_path,
           timeout: 30
         ).returns([ "", "", @success_status ])
@@ -178,7 +178,7 @@ module ArnoldPipeline
 
       test "handles single commit with multiple files" do
         git_output = <<~GIT
-          abc123|Alice|2025-01-15T10:30:00+00:00
+          ---COMMIT---abc123 2025-01-15T10:30:00+00:00 Alice
 
           app/models/user.rb
           app/models/post.rb
@@ -199,7 +199,7 @@ module ArnoldPipeline
 
       test "handles file appearing in only one commit" do
         git_output = <<~GIT
-          abc123|Alice|2025-06-01T12:00:00+00:00
+          ---COMMIT---abc123 2025-06-01T12:00:00+00:00 Alice
 
           config/database.yml
         GIT
@@ -216,7 +216,7 @@ module ArnoldPipeline
 
       test "handles author names with special characters" do
         git_output = <<~GIT
-          abc123|Jean-Pierre O'Brien|2025-01-15T10:30:00+00:00
+          ---COMMIT---abc123 2025-01-15T10:30:00+00:00 Jean-Pierre O'Brien
 
           README.md
         GIT
@@ -228,9 +228,23 @@ module ArnoldPipeline
         assert_includes result["README.md"][:authors], "Jean-Pierre O'Brien"
       end
 
+      test "handles author names with pipe characters" do
+        git_output = <<~GIT
+          ---COMMIT---abc123 2025-01-15T10:30:00+00:00 Jane | DevOps
+
+          README.md
+        GIT
+
+        Open3.stubs(:capture3).returns([ git_output, "", @success_status ])
+
+        result = GitActivityAnalyzer.call(repo_path: @repo_path)
+
+        assert_includes result["README.md"][:authors], "Jane | DevOps"
+      end
+
       test "handles file paths with spaces" do
         git_output = <<~GIT
-          abc123|Alice|2025-01-15T10:30:00+00:00
+          ---COMMIT---abc123 2025-01-15T10:30:00+00:00 Alice
 
           app/views/home page/index.html.erb
         GIT

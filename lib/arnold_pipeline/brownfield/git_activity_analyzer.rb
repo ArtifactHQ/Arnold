@@ -25,10 +25,13 @@ module ArnoldPipeline
 
       private
 
+      COMMIT_DELIMITER = "---COMMIT---"
+
       def run_git_log
-        command = "git log --name-only --format=\"%H|%an|%aI\" --since=\"#{@since}\""
         stdout, _stderr, status = Open3.capture3(
-          command,
+          "git", "log", "--name-only",
+          "--format=#{COMMIT_DELIMITER}%H %aI %an",
+          "--since=#{@since}",
           chdir: @repo_path,
           timeout: TIMEOUT
         )
@@ -48,11 +51,12 @@ module ArnoldPipeline
           line = raw_line.strip
           next if line.empty?
 
-          if line.match?(/\A[0-9a-f]+\|.+\|.+\z/)
-            # Commit header line: hash|author|iso_date
-            parts = line.split("|", 3)
-            current_author = parts[1]
-            current_date = parse_date(parts[2])
+          if line.start_with?(COMMIT_DELIMITER)
+            # Commit header: ---COMMIT---<hash> <iso_date> <author>
+            header = line.delete_prefix(COMMIT_DELIMITER)
+            parts = header.split(" ", 3)
+            current_date = parse_date(parts[1])
+            current_author = parts[2]
           else
             # File path line
             file_path = line

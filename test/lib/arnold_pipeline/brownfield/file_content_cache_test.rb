@@ -89,6 +89,21 @@ module ArnoldPipeline
       test "returns nil for directories" do
         assert_nil @cache.read("sub")
       end
+
+      test "blocks path traversal attempts" do
+        # Create a file outside the repo dir to verify it cannot be read
+        outside_file = File.join(Dir.tmpdir, "secret_#{SecureRandom.hex(4)}.txt")
+        File.write(outside_file, "secret data")
+
+        # Calculate the relative traversal path from @dir to the outside file
+        relative = "../" + File.basename(outside_file)
+
+        assert_nil @cache.read(relative)
+        assert_nil @cache.read("../../etc/passwd")
+        assert_nil @cache.read("sub/../../#{File.basename(outside_file)}")
+      ensure
+        FileUtils.rm_f(outside_file)
+      end
     end
   end
 end

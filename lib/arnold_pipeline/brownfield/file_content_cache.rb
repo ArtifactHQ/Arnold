@@ -4,7 +4,7 @@ module ArnoldPipeline
       DEFAULT_MAX_SIZE = 50 * 1024 # 50KB
 
       def initialize(repo_path:)
-        @repo_path = repo_path
+        @repo_path = File.expand_path(repo_path)
         @cache = {}
         @mutex = Mutex.new
       end
@@ -41,7 +41,8 @@ module ArnoldPipeline
       private
 
       def read_file(relative_path, max_size)
-        full_path = File.join(@repo_path, relative_path)
+        full_path = File.expand_path(File.join(@repo_path, relative_path))
+        return nil unless full_path.start_with?("#{@repo_path}/")
         return nil unless File.file?(full_path)
 
         stat = File.stat(full_path)

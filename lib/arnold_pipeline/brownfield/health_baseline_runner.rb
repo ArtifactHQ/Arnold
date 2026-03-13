@@ -114,7 +114,7 @@ module ArnoldPipeline
 
         stdout, stderr, status = Timeout.timeout(@timeout) do
           Bundler.with_unbundled_env do
-            Open3.capture3(command, chdir: @repo_path)
+            Open3.capture3("sh", "-c", command, chdir: @repo_path)
           end
         end
 
