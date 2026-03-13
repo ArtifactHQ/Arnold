@@ -1,6 +1,7 @@
 require "tty-prompt"
 require "yaml"
 require "fileutils"
+require "arnold_pipeline/configuration"
 
 module ArnoldPipeline
   module CliModule
