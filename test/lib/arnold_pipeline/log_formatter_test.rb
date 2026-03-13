@@ -465,6 +465,18 @@ module ArnoldPipeline
       assert_no_match(/Add API.*resolved/, output)
     end
 
+    test "pipeline_resumed renders cyan banner with stage and previous status" do
+      @run.pipeline_events.create!(event_type: :pipeline_resumed, stage: "lifecycle",
+        summary: { "resumed_from_stage" => "execute", "previous_status" => "paused", "task_count" => 5 })
+
+      formatter = LogFormatter.new(@run.pipeline_events.chronological, pipeline_run: @run, color: false)
+      output = formatter.render
+
+      assert_includes output, "PIPELINE RESUMED"
+      assert_includes output, "from execute"
+      assert_includes output, "(was paused)"
+    end
+
     # --- End-to-end integration ---
 
     test "full pipeline run renders complete structured output" do

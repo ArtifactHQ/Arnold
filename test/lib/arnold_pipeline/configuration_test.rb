@@ -409,6 +409,35 @@ module ArnoldPipeline
       assert_nil @config.claude_code_disallowed_tools
     end
 
+    # --- claude_code_merge_timeout validation ---
+
+    test "claude_code_merge_timeout defaults to 10" do
+      assert_equal 10, @config.claude_code_merge_timeout
+    end
+
+    test "validate! rejects invalid claude_code_merge_timeout" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+
+      [ 0, -5, "30", nil ].each do |bad|
+        @config.claude_code_merge_timeout = bad
+        error = assert_raises(ConfigurationError, "Expected ConfigurationError for #{bad.inspect}") { @config.validate! }
+        assert_match(/claude_code_merge_timeout must be a positive number/, error.message)
+      end
+    end
+
+    test "validate! accepts valid claude_code_merge_timeout" do
+      @config.llm_api_key = "sk-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+
+      [ 1, 30, 0.5, 10 ].each do |good|
+        @config.claude_code_merge_timeout = good
+        assert @config.validate!, "Expected validate! to pass for #{good.inspect}"
+      end
+    end
+
     # --- claude_code_max_budget_usd validation ---
 
     test "validate! rejects invalid claude_code_max_budget_usd" do

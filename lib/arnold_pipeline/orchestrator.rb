@@ -77,18 +77,11 @@ module ArnoldPipeline
       previous_status = pipeline_run.status
       stage = ResumeInferrer.call(pipeline_run)
 
-      event_recorder = PipelineEventRecorder.new(pipeline_run:)
-      event_recorder.record(
-        event_type: :pipeline_resumed,
-        stage: "lifecycle",
-        summary: {
-          resumed_from_stage: stage.to_s,
-          previous_status: previous_status.to_s,
-          task_count: pipeline_run.tasks.count
-        }
-      )
-
-      run_pipeline!(pipeline_run, from: stage, stop_after:)
+      run_pipeline!(pipeline_run, from: stage, stop_after:, resumed_from: {
+        stage: stage.to_s,
+        previous_status: previous_status.to_s,
+        task_count: pipeline_run.tasks.count
+      })
     end
 
     def iterate_spec!(pipeline_run:, change_request:)
@@ -382,7 +375,7 @@ module ArnoldPipeline
       end
     end
 
-    def run_pipeline!(pipeline_run, from:, stop_after: nil)
+    def run_pipeline!(pipeline_run, from:, stop_after: nil, resumed_from: nil)
       @event_recorder = PipelineEventRecorder.new(pipeline_run:)
       @tier_execution_engine = TierExecutionEngine.new(
         executor: @executor, tier_gate_check: @tier_gate_check, logger: @logger,
@@ -390,6 +383,18 @@ module ArnoldPipeline
       )
       start_index = STAGES.index(from)
       @current_stage = nil
+
+      if resumed_from
+        @event_recorder.record(
+          event_type: :pipeline_resumed,
+          stage: "lifecycle",
+          summary: {
+            resumed_from_stage: resumed_from[:stage],
+            previous_status: resumed_from[:previous_status],
+            task_count: resumed_from[:task_count]
+          }
+        )
+      end
 
       begin
         STAGES[start_index..].each do |stage|

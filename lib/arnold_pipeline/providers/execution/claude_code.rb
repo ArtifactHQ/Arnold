@@ -156,6 +156,7 @@ module ArnoldPipeline
         end
 
         def merge_results(pipeline_run:, tasks: nil)
+          @library_selections ||= resolve_library_selections(pipeline_run)
           target_tasks = tasks || pipeline_run.tasks
           target_tasks.each do |task|
             next unless task.external_id
@@ -304,7 +305,7 @@ module ArnoldPipeline
         end
 
         def agent_subprocess_env
-          { "CLAUDECODE" => nil, "CI" => "true", "ARNOLD_NONINTERACTIVE" => "1" }
+          { "CLAUDECODE" => nil, "ARNOLD_NONINTERACTIVE" => "1" }
         end
 
         # Spawns a shell command in its own process group with an optional timeout.
@@ -443,7 +444,7 @@ module ArnoldPipeline
           parts << "To verify changes, run: `#{test_cmd}`" if test_cmd
           parts << "NEVER run commands that start long-lived server processes. These block the pipeline indefinitely and will be killed."
 
-          if boot_cmd
+          if boot_cmd && !boot_cmd.strip.empty?
             parts << "Specifically, do NOT run: bin/setup (starts a server), bin/dev, #{boot_cmd.split.first(2).join(' ')}, puma, foreman start, overmind start, or any command that listens on a port."
           else
             parts << "Do NOT run: bin/setup, bin/dev, puma, foreman start, overmind start, npm start, or any command that listens on a port."

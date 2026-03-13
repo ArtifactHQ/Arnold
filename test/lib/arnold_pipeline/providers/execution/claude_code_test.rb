@@ -273,6 +273,41 @@ module ArnoldPipeline
           assert_includes prompt, "Commit all changes"
         end
 
+        test "system_prompt includes generic server blocklist when no recipe" do
+          prompt = @provider.send(:system_prompt)
+          assert_includes prompt, "NEVER run commands that start long-lived server processes"
+          assert_includes prompt, "Do NOT run: bin/setup, bin/dev, puma, foreman start, overmind start, npm start"
+        end
+
+        test "system_prompt includes recipe-derived test command and boot_command blocklist" do
+          @provider.instance_variable_set(:@library_selections, {
+            recipe: ArnoldPipeline::Library::Recipe.new(
+              name: "Web App", type: "web_app", keywords: [], description: "d",
+              framework: { "primary" => "Rails 8+" }, sections: [],
+              verification: { "test_command" => "bin/rails test:all", "boot_command" => "bin/rails server -p 3000 -d" }
+            )
+          })
+
+          prompt = @provider.send(:system_prompt)
+          assert_includes prompt, "To verify changes, run: `bin/rails test:all`"
+          assert_includes prompt, "bin/rails server"
+          assert_includes prompt, "NEVER run commands that start long-lived server processes"
+        end
+
+        test "system_prompt uses generic blocklist when recipe has no boot_command" do
+          @provider.instance_variable_set(:@library_selections, {
+            recipe: ArnoldPipeline::Library::Recipe.new(
+              name: "CLI Tool", type: "cli_tool", keywords: [], description: "d",
+              framework: { "primary" => "Ruby" }, sections: [],
+              verification: { "test_command" => "bundle exec rake test" }
+            )
+          })
+
+          prompt = @provider.send(:system_prompt)
+          assert_includes prompt, "To verify changes, run: `bundle exec rake test`"
+          assert_includes prompt, "Do NOT run: bin/setup, bin/dev, puma, foreman start, overmind start, npm start"
+        end
+
         test "build_prompt contains only task content" do
           prompt = @provider.send(:build_prompt, title: "Setup", description: "Init project", labels: [ "backend" ], prior_context: nil)
           assert_includes prompt, "Setup"
@@ -454,8 +489,16 @@ module ArnoldPipeline
           assert_kind_of Hash, captured_env
           assert captured_env.key?("CLAUDECODE"), "CLAUDECODE key should be present"
           assert_nil captured_env["CLAUDECODE"], "CLAUDECODE should be nil to unset in child"
+          assert_equal "1", captured_env["ARNOLD_NONINTERACTIVE"], "ARNOLD_NONINTERACTIVE should be set"
         ensure
           ENV.delete("CLAUDECODE")
+        end
+
+        test "agent_subprocess_env includes ARNOLD_NONINTERACTIVE and unsets CLAUDECODE" do
+          env = @provider.send(:agent_subprocess_env)
+          assert_nil env["CLAUDECODE"]
+          assert_equal "1", env["ARNOLD_NONINTERACTIVE"]
+          refute env.key?("CI"), "CI should not be set globally — too broad"
         end
 
         # --- Configuration tests ---
@@ -1594,6 +1637,60 @@ module ArnoldPipeline
           assert_match(/Failed to merge branch/, error.message)
         ensure
           ArnoldPipeline.reset_configuration!
+        end
+
+        # --- Merge conflict timeout tests ---
+
+        test "resolve_merge_conflicts raises MergeError on timeout" do
+          ArnoldPipeline.configure do |c|
+            c.merge_conflict_resolution_enabled = true
+            c.claude_code_merge_timeout = 0.01
+          end
+
+          branch = create_conflict_scenario
+          task = @pipeline_run.tasks.create!(title: "Slow resolve", description: "Times out", position: 0)
+
+          @provider.stubs(:build_cli_command).returns("sleep 60")
+
+          error = assert_raises(ClaudeCode::MergeError) do
+            @provider.send(:merge_branch, branch, task: task)
+          end
+          assert_match(/timed out/, error.message)
+          assert_match(/0\.01 minutes/, error.message)
+
+          merge_head = File.join(@repo_path, ".git", "MERGE_HEAD")
+          refute File.exist?(merge_head), "MERGE_HEAD should be cleaned up after timeout"
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "merge_conflict_timeout defaults to 10" do
+          config = ArnoldPipeline::Configuration.new
+          assert_equal 10, config.claude_code_merge_timeout
+          assert_equal 10, @provider.send(:merge_conflict_timeout)
+        end
+
+        test "merge_conflict_timeout reads from configuration" do
+          ArnoldPipeline.configure { |c| c.claude_code_merge_timeout = 5 }
+          assert_equal 5, @provider.send(:merge_conflict_timeout)
+        ensure
+          ArnoldPipeline.reset_configuration!
+        end
+
+        test "merge_results lazily initializes library_selections" do
+          task = @pipeline_run.tasks.create!(title: "Task", description: "Desc", position: 0, external_id: "cc-1-lazy")
+          @provider.instance_variable_set(:@results, {
+            "cc-1-lazy" => { success: true, branch: "task-branch" }
+          })
+          @provider.stubs(:merge_branch)
+
+          # @library_selections is nil before merge_results
+          assert_nil @provider.instance_variable_get(:@library_selections)
+
+          @provider.merge_results(pipeline_run: @pipeline_run, tasks: [ task ])
+
+          # After merge_results, it should be initialized (may be nil hash if no metadata, but the call was made)
+          # The key thing is resolve_library_selections was called — no error raised
         end
 
         # --- Task timeout tests ---

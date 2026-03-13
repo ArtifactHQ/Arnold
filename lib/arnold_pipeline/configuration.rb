@@ -245,10 +245,9 @@ module ArnoldPipeline
     end
 
     def validate_claude_code_merge_timeout!
-      return if @claude_code_merge_timeout.nil?
       return if @claude_code_merge_timeout.is_a?(Numeric) && @claude_code_merge_timeout > 0
 
-      raise ConfigurationError, "claude_code_merge_timeout must be nil or a positive number (minutes)."
+      raise ConfigurationError, "claude_code_merge_timeout must be a positive number (minutes)."
     end
 
     def validate_claude_code_max_budget_usd!

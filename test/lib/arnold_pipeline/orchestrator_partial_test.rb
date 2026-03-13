@@ -196,6 +196,31 @@ module ArnoldPipeline
       assert_equal 5, result.tasks.count
     end
 
+    # --- Resume Event Tests ---
+
+    test "resume records pipeline_resumed event with stage and previous status" do
+      stub_spec_generation!
+      stub_task_breakdown!
+      @executor.expects(:call).never
+
+      run = @orchestrator.call(nl_input: "Build a todo app", stop_after: :tasks)
+      assert_equal "paused", run.status
+
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.stubs(:call).returns(analysis_result("done", 95))
+
+      @orchestrator.resume(pipeline_run: run)
+
+      resumed_event = run.pipeline_events.find_by(event_type: :pipeline_resumed)
+      assert_not_nil resumed_event, "pipeline_resumed event should be recorded"
+      assert_equal "lifecycle", resumed_event.stage
+      assert_equal "execute", resumed_event.summary["resumed_from_stage"]
+      assert_equal "paused", resumed_event.summary["previous_status"]
+      assert resumed_event.summary.key?("task_count")
+    end
+
     # --- Infer Resume Stage Tests ---
 
     test "infer_resume_stage returns generate_spec when no spec exists" do
