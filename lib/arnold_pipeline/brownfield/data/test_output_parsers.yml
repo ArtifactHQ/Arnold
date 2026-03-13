@@ -1,0 +1,73 @@
+---
+# Test output parsers for brownfield health baseline.
+# Each parser has a summary_pattern (captures total/failures/errors) and failure_pattern.
+
+parsers:
+  minitest:
+    frameworks:
+      - minitest
+    summary_pattern: '(\d+) runs, (\d+) assertions, (\d+) failures, (\d+) errors, (\d+) skips'
+    summary_groups:
+      runs: 1
+      assertions: 2
+      failures: 3
+      errors: 4
+      skips: 5
+    failure_pattern: 'Failure:\n(.+?) \[(.+?)\]'
+
+  rspec:
+    frameworks:
+      - rspec
+    summary_pattern: '(\d+) examples?, (\d+) failures?(?:, (\d+) pending)?'
+    summary_groups:
+      runs: 1
+      failures: 2
+      skips: 3
+    failure_pattern: 'rspec (.+?):(\d+)'
+
+  jest:
+    frameworks:
+      - jest
+      - vitest
+    summary_pattern: 'Tests:\s+(?:(\d+) failed,\s+)?(?:(\d+) skipped,\s+)?(\d+) passed,\s+(\d+) total'
+    summary_groups:
+      failures: 1
+      skips: 2
+      passed: 3
+      runs: 4
+    failure_pattern: 'FAIL\s+(.+?)$'
+
+  junit_maven:
+    frameworks:
+      - junit
+      - maven
+      - gradle
+    summary_pattern: 'Tests run: (\d+),\s+Failures: (\d+),\s+Errors: (\d+),\s+Skipped: (\d+)'
+    summary_groups:
+      runs: 1
+      failures: 2
+      errors: 3
+      skips: 4
+    failure_pattern: 'FAILED:\s+(.+)'
+
+  pytest:
+    frameworks:
+      - pytest
+    summary_pattern: '(\d+) passed(?:, (\d+) failed)?(?:, (\d+) error)?(?:, (\d+) skipped)?'
+    summary_groups:
+      passed: 1
+      failures: 2
+      errors: 3
+      skips: 4
+    failure_pattern: 'FAILED\s+(.+?)\s+-'
+
+  cargo_test:
+    frameworks:
+      - cargo
+      - rust
+    summary_pattern: 'test result: \w+\. (\d+) passed; (\d+) failed; (\d+) ignored'
+    summary_groups:
+      passed: 1
+      failures: 2
+      skips: 3
+    failure_pattern: 'test (.+?) \.\.\. FAILED'

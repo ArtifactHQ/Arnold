@@ -5,10 +5,16 @@ module ArnoldPipeline
     VALID_LLM_PROVIDERS = %i[anthropic openai].freeze
     VALID_EXECUTION_PROVIDERS = %i[github claude_code].freeze
     VALID_CRITERIA_CHECK_MODES = %i[advisory gating disabled].freeze
+    VALID_BROWNFIELD_MODES = %i[assess extend strangle].freeze
 
     PROVIDER_DEFAULTS = {
       anthropic: { env_key: "ANTHROPIC_API_KEY", model: "claude-sonnet-4-6" },
-      openai:    { env_key: "OPENAI_API_KEY",    model: "gpt-4o" }
+      openai:    { env_key: "OPENAI_API_KEY",    model: "gpt-5-mini-2025-08-07" }
+    }.freeze
+
+    BROWNFIELD_MODEL_DEFAULTS = {
+      agent:     { anthropic: "claude-sonnet-4-6", openai: "gpt-5-mini-2025-08-07" },
+      synthesis: { anthropic: "claude-sonnet-4-6", openai: "gpt-5-mini-2025-08-07" }
     }.freeze
 
     attr_accessor :execution_provider, :github_token, :github_repo,
@@ -33,7 +39,13 @@ module ArnoldPipeline
                   :post_merge_hooks, :verification_checks,
                   :spec_test_generation_enabled, :spec_test_directory, :spec_test_persona,
                   :criteria_check_mode,
-                  :finalization_enabled
+                  :finalization_enabled,
+                  :brownfield_mode, :reference_materials, :brownfield_scan_budget,
+                  :brownfield_deep_dive_domains, :convention_compliance_enabled,
+                  :regression_baseline_enabled, :stack_detection_overrides,
+                  :additional_detection_rules_path, :additional_artifact_maps_path,
+                  :health_baseline_timeout,
+                  :brownfield_agent_models, :brownfield_agent_budgets
     attr_writer   :llm_provider, :llm_api_key, :llm_model
 
     def initialize
@@ -84,6 +96,18 @@ module ArnoldPipeline
       @spec_test_persona                         = "testing_specialist"
       @criteria_check_mode                         = :advisory
       @finalization_enabled                        = true
+      @brownfield_mode                             = nil
+      @reference_materials                         = []
+      @brownfield_scan_budget                      = 50_000
+      @brownfield_deep_dive_domains                = nil
+      @convention_compliance_enabled                = false
+      @regression_baseline_enabled                  = true
+      @stack_detection_overrides                    = {}
+      @additional_detection_rules_path              = nil
+      @additional_artifact_maps_path                = nil
+      @health_baseline_timeout                      = 120
+      @brownfield_agent_models                       = {}
+      @brownfield_agent_budgets                      = {}
     end
 
     def llm_provider
@@ -96,6 +120,14 @@ module ArnoldPipeline
 
     def llm_model
       @llm_model || PROVIDER_DEFAULTS.dig(llm_provider, :model)
+    end
+
+    def brownfield_model_for(agent_key)
+      explicit = @brownfield_agent_models[agent_key]
+      return explicit if explicit
+
+      defaults = BROWNFIELD_MODEL_DEFAULTS[agent_key] || BROWNFIELD_MODEL_DEFAULTS[:agent]
+      defaults.is_a?(Hash) ? defaults[llm_provider] : defaults
     end
 
     def target_repo_path
@@ -121,6 +153,7 @@ module ArnoldPipeline
       validate_claude_code_task_timeout!
       validate_claude_code_max_budget_usd!
       validate_claude_code_tool_restrictions!
+      validate_brownfield_config!
       true
     end
 
@@ -219,6 +252,28 @@ module ArnoldPipeline
         unless value.is_a?(Array) && value.all? { |v| v.is_a?(String) }
           raise ConfigurationError, "#{attr} must be nil or an Array of Strings"
         end
+      end
+    end
+
+    def validate_brownfield_config!
+      if @brownfield_mode && !VALID_BROWNFIELD_MODES.include?(@brownfield_mode)
+        raise ConfigurationError, "brownfield_mode must be one of: #{VALID_BROWNFIELD_MODES.join(', ')}"
+      end
+
+      unless @brownfield_scan_budget.is_a?(Integer) && @brownfield_scan_budget > 0
+        raise ConfigurationError, "brownfield_scan_budget must be a positive integer"
+      end
+
+      unless @health_baseline_timeout.is_a?(Integer) && @health_baseline_timeout > 0
+        raise ConfigurationError, "health_baseline_timeout must be a positive integer"
+      end
+
+      if @stack_detection_overrides && !@stack_detection_overrides.is_a?(Hash)
+        raise ConfigurationError, "stack_detection_overrides must be a Hash"
+      end
+
+      if @reference_materials && !@reference_materials.is_a?(Array)
+        raise ConfigurationError, "reference_materials must be an Array"
       end
     end
 

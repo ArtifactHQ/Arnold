@@ -39,7 +39,8 @@ module ArnoldPipeline
       def chat_json(messages:, system: nil, schema:)
         logger.debug { "#{self.class.name} sending #{messages.size} message(s) (structured output: #{schema[:name]})" }
         log_prompt(system:, messages:)
-        result = llm.chat_json(messages:, system:, schema:)
+        normalized = normalize_schema(schema)
+        result = llm.chat_json(messages:, system:, schema: normalized)
         logger.debug { "#{self.class.name} received structured output (#{result.class})" }
         logger.debug { "[response:json] #{format_json_for_log(result)}" }
         result
@@ -52,6 +53,11 @@ module ArnoldPipeline
       rescue JSON::ParserError => e
         logger.error { "JSON parse failed: #{e.message}" }
         logger.debug { "Extracted content (first 200 chars): #{raw&.slice(0, 200).inspect}" }
+        repaired = attempt_json_repair(sanitized)
+        if repaired
+          logger.warn { "JSON repaired by closing #{repaired[:closed]} unclosed bracket(s)" }
+          return repaired[:result]
+        end
         raise LlmParseError.new(e.message, raw_response: text, original_error: e)
       end
 
@@ -103,6 +109,74 @@ module ArnoldPipeline
         end
 
         nil
+      end
+
+      def attempt_json_repair(text)
+        # Count unmatched openers, respecting string literals
+        stack = []
+        in_string = false
+        i = 0
+
+        while i < text.length
+          char = text[i]
+
+          if in_string
+            if char == "\\" then i += 1 # skip escaped char
+            elsif char == '"' then in_string = false
+            end
+          else
+            case char
+            when '"' then in_string = true
+            when "{", "[" then stack.push(char)
+            when "}"
+              return nil if stack.empty? || stack.last != "{"
+              stack.pop
+            when "]"
+              return nil if stack.empty? || stack.last != "["
+              stack.pop
+            end
+          end
+
+          i += 1
+        end
+
+        # Only repair when there are unclosed openers (truncation signature)
+        return nil if stack.empty?
+
+        # Strip trailing comma before closing (common in truncated output)
+        repaired = text.rstrip.chomp(",")
+
+        # Close in reverse order
+        closers = stack.reverse.map { |opener| opener == "{" ? "}" : "]" }
+        repaired += closers.join
+
+        parsed = JSON.parse(repaired, allow_trailing_comma: true)
+        { result: parsed, closed: closers.size }
+      rescue JSON::ParserError
+        nil
+      end
+
+      def normalize_schema(schema)
+        deep_copy = JSON.parse(JSON.generate(schema), symbolize_names: true)
+        normalize_object_node(deep_copy[:schema]) if deep_copy[:schema]
+        deep_copy
+      end
+
+      def normalize_object_node(node)
+        return unless node.is_a?(Hash)
+
+        if node[:type] == "object" && node[:properties]
+          all_keys = node[:properties].keys.map(&:to_s)
+          node[:required] = all_keys
+          node[:additionalProperties] = false
+          node[:properties].each_value { |v| normalize_object_node(v) }
+        end
+
+        if node[:items]
+          normalize_object_node(node[:items])
+        end
+
+        (node[:anyOf] || node[:oneOf] || []).each { |v| normalize_object_node(v) }
       end
 
       def log_prompt(system:, messages:)

@@ -1,0 +1,217 @@
+---
+# Maps abstract artifact roles to file paths per stack.
+# Roles: schema, routes, components, dependency_manifest, entry_point,
+#        orm_config, ci_config, boot_command, test_command
+
+stacks:
+  ruby_rails:
+    schema:
+      - path: db/schema.rb
+        format: ruby
+      - path: db/structure.sql
+        format: sql
+    routes:
+      - path: config/routes.rb
+        format: ruby
+    components:
+      - path: app/views/**/*.html.erb
+        format: erb
+      - path: app/helpers/**/*.rb
+        format: ruby
+      - path: app/javascript/controllers/**/*.js
+        format: javascript
+      - path: app/components/**/*.rb
+        format: ruby
+    dependency_manifest:
+      - path: Gemfile
+        format: bundler
+      - path: Gemfile.lock
+        format: bundler_lock
+    entry_point:
+      - path: config/application.rb
+        format: ruby
+      - path: config.ru
+        format: ruby
+    orm_config:
+      - path: config/database.yml
+        format: yaml
+    ci_config:
+      - path: .github/workflows/*.yml
+        format: yaml
+      - path: .gitlab-ci.yml
+        format: yaml
+    boot_command: "bin/rails server"
+    test_command: "bin/rails test"
+
+  typescript_nextjs:
+    schema:
+      - path: prisma/schema.prisma
+        format: prisma
+      - path: drizzle/*.ts
+        format: typescript
+    routes:
+      - path: app/**/page.tsx
+        format: tsx
+      - path: pages/**/*.tsx
+        format: tsx
+      - path: app/api/**/route.ts
+        format: typescript
+    components:
+      - path: app/components/**/*.tsx
+        format: tsx
+      - path: components/**/*.tsx
+        format: tsx
+      - path: app/**/layout.tsx
+        format: tsx
+      - path: lib/hooks/**/*.ts
+        format: typescript
+    dependency_manifest:
+      - path: package.json
+        format: json
+      - path: package-lock.json
+        format: json
+      - path: yarn.lock
+        format: yarn
+      - path: pnpm-lock.yaml
+        format: yaml
+    entry_point:
+      - path: next.config.js
+        format: javascript
+      - path: next.config.mjs
+        format: javascript
+      - path: next.config.ts
+        format: typescript
+    orm_config:
+      - path: prisma/schema.prisma
+        format: prisma
+    ci_config:
+      - path: .github/workflows/*.yml
+        format: yaml
+    boot_command: "npm run dev"
+    test_command: "npm test"
+
+  java_spring_boot:
+    schema:
+      - path: src/main/resources/db/migration/*.sql
+        format: sql
+      - path: src/main/resources/db/changelog/*.xml
+        format: xml
+    routes:
+      - path: src/main/java/**/*Controller.java
+        format: java
+    components:
+      - path: src/main/resources/templates/**/*.html
+        format: html
+      - path: src/main/resources/static/**/*.js
+        format: javascript
+    dependency_manifest:
+      - path: pom.xml
+        format: maven
+      - path: build.gradle
+        format: gradle
+      - path: build.gradle.kts
+        format: gradle_kts
+    entry_point:
+      - path: src/main/java/**/*Application.java
+        format: java
+    orm_config:
+      - path: src/main/resources/application.properties
+        format: properties
+      - path: src/main/resources/application.yml
+        format: yaml
+    ci_config:
+      - path: .github/workflows/*.yml
+        format: yaml
+      - path: Jenkinsfile
+        format: groovy
+    boot_command: "./mvnw spring-boot:run"
+    test_command: "./mvnw test"
+
+  python_django:
+    schema:
+      - path: "**/migrations/*.py"
+        format: python
+    routes:
+      - path: "**/urls.py"
+        format: python
+    components:
+      - path: "**/templates/**/*.html"
+        format: html
+      - path: "**/static/**/*.js"
+        format: javascript
+      - path: "**/templatetags/**/*.py"
+        format: python
+    dependency_manifest:
+      - path: requirements.txt
+        format: pip
+      - path: pyproject.toml
+        format: toml
+      - path: Pipfile
+        format: pipfile
+    entry_point:
+      - path: manage.py
+        format: python
+      - path: "**/wsgi.py"
+        format: python
+    orm_config:
+      - path: "**/settings.py"
+        format: python
+    ci_config:
+      - path: .github/workflows/*.yml
+        format: yaml
+    boot_command: "python manage.py runserver"
+    test_command: "python manage.py test"
+
+  rust:
+    schema: []
+    routes: []
+    components: []
+    dependency_manifest:
+      - path: Cargo.toml
+        format: toml
+      - path: Cargo.lock
+        format: toml
+    entry_point:
+      - path: src/main.rs
+        format: rust
+      - path: src/lib.rs
+        format: rust
+    orm_config: []
+    ci_config:
+      - path: .github/workflows/*.yml
+        format: yaml
+    boot_command: "cargo run"
+    test_command: "cargo test"
+
+  csharp_aspnet:
+    schema:
+      - path: Migrations/*.cs
+        format: csharp
+    routes:
+      - path: Controllers/*.cs
+        format: csharp
+      - path: Program.cs
+        format: csharp
+    components:
+      - path: Pages/**/*.cshtml
+        format: razor
+      - path: Views/**/*.cshtml
+        format: razor
+      - path: Components/**/*.razor
+        format: blazor
+    dependency_manifest:
+      - path: "*.csproj"
+        format: xml
+    entry_point:
+      - path: Program.cs
+        format: csharp
+      - path: Startup.cs
+        format: csharp
+    orm_config:
+      - path: appsettings.json
+        format: json
+    ci_config:
+      - path: .github/workflows/*.yml
+        format: yaml
+    boot_command: "dotnet run"
+    test_command: "dotnet test"

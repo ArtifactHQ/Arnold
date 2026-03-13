@@ -83,11 +83,14 @@ NL Input → Spec Generation Agent → Task Breakdown Agent → Execution (GitHu
 ## Current Status
 
 Active development. The pipeline is fully implemented with:
-- 7 CLI commands (run, resume, status, list, spec, version, plus --help)
-- 300+ tests (Minitest, 833 assertions, 0 failures)
+- 13 CLI commands (run, resume, iterate, analyze, setup, status, list, spec, tasks, log, mcp, doctor, version)
+- 2063 tests (Minitest, 6743 assertions, 0 failures)
 - Anthropic and OpenAI LLM providers
-- GitHub execution provider with tiered task management
+- GitHub and Claude Code execution providers with tiered task management
 - Tier gate checking with context propagation and baseline awareness
 - Workflow status monitoring
 - Pause/resume with stage checkpoints
 - Configurable iteration limits (1-10, default 3)
+- Brownfield codebase analysis (stack detection, feature extraction, as-built spec)
+- MCP server for Claude Code plugin integration
+- Drift detection and resolution

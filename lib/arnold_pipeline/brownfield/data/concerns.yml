@@ -1,0 +1,142 @@
+---
+# Universal abstract concerns for brownfield codebase analysis.
+# These are stack-agnostic; framework_overlays.yml provides stack-specific mappings.
+
+concerns:
+  auth:
+    name: Authentication & Authorization
+    description: User identity, login, sessions, roles, permissions, and access control.
+    indicators:
+      - authentication
+      - authorization
+      - login
+      - session
+      - password
+      - token
+      - oauth
+      - jwt
+      - role
+      - permission
+      - devise
+      - auth
+
+  data_layer:
+    name: Data Layer
+    description: Database schema, ORM models, migrations, relationships, and data access patterns.
+    indicators:
+      - model
+      - migration
+      - schema
+      - database
+      - orm
+      - active_record
+      - prisma
+      - entity
+      - repository
+      - query
+
+  api_layer:
+    name: API Layer
+    description: HTTP endpoints, REST/GraphQL APIs, serialization, and external API integrations.
+    indicators:
+      - controller
+      - route
+      - endpoint
+      - api
+      - graphql
+      - rest
+      - serializer
+      - middleware
+      - request
+      - response
+
+  background_jobs:
+    name: Background Jobs
+    description: Asynchronous task processing, job queues, scheduled tasks, and workers.
+    indicators:
+      - job
+      - worker
+      - queue
+      - async
+      - sidekiq
+      - solid_queue
+      - celery
+      - cron
+      - scheduled
+      - background
+
+  realtime:
+    name: Real-Time Features
+    description: WebSockets, server-sent events, push notifications, and live updates.
+    indicators:
+      - websocket
+      - channel
+      - cable
+      - broadcast
+      - notification
+      - push
+      - stream
+      - live
+      - sse
+      - pubsub
+
+  testing:
+    name: Testing
+    description: Test suite, test frameworks, fixtures, factories, and test infrastructure.
+    indicators:
+      - test
+      - spec
+      - fixture
+      - factory
+      - mock
+      - stub
+      - coverage
+      - minitest
+      - rspec
+      - jest
+      - pytest
+
+  frontend:
+    name: Frontend & UI
+    description: User interface components, pages, layouts, client-side state, styling, and user interactions.
+    indicators:
+      - component
+      - page
+      - layout
+      - hook
+      - useState
+      - useEffect
+      - context
+      - provider
+      - modal
+      - form
+      - button
+      - sidebar
+      - navbar
+      - dashboard
+      - view
+      - template
+      - partial
+      - stylesheet
+      - tailwind
+      - css
+      - styled
+      - theme
+      - responsive
+      - ui
+
+  deployment:
+    name: Deployment & Infrastructure
+    description: CI/CD pipelines, containerization, hosting, and infrastructure configuration.
+    indicators:
+      - docker
+      - dockerfile
+      - kubernetes
+      - ci
+      - cd
+      - deploy
+      - kamal
+      - heroku
+      - aws
+      - terraform
+      - github_actions

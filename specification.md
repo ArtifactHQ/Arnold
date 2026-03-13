@@ -683,6 +683,17 @@ The system SHALL record event types for empirical validation:
 | spec_test_execution | 18 | Records spec-scenario test execution results |
 | post_merge_hooks | 19 | Records post-merge hook execution results |
 | verification_checks | 20 | Records verification check execution results |
+| stack_detection | 21 | Records stack detection results during brownfield analysis |
+| codebase_profiling | 22 | Records LLM-driven codebase profiling results |
+| feature_extraction | 23 | Records feature extraction from existing concerns |
+| as_built_spec_generated | 24 | Records as-built specification generation |
+| health_baseline | 25 | Records health baseline check execution results |
+| test_name_collection | 26 | Records test name collection results during brownfield analysis |
+| concern_diff_analysis | 27 | Records concern diff analysis results |
+| file_manifest_built | 28 | Records file manifest build results during brownfield analysis |
+| route_table_parsed | 29 | Records route table parsing results during brownfield analysis |
+| git_activity_analyzed | 30 | Records git activity analysis results during brownfield analysis |
+| parallel_agents_completed | 31 | Records parallel agent execution results during brownfield analysis |
 
 #### Scenario: Validation Event Recording [SPEC-EVENT-007]
 - GIVEN a tier completes execution and validation.
@@ -773,6 +784,11 @@ Event recording SHALL be non-fatal: database errors during event creation do not
 
 ### Requirement: CLI Commands
 The system SHALL provide a command-line interface via the `arnold_pipeline` executable.
+
+#### Global Options [SPEC-CLI-GLOBAL-001]
+All commands accept the following global options:
+- `--quiet` — Suppress informational output.
+- `--backtrace` — Show full error backtrace on failure. For LlmParseError, also shows the raw LLM response excerpt (first 500 chars).
 
 #### Command: run
 - GIVEN a natural language description as argument.
@@ -897,6 +913,103 @@ The system SHALL provide a command-line interface via the `arnold_pipeline` exec
 - AND the server listens for requests on stdin and writes responses to stdout.
 - AND the server runs until stdin closes or a SIGINT/SIGTERM signal is received.
 - Options: --config (YAML path).
+
+#### Command: analyze [SPEC-CLI-ANALYZE-001]
+- GIVEN a file path argument pointing to an existing directory.
+- WHEN `arnold analyze PATH` is executed.
+- THEN the system performs brownfield codebase analysis and produces a CodebaseProfile, HealthBaseline, and As-Built Specification.
+- AND the profile summary is displayed (project name, detected stack, confidence score, concern status counts, health baseline pass/fail).
+- WHEN the --json flag is provided.
+- THEN the full profile data is output as JSON (project_name, stack, confidence, recipe_alignment, conventions, health_baseline, feature_inventories, documentation_fidelity, change_surface, token_budget_used, analyzed_at).
+- WHEN the --output/-o flag is provided.
+- THEN the as-built specification markdown is written to the specified file.
+- Options: --config (YAML path), --provider (anthropic|openai), --model (name), --reference-materials (array of file paths), --json (boolean), --verbose (boolean), --output/-o (file path).
+- Exit code 0 on success, 1 on error (including directory not found).
+
+### Requirement: Brownfield Codebase Analysis [SPEC-BROWNFIELD-001]
+The system SHALL provide a brownfield analysis pipeline that produces a CodebaseProfile, HealthBaseline, and As-Built Specification from an existing codebase.
+The analysis pipeline SHALL execute as a sequence of deterministic and LLM-driven steps, recorded via pipeline events under the "brownfield" stage.
+
+#### Scenario: Stack Detection [SPEC-BROWNFIELD-002]
+- GIVEN a path to an existing codebase directory.
+- WHEN the StackDetector service is called.
+- THEN the service scans the directory for language, framework, and tooling indicators using YAML-defined detection rules.
+- AND returns a stack fingerprint hash containing language, framework, confidence score, and detected tooling.
+- AND supports user-provided overrides via `stack_detection_overrides` configuration.
+- AND supports additional detection rules via `additional_detection_rules_path` configuration.
+
+#### Scenario: Artifact Discovery [SPEC-BROWNFIELD-003]
+- GIVEN a repo path and a stack fingerprint.
+- WHEN the ArtifactDiscoverer service is called.
+- THEN the service scans for framework-specific artifacts (schema, routes, components, dependency manifests, entry points, ORM config, CI config) using YAML-defined artifact maps.
+- AND the `components` role discovers UI files (views, templates, React components, layouts, hooks) per stack.
+- AND returns an array of discovered artifacts with path, type, and metadata.
+- AND supports additional artifact maps via `additional_artifact_maps_path` configuration.
+
+#### Scenario: Overlay Resolution [SPEC-BROWNFIELD-004]
+- GIVEN a stack fingerprint.
+- WHEN the OverlayResolver service is called.
+- THEN the service loads the appropriate framework overlay from YAML data files.
+- AND returns framework-specific concern mappings, conventions, health check definitions, and `behavioral_files` glob patterns per concern.
+- AND `behavioral_files` patterns are resolved by agents to identify which files contain behavioral implementation for each concern.
+
+#### Scenario: Enhanced Deterministic Layer [SPEC-BROWNFIELD-010]
+- GIVEN a repo path and a stack fingerprint.
+- WHEN the brownfield analysis pipeline executes its deterministic pre-processing steps.
+- THEN a FileManifestBuilder walks the repo tree, skips vendor directories, and parses files by language to produce an AST-like manifest of classes, methods, and modules.
+- AND a RouteTableParser extracts HTTP endpoints from framework-specific route files (Rails, Django, Next.js).
+- AND a GitActivityAnalyzer mines commit history (past 6 months) to produce file churn and authorship data.
+- AND a TestNameCollector runs the test framework in dry-run mode, parses test names, and groups them by concern using keyword matching. Supports minitest, rspec, jest, pytest, and cargo.
+- AND all deterministic results are packaged into an AnalysisContext (Data.define) alongside stack fingerprint, artifacts, overlay, concerns, reference materials, and change request.
+
+#### Scenario: Parallel Specialized Agents [SPEC-BROWNFIELD-011]
+- GIVEN an AnalysisContext and a FileContentCache (thread-safe, 50KB per-file limit).
+- WHEN the ParallelAgentRunner executes the 5 specialized agents concurrently via threads.
+- THEN each agent receives the shared context and file cache, uses `chat_json` with a strict JSON schema, and returns `{data:, tokens_used:}`.
+- AND the 5 specialized agents are:
+  - **DataModelAgent**: Analyzes models, associations, validations, callbacks, scopes, and business methods. Output schema: `data_model_analysis`.
+  - **BusinessLogicAgent**: Extracts service objects, domain logic, state machines, and side effects. Output schema: `business_logic_analysis`.
+  - **ControllerRouteAgent**: Documents HTTP endpoints, access control, input/output contracts. Output schema: `controller_route_analysis`.
+  - **InfrastructureAgent**: Identifies conventions, framework concerns (auth, data_layer, API, etc.), and configuration patterns. Output schema: `infrastructure_analysis`.
+  - **ViewUxAgent**: Maps views, pages, layouts, role-based adaptations, and JavaScript controllers. Output schema: `view_ux_analysis`.
+- AND each agent result is wrapped in an AgentResult (agent_name, output, error, duration_ms, tokens_used).
+- AND agent failures are isolated — one agent crashing does not prevent other agents from completing.
+- AND per-agent model overrides are supported via `brownfield_agent_models` configuration.
+
+#### Scenario: Synthesis Agent (As-Built Spec Generation) [SPEC-BROWNFIELD-012]
+- GIVEN all 5 agent results, the concerns mapping, stack fingerprint, project name, and optional reference materials.
+- WHEN the SynthesisAgent is called after all parallel agents complete.
+- THEN it produces an OpenSpec-format specification document in Markdown reflecting the codebase's actual behavior.
+- AND when reference materials are provided, they are included to produce a richer specification informed by product documentation.
+- AND the specification is persisted as a Specification record with `spec_type: "as_built"`.
+
+#### Scenario: Concern Diff Analysis [SPEC-BROWNFIELD-013]
+- GIVEN an as-built specification, a change request, and a list of concern IDs.
+- WHEN the ConcernDiffAnalyzer agent is called.
+- THEN it uses `chat_json` with a strict schema to identify which concerns are affected by the change.
+- AND each affected concern is classified as `modify`, `extend`, or `new` with a rationale.
+- AND the output includes a `delta_concerns` array and a summary string.
+
+#### Scenario: JSON Parse Repair [SPEC-BROWNFIELD-014]
+- GIVEN an LLM response containing truncated JSON (unclosed brackets or braces).
+- WHEN `BaseAgent#parse_json` fails to parse the response.
+- THEN the repair mechanism counts unmatched openers (respecting string literals), appends the missing closers in reverse order, and reattempts parsing.
+- AND trailing commas before closing brackets are stripped before repair.
+- AND structural mismatches (e.g., `}` without a matching `{`) return nil instead of attempting repair.
+
+#### Scenario: Health Baseline [SPEC-BROWNFIELD-008]
+- GIVEN a repo path, convention inventory, and artifact map.
+- WHEN the HealthBaselineRunner service is called.
+- THEN the service executes health checks (boot, test suite, linter) with a configurable timeout (`health_baseline_timeout`).
+- AND returns pass/fail results per check plus a summary.
+- AND the health baseline is persisted as part of the CodebaseProfile.
+
+#### Scenario: CodebaseProfile Persistence [SPEC-BROWNFIELD-009]
+- GIVEN a completed brownfield analysis.
+- WHEN all analysis steps succeed.
+- THEN a CodebaseProfile record is created with: project_name, stack_fingerprint, recipe_alignment, conventions, health_baseline, change_surface, scan_data (including agent_results, file_manifest, route_table, git_activity, test_names), as_built_spec content, confidence, token_budget_used, and analyzed_at.
+- AND the CodebaseProfile belongs to the PipelineRun.
+- AND the PipelineRun transitions to `completed` status.
 
 ### Requirement: Drift Detection [SPEC-DRIFT-001]
 The system SHALL provide a DriftDetector agent that analyzes completed pipeline work against the specification to identify divergence.
@@ -1053,6 +1166,16 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 | spec_test_generation_enabled | Boolean | false | None |
 | spec_test_directory | String | "test/spec_integration" | None |
 | spec_test_persona | String | "testing_specialist" | None |
+| brownfield_mode | Symbol | nil | Must be :assess, :extend, or :strangle when set |
+| reference_materials | Array | [] | Must be an Array |
+| brownfield_scan_budget | Integer | 50000 | Positive integer (token budget for brownfield LLM analysis) |
+| brownfield_deep_dive_domains | Array | nil | nil or Array of domain names for targeted deep analysis |
+| convention_compliance_enabled | Boolean | false | None |
+| regression_baseline_enabled | Boolean | true | None |
+| stack_detection_overrides | Hash | {} | Must be a Hash |
+| additional_detection_rules_path | String | nil | Path to additional YAML detection rules |
+| additional_artifact_maps_path | String | nil | Path to additional YAML artifact maps |
+| health_baseline_timeout | Integer | 120 | Positive integer (seconds for health check execution) |
 
 ### PipelineRun State Machine
 
@@ -1074,7 +1197,7 @@ The PipelineRun model uses a status enum with the following values and valid tra
 #### Valid State Transitions
 
 ```
-pending -> generating_spec | executing | failed
+pending -> generating_spec | executing | analyzing (brownfield) | failed
 generating_spec -> breaking_tasks | failed | paused
 breaking_tasks -> executing | failed | paused
 executing -> awaiting_results | analyzing (sync providers) | failed | paused
@@ -1086,4 +1209,4 @@ completed -> (terminal, no transitions)
 max_iterations_reached -> (terminal, no transitions)
 ```
 
-The `analyzing` state has branching transitions: `completed` and `max_iterations_reached` are terminal states; `executing` is reached via an `iterate_tasks` decision (new corrective tasks); `breaking_tasks` is reached via an `iterate_spec` decision (the spec is updated inline, then tasks are re-broken without a separate `generating_spec` pass). The `executing` → `analyzing` transition supports sync providers (e.g., Claude Code) that skip the `awaiting_results` polling stage. `pending` can transition directly to `executing` or `failed` for resume/restart paths. `paused` and `failed` have explicit transition targets matching the stages they can resume into. Active stages may transition to `failed` on error; stages with a `stop_after` checkpoint may transition to `paused`.
+The `analyzing` state has branching transitions: `completed` and `max_iterations_reached` are terminal states; `executing` is reached via an `iterate_tasks` decision (new corrective tasks); `breaking_tasks` is reached via an `iterate_spec` decision (the spec is updated inline, then tasks are re-broken without a separate `generating_spec` pass). The `executing` → `analyzing` transition supports sync providers (e.g., Claude Code) that skip the `awaiting_results` polling stage. `pending` can transition directly to `executing` or `failed` for resume/restart paths. The `pending` -> `analyzing` transition supports the brownfield analysis path, which skips spec generation and task breakdown to directly analyze an existing codebase. `paused` and `failed` have explicit transition targets matching the stages they can resume into. Active stages may transition to `failed` on error; stages with a `stop_after` checkpoint may transition to `paused`.

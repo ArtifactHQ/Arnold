@@ -247,22 +247,120 @@ module ArnoldPipeline
         assert_kind_of String, result
       end
 
+      # -- Truncated JSON repair --
+
+      test "repairs truncated object with missing closing brace" do
+        text = '{"key": "value"'
+        result = @agent.parse_json(text)
+        assert_equal({ "key" => "value" }, result)
+      end
+
+      test "repairs truncated array inside object" do
+        text = '{"items": [1, 2'
+        result = @agent.parse_json(text)
+        assert_equal({ "items" => [ 1, 2 ] }, result)
+      end
+
+      test "repairs truncated nested structure" do
+        text = '{"outer": {"inner": [1, 2, 3'
+        result = @agent.parse_json(text)
+        assert_equal({ "outer" => { "inner" => [ 1, 2, 3 ] } }, result)
+      end
+
+      test "repairs truncated object with trailing comma" do
+        text = '{"a": 1, "b": 2,'
+        result = @agent.parse_json(text)
+        assert_equal({ "a" => 1, "b" => 2 }, result)
+      end
+
+      test "does not repair non-truncation parse errors" do
+        assert_raises(ArnoldPipeline::Agents::LlmParseError) do
+          @agent.parse_json("{invalid token}")
+        end
+      end
+
+      test "does not repair mismatched brackets" do
+        assert_raises(ArnoldPipeline::Agents::LlmParseError) do
+          @agent.parse_json('{"key": ]')
+        end
+      end
+
       # -- chat_json delegation --
 
       test "chat_json delegates to llm.chat_json and returns result" do
         schema = { name: "test", schema: { type: "object" } }
         expected = { "key" => "value" }
-        @llm.expects(:chat_json).with(
-          messages: [ { role: :user, content: "Hi" } ],
-          system: nil,
-          schema: schema
-        ).returns(expected)
+        @llm.expects(:chat_json).with { |kwargs|
+          kwargs[:messages] == [ { role: :user, content: "Hi" } ] &&
+            kwargs[:system].nil? &&
+            kwargs[:schema][:name] == "test"
+        }.returns(expected)
 
         result = @agent.chat_json(
           messages: [ { role: :user, content: "Hi" } ],
           schema: schema
         )
         assert_equal expected, result
+      end
+
+      # -- Schema normalization --
+
+      test "normalize_schema adds missing keys to required array" do
+        schema = {
+          name: "test",
+          schema: {
+            type: "object",
+            required: %w[a],
+            properties: { a: { type: "string" }, b: { anyOf: [ { type: "string" }, { type: "null" } ] } }
+          }
+        }
+        @llm.expects(:chat_json).with { |kwargs|
+          inner = kwargs[:schema][:schema]
+          inner[:required].sort == %w[a b] && inner[:additionalProperties] == false
+        }.returns({})
+        @agent.chat_json(messages: [ { role: :user, content: "x" } ], schema: schema)
+      end
+
+      test "normalize_schema recurses into nested objects and items" do
+        schema = {
+          name: "test",
+          schema: {
+            type: "object",
+            required: %w[list],
+            properties: {
+              list: {
+                type: "array",
+                items: {
+                  type: "object",
+                  required: %w[id],
+                  properties: {
+                    id: { type: "string" },
+                    meta: { anyOf: [ { type: "string" }, { type: "null" } ] }
+                  }
+                }
+              }
+            }
+          }
+        }
+        @llm.expects(:chat_json).with { |kwargs|
+          items = kwargs[:schema][:schema][:properties][:list][:items]
+          items[:required].sort == %w[id meta]
+        }.returns({})
+        @agent.chat_json(messages: [ { role: :user, content: "x" } ], schema: schema)
+      end
+
+      test "normalize_schema does not mutate the original schema" do
+        schema = {
+          name: "test",
+          schema: {
+            type: "object",
+            required: %w[a],
+            properties: { a: { type: "string" }, b: { type: "string" } }
+          }
+        }
+        @llm.stubs(:chat_json).returns({})
+        @agent.chat_json(messages: [ { role: :user, content: "x" } ], schema: schema)
+        assert_equal %w[a], schema[:schema][:required]
       end
     end
   end

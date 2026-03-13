@@ -1,7 +1,7 @@
 module ArnoldPipeline
   class PipelineEvent < ApplicationRecord
     VALID_STAGES = %w[
-      spec_generation task_breakdown execution tier_gate analysis iteration lifecycle
+      spec_generation task_breakdown execution tier_gate analysis iteration lifecycle brownfield
     ].freeze
 
     enum :event_type, {
@@ -28,7 +28,18 @@ module ArnoldPipeline
       verification_checks: 20,
       pipeline_finalized: 21,
       finalization_verification: 22,
-      finalization_setup: 23
+      finalization_setup: 23,
+      stack_detection: 24,
+      codebase_profiling: 25,
+      feature_extraction: 26,
+      as_built_spec_generated: 27,
+      health_baseline: 28,
+      test_name_collection: 29,
+      concern_diff_analysis: 30,
+      file_manifest_built: 31,
+      route_table_parsed: 32,
+      git_activity_analyzed: 33,
+      parallel_agents_completed: 34
     }
 
     belongs_to :pipeline_run

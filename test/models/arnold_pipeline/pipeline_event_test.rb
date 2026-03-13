@@ -52,12 +52,15 @@ module ArnoldPipeline
         criteria_check verification_execution test_execution spec_test_execution
         post_merge_hooks verification_checks
         pipeline_finalized finalization_verification finalization_setup
+        stack_detection codebase_profiling feature_extraction as_built_spec_generated health_baseline
+        test_name_collection concern_diff_analysis
+        file_manifest_built route_table_parsed git_activity_analyzed parallel_agents_completed
       ]
       assert_equal expected, PipelineEvent.event_types.keys
     end
 
     test "VALID_STAGES includes all stages" do
-      expected = %w[spec_generation task_breakdown execution tier_gate analysis iteration lifecycle]
+      expected = %w[spec_generation task_breakdown execution tier_gate analysis iteration lifecycle brownfield]
       assert_equal expected, PipelineEvent::VALID_STAGES
     end
 
