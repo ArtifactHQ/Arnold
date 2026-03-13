@@ -993,6 +993,69 @@ module ArnoldPipeline
           system("git", "-C", @repo_path, "worktree", "remove", worktree_path) if worktree_path && Dir.exist?(worktree_path)
         end
 
+        # --- ensure_initial_commit! tests ---
+
+        test "ensure_initial_commit! is a no-op when repo already has commits" do
+          # setup already creates an initial commit
+          head_before, = Open3.capture2("git", "-C", @repo_path, "rev-parse", "HEAD")
+
+          @provider.send(:ensure_initial_commit!)
+
+          head_after, = Open3.capture2("git", "-C", @repo_path, "rev-parse", "HEAD")
+          assert_equal head_before.strip, head_after.strip, "HEAD should not change when commits already exist"
+        end
+
+        test "ensure_initial_commit! creates initial commit on empty repo" do
+          empty_repo = Dir.mktmpdir
+          system("git", "-C", empty_repo, "init", exception: true)
+          provider = ClaudeCode.new(repo_path: empty_repo)
+
+          # Verify HEAD is invalid before
+          _, status = Open3.capture2("git", "-C", empty_repo, "rev-parse", "HEAD")
+          refute status.success?, "Empty repo should not have a valid HEAD"
+
+          provider.send(:ensure_initial_commit!)
+
+          # Now HEAD should be valid
+          _, status = Open3.capture2("git", "-C", empty_repo, "rev-parse", "HEAD")
+          assert status.success?, "HEAD should be valid after ensure_initial_commit!"
+
+          # And the commit message should be identifiable
+          msg, = Open3.capture2("git", "-C", empty_repo, "log", "--format=%s", "-1")
+          assert_equal "Initial commit (arnold pipeline)", msg.strip
+        ensure
+          FileUtils.remove_entry(empty_repo) if empty_repo && Dir.exist?(empty_repo)
+        end
+
+        test "ensure_initial_commit! enables worktree and diff on fresh repo" do
+          empty_repo = Dir.mktmpdir
+          system("git", "-C", empty_repo, "init", exception: true)
+          provider = ClaudeCode.new(repo_path: empty_repo)
+
+          provider.send(:ensure_initial_commit!)
+
+          # Worktree creation should now work
+          branch = "test-fresh-worktree"
+          worktree_path = File.join(empty_repo, ".worktrees", branch)
+          system("git", "-C", empty_repo, "worktree", "add", "-B", branch, worktree_path, exception: true)
+
+          # Add a file in the worktree
+          File.write(File.join(worktree_path, "hello.rb"), "puts 'hello'\n")
+          system("git", "-C", worktree_path, "add", "-A", ".", exception: true)
+          system("git", "-C", worktree_path, "commit", "-m", "Add hello", exception: true)
+
+          # diff HEAD...branch should return content
+          diff, = Open3.capture2("git", "-C", empty_repo, "diff", "HEAD...#{branch}")
+          assert_includes diff, "hello.rb", "diff should detect changes on worktree branch"
+
+          # merge should succeed
+          _, status = Open3.capture2e("git", "-C", empty_repo, "merge", "--no-ff", "--no-edit", branch)
+          assert status.success?, "merge into main should succeed after initial commit"
+        ensure
+          system("git", "-C", empty_repo, "worktree", "remove", "--force", worktree_path) if worktree_path && Dir.exist?(worktree_path)
+          FileUtils.remove_entry(empty_repo) if empty_repo && Dir.exist?(empty_repo)
+        end
+
         test "setup_worktree creates .gitignore when missing" do
           branch = "test-gitignore-creation"
           worktree_path = @provider.send(:setup_worktree, branch)
