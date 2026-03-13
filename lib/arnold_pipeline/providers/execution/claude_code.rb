@@ -43,6 +43,10 @@ module ArnoldPipeline
             raise ConfigurationError, "claude_code_repo_path '#{path}' is not a valid directory"
           end
 
+          unless system("git", "-C", path, "rev-parse", "--git-dir", out: File::NULL, err: File::NULL)
+            raise ConfigurationError, "claude_code_repo_path '#{path}' is not a git repository"
+          end
+
           unless claude_cli_available?
             raise ConfigurationError,
               "claude CLI not found — install Claude Code: npm install -g @anthropic-ai/claude-code"
@@ -79,6 +83,7 @@ module ArnoldPipeline
 
         def create_tasks(tasks:, pipeline_run:, prior_context: nil)
           @library_selections = resolve_library_selections(pipeline_run)
+          ensure_initial_commit!
 
           work_items = tasks.each_with_index.map do |task, index|
             title = task.respond_to?(:title) ? task.title : task["title"]
@@ -444,6 +449,21 @@ module ArnoldPipeline
           cmd_parts += tool_restriction_flags
           cmd_parts << prompt
           cmd_parts.shelljoin
+        end
+
+        # Ensure the target repo has at least one commit so that HEAD is valid.
+        # Without this, git worktree, diff HEAD..., and merge all fail on a
+        # freshly-initialized repo with no commits.
+        # Safe to call multiple times; no-ops if HEAD already resolves.
+        def ensure_initial_commit!
+          _, status = Open3.capture2e("git", "-C", repo_path, "rev-parse", "HEAD")
+          return if status.success?
+
+          system("git", "-C", repo_path,
+            "-c", "user.name=Arnold Pipeline",
+            "-c", "user.email=arnold@pipeline.local",
+            "commit", "--allow-empty",
+            "-m", "Initial commit (arnold pipeline)", exception: true)
         end
 
         def setup_worktree(branch)
