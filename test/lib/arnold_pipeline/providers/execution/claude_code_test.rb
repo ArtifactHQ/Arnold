@@ -482,6 +482,20 @@ module ArnoldPipeline
           assert_match(/is not a valid directory/, error.message)
         end
 
+        test "validate_configuration! raises when repo_path is not a git repository" do
+          non_git_dir = Dir.mktmpdir
+          config = ArnoldPipeline::Configuration.new
+          config.execution_provider = :claude_code
+          config.claude_code_repo_path = non_git_dir
+
+          error = assert_raises(ArnoldPipeline::ConfigurationError) do
+            ClaudeCode.validate_configuration!(config)
+          end
+          assert_match(/is not a git repository/, error.message)
+        ensure
+          FileUtils.remove_entry(non_git_dir) if non_git_dir && Dir.exist?(non_git_dir)
+        end
+
         test "validate_configuration! raises when claude CLI not available" do
           config = ArnoldPipeline::Configuration.new
           config.execution_provider = :claude_code
