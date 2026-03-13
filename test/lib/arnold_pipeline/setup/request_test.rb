@@ -54,9 +54,10 @@ module ArnoldPipeline
         assert_equal "/tmp/updated", request.project_path
       end
 
-      test "VALID_LLM_PROVIDERS includes anthropic and openai" do
+      test "VALID_LLM_PROVIDERS includes anthropic, openai, and openrouter" do
         assert_includes Request::VALID_LLM_PROVIDERS, "anthropic"
         assert_includes Request::VALID_LLM_PROVIDERS, "openai"
+        assert_includes Request::VALID_LLM_PROVIDERS, "openrouter"
       end
 
       test "VALID_EXECUTION_PROVIDERS includes github claude_code and null" do

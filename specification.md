@@ -793,7 +793,7 @@ All commands accept the following global options:
 #### Command: run
 - GIVEN a natural language description as argument.
 - WHEN `arnold_pipeline run DESCRIPTION` is executed.
-- THEN the full pipeline runs with options: --config (YAML path), --provider (anthropic|openai), --model (name), --repo (owner/repo), --issue-mention (@handle), --polling-interval (seconds), --polling-timeout (seconds), --stop-after (spec|tasks|executed), --preview/--dry-run (boolean, generate spec and tasks without publishing to GitHub), --verbose (boolean).
+- THEN the full pipeline runs with options: --config (YAML path), --provider (anthropic|openai|openrouter), --model (name), --repo (owner/repo), --issue-mention (@handle), --polling-interval (seconds), --polling-timeout (seconds), --stop-after (spec|tasks|executed), --preview/--dry-run (boolean, generate spec and tasks without publishing to GitHub), --verbose (boolean).
 - Exit code 0 on success, 1 on error.
 
 #### Command: resume
@@ -863,7 +863,7 @@ All commands accept the following global options:
 - AND the deltas are merged via the 3-tier merge chain (OpenSpec → structured append → legacy).
 - AND a SpecRevision is created with change_source: "user_iterate".
 - AND existing tasks (if any) are marked as `superseded`.
-- Options: --config (YAML path), --provider (anthropic|openai), --model (name), --dry-run (boolean), --json (boolean), --verbose (boolean), --yes/-y (boolean, skip confirmation).
+- Options: --config (YAML path), --provider (anthropic|openai|openrouter), --model (name), --dry-run (boolean), --json (boolean), --verbose (boolean), --yes/-y (boolean, skip confirmation).
 - Exit code 0 on success, 1 on error (including "not found", invalid state, empty change request).
 
 #### Scenario: Dry Run Preview [SPEC-CLI-ITERATE-002]
@@ -923,7 +923,7 @@ All commands accept the following global options:
 - THEN the full profile data is output as JSON (project_name, stack, confidence, recipe_alignment, conventions, health_baseline, feature_inventories, documentation_fidelity, change_surface, token_budget_used, analyzed_at).
 - WHEN the --output/-o flag is provided.
 - THEN the as-built specification markdown is written to the specified file.
-- Options: --config (YAML path), --provider (anthropic|openai), --model (name), --reference-materials (array of file paths), --json (boolean), --verbose (boolean), --output/-o (file path).
+- Options: --config (YAML path), --provider (anthropic|openai|openrouter), --model (name), --reference-materials (array of file paths), --json (boolean), --verbose (boolean), --output/-o (file path).
 - Exit code 0 on success, 1 on error (including directory not found).
 
 ### Requirement: Brownfield Codebase Analysis [SPEC-BROWNFIELD-001]
@@ -1117,6 +1117,45 @@ Tools for detecting and resolving spec-vs-code divergence:
 - `detect_drift` — Runs the DriftDetector agent with specified scope and depth, persists findings as DriftFinding records, and returns findings with coverage statistics. Accepted findings from the current spec revision are automatically excluded.
 - `resolve_drift` — Resolves a drift finding by ID using one of four strategies: `update_spec`, `update_code`, `accept`, or `ignore` (see SPEC-DRIFT-006).
 
+### Requirement: LLM Providers [SPEC-PROVIDER-001]
+The system SHALL support pluggable LLM providers for spec generation, task breakdown, analysis, and brownfield agents. Each provider implements a common interface with two methods: `chat(messages:, system:)` for free-text responses and `chat_json(messages:, system:, schema:)` for structured JSON output. Providers are selected via the `llm_provider` configuration key and auto-detected from environment variables when not explicitly set.
+
+#### Scenario: Provider Auto-Detection
+- GIVEN no explicit `llm_provider` configuration is set.
+- WHEN the system resolves the LLM provider.
+- THEN it checks environment variables in priority order: `ANTHROPIC_API_KEY` (highest), `OPENAI_API_KEY`, `OPENROUTER_API_KEY` (lowest).
+- AND the first non-empty key determines the provider.
+- AND if no key is found, the provider defaults to `:anthropic`.
+
+#### Scenario: Anthropic Provider [SPEC-PROVIDER-002]
+- GIVEN `llm_provider` is `:anthropic`.
+- WHEN the LLM client is built.
+- THEN the system uses the `anthropic` gem with the Anthropic Messages API.
+- AND API key is read from `ANTHROPIC_API_KEY` environment variable (or explicit configuration).
+- AND the default model is `claude-sonnet-4-6`.
+- AND `chat_json` uses Anthropic's tool_use mechanism with `tool_choice: { type: "tool" }` for structured output.
+- AND truncation is detected via `stop_reason == "max_tokens"` and raises an error.
+
+#### Scenario: OpenAI Provider [SPEC-PROVIDER-002a]
+- GIVEN `llm_provider` is `:openai`.
+- WHEN the LLM client is built.
+- THEN the system uses the `ruby-openai` gem with the OpenAI Chat Completions API.
+- AND API key is read from `OPENAI_API_KEY` environment variable (or explicit configuration).
+- AND the default model is `gpt-5-mini-2025-08-07`.
+- AND `chat_json` uses OpenAI's `response_format: { type: "json_schema" }` for structured output.
+- AND truncation is detected via `finish_reason == "length"` and raises an error.
+
+#### Scenario: OpenRouter Provider [SPEC-PROVIDER-003]
+- GIVEN `llm_provider` is `:openrouter`.
+- WHEN the LLM client is built.
+- THEN the system uses the `ruby-openai` gem with `uri_base` set to `https://openrouter.ai/api/v1`.
+- AND the request includes OpenRouter-specific headers: `HTTP-Referer: https://github.com/ArtifactHQ/Arnold` and `X-Title: Arnold Pipeline`.
+- AND API key is read from `OPENROUTER_API_KEY` environment variable (or explicit configuration).
+- AND the default model is `anthropic/claude-sonnet-4`.
+- AND `chat_json` uses the same `response_format: { type: "json_schema" }` mechanism as the OpenAI provider.
+- AND truncation is detected via `finish_reason == "length"` and raises an error.
+- AND no additional gem dependency is required beyond the existing `ruby-openai` gem.
+
 ### Requirement: Configuration
 The system SHALL be configurable via a Ruby block (`ArnoldPipeline.configure`) or YAML config file.
 When multiple sources provide the same key, CLI flags take precedence over YAML config, which takes precedence over defaults (CLI > YAML > defaults).
@@ -1125,7 +1164,7 @@ All configuration keys SHALL be validated before pipeline execution via `validat
 
 | Key | Type | Default | Validation |
 |---|---|---|---|
-| llm_provider | Symbol | :anthropic | Must be :anthropic or :openai |
+| llm_provider | Symbol | :anthropic | Must be :anthropic, :openai, or :openrouter |
 | llm_api_key | String | ENV lookup | Required (non-empty) |
 | llm_model | String | Provider default | None |
 | execution_provider | Symbol | :github | Must be :github, :claude_code, :null, or a registered provider |

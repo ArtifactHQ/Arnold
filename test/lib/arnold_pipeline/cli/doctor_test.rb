@@ -7,6 +7,7 @@ module ArnoldPipeline
       setup do
         @original_anthropic = ENV["ANTHROPIC_API_KEY"]
         @original_openai = ENV["OPENAI_API_KEY"]
+        @original_openrouter = ENV["OPENROUTER_API_KEY"]
       end
 
       teardown do
@@ -19,6 +20,11 @@ module ArnoldPipeline
           ENV["OPENAI_API_KEY"] = @original_openai
         else
           ENV.delete("OPENAI_API_KEY")
+        end
+        if @original_openrouter
+          ENV["OPENROUTER_API_KEY"] = @original_openrouter
+        else
+          ENV.delete("OPENROUTER_API_KEY")
         end
         ArnoldPipeline.reset_configuration!
       end
@@ -79,9 +85,19 @@ module ArnoldPipeline
       test "check_api_keys returns pass when OPENAI_API_KEY set" do
         ENV.delete("ANTHROPIC_API_KEY")
         ENV["OPENAI_API_KEY"] = "sk-test"
+        ENV.delete("OPENROUTER_API_KEY")
         result = Doctor.check_api_keys
         assert_equal :pass, result.status
         assert_match(/OPENAI_API_KEY/, result.message)
+      end
+
+      test "check_api_keys returns pass when OPENROUTER_API_KEY set" do
+        ENV.delete("ANTHROPIC_API_KEY")
+        ENV.delete("OPENAI_API_KEY")
+        ENV["OPENROUTER_API_KEY"] = "sk-or-test"
+        result = Doctor.check_api_keys
+        assert_equal :pass, result.status
+        assert_match(/OPENROUTER_API_KEY/, result.message)
       end
 
       test "check_api_keys prefers ANTHROPIC_API_KEY when both set" do
@@ -95,6 +111,7 @@ module ArnoldPipeline
       test "check_api_keys returns pass when configured via config file" do
         ENV.delete("ANTHROPIC_API_KEY")
         ENV.delete("OPENAI_API_KEY")
+        ENV.delete("OPENROUTER_API_KEY")
         ArnoldPipeline.configure { |c| c.llm_api_key = "some-key" }
         result = Doctor.check_api_keys
         assert_equal :pass, result.status
@@ -104,6 +121,7 @@ module ArnoldPipeline
       test "check_api_keys returns fail when no key set" do
         ENV.delete("ANTHROPIC_API_KEY")
         ENV.delete("OPENAI_API_KEY")
+        ENV.delete("OPENROUTER_API_KEY")
         ArnoldPipeline.reset_configuration!
         result = Doctor.check_api_keys
         assert_equal :fail, result.status
@@ -113,6 +131,7 @@ module ArnoldPipeline
       test "check_api_keys treats empty string as missing" do
         ENV["ANTHROPIC_API_KEY"] = ""
         ENV.delete("OPENAI_API_KEY")
+        ENV.delete("OPENROUTER_API_KEY")
         ArnoldPipeline.reset_configuration!
         result = Doctor.check_api_keys
         assert_equal :fail, result.status

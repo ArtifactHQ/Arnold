@@ -10,7 +10,7 @@ module ArnoldPipeline
 
     test "has sensible defaults" do
       assert_includes Configuration::VALID_LLM_PROVIDERS, @config.llm_provider
-      assert_includes [ "claude-sonnet-4-6", "gpt-5-mini-2025-08-07" ], @config.llm_model
+      assert_includes [ "claude-sonnet-4-6", "gpt-5-mini-2025-08-07", "anthropic/claude-sonnet-4" ], @config.llm_model
       assert_equal :github, @config.execution_provider
       assert_equal 3, @config.max_iterations
       assert_nil @config.github_issue_mention
@@ -49,8 +49,10 @@ module ArnoldPipeline
     test "validate! raises on missing llm_api_key" do
       original_anthropic = ENV["ANTHROPIC_API_KEY"]
       original_openai = ENV["OPENAI_API_KEY"]
+      original_openrouter = ENV["OPENROUTER_API_KEY"]
       ENV.delete("ANTHROPIC_API_KEY")
       ENV.delete("OPENAI_API_KEY")
+      ENV.delete("OPENROUTER_API_KEY")
 
       config = Configuration.new
       config.llm_api_key = nil
@@ -62,6 +64,7 @@ module ArnoldPipeline
     ensure
       original_anthropic ? ENV["ANTHROPIC_API_KEY"] = original_anthropic : ENV.delete("ANTHROPIC_API_KEY")
       original_openai ? ENV["OPENAI_API_KEY"] = original_openai : ENV.delete("OPENAI_API_KEY")
+      original_openrouter ? ENV["OPENROUTER_API_KEY"] = original_openrouter : ENV.delete("OPENROUTER_API_KEY")
     end
 
     test "validate! raises on empty llm_api_key" do
@@ -110,6 +113,15 @@ module ArnoldPipeline
       assert @config.validate!
     end
 
+    test "validate! accepts openrouter provider" do
+      @config.llm_provider = :openrouter
+      @config.llm_api_key = "sk-or-test"
+      @config.github_token = "ghp_test"
+      @config.github_repo = "owner/repo"
+
+      assert @config.validate!
+    end
+
     test "llm_api_key resolves from env based on provider" do
       @config.llm_provider = :openai
       original = ENV["OPENAI_API_KEY"]
@@ -120,12 +132,25 @@ module ArnoldPipeline
       ENV["OPENAI_API_KEY"] = original
     end
 
+    test "llm_api_key resolves from env for openrouter provider" do
+      @config.llm_provider = :openrouter
+      original = ENV["OPENROUTER_API_KEY"]
+      ENV["OPENROUTER_API_KEY"] = "sk-or-test"
+
+      assert_equal "sk-or-test", @config.llm_api_key
+    ensure
+      original ? ENV["OPENROUTER_API_KEY"] = original : ENV.delete("OPENROUTER_API_KEY")
+    end
+
     test "llm_model defaults based on provider" do
       @config.llm_provider = :anthropic
       assert_equal "claude-sonnet-4-6", @config.llm_model
 
       @config.llm_provider = :openai
       assert_equal "gpt-5-mini-2025-08-07", @config.llm_model
+
+      @config.llm_provider = :openrouter
+      assert_equal "anthropic/claude-sonnet-4", @config.llm_model
     end
 
     test "explicit llm_api_key takes precedence over env" do
@@ -154,7 +179,7 @@ module ArnoldPipeline
       ArnoldPipeline.configure { |c| c.llm_model = "custom-model" }
       ArnoldPipeline.reset_configuration!
 
-      assert_includes [ "claude-sonnet-4-6", "gpt-5-mini-2025-08-07" ], ArnoldPipeline.configuration.llm_model
+      assert_includes [ "claude-sonnet-4-6", "gpt-5-mini-2025-08-07", "anthropic/claude-sonnet-4" ], ArnoldPipeline.configuration.llm_model
     end
 
     test "validate! raises on invalid polling_interval" do
@@ -439,53 +464,81 @@ module ArnoldPipeline
     test "auto-detects anthropic when ANTHROPIC_API_KEY is set" do
       original_anthropic = ENV["ANTHROPIC_API_KEY"]
       original_openai = ENV["OPENAI_API_KEY"]
+      original_openrouter = ENV["OPENROUTER_API_KEY"]
       ENV["ANTHROPIC_API_KEY"] = "sk-ant-test"
       ENV.delete("OPENAI_API_KEY")
+      ENV.delete("OPENROUTER_API_KEY")
 
       config = Configuration.new
       assert_equal :anthropic, config.llm_provider
     ensure
       ENV["ANTHROPIC_API_KEY"] = original_anthropic
       ENV["OPENAI_API_KEY"] = original_openai
+      original_openrouter ? ENV["OPENROUTER_API_KEY"] = original_openrouter : ENV.delete("OPENROUTER_API_KEY")
     end
 
     test "auto-detects openai when only OPENAI_API_KEY is set" do
       original_anthropic = ENV["ANTHROPIC_API_KEY"]
       original_openai = ENV["OPENAI_API_KEY"]
+      original_openrouter = ENV["OPENROUTER_API_KEY"]
       ENV.delete("ANTHROPIC_API_KEY")
       ENV["OPENAI_API_KEY"] = "sk-openai-test"
+      ENV.delete("OPENROUTER_API_KEY")
 
       config = Configuration.new
       assert_equal :openai, config.llm_provider
     ensure
       ENV["ANTHROPIC_API_KEY"] = original_anthropic
       ENV["OPENAI_API_KEY"] = original_openai
+      original_openrouter ? ENV["OPENROUTER_API_KEY"] = original_openrouter : ENV.delete("OPENROUTER_API_KEY")
+    end
+
+    test "auto-detects openrouter when only OPENROUTER_API_KEY is set" do
+      original_anthropic = ENV["ANTHROPIC_API_KEY"]
+      original_openai = ENV["OPENAI_API_KEY"]
+      original_openrouter = ENV["OPENROUTER_API_KEY"]
+      ENV.delete("ANTHROPIC_API_KEY")
+      ENV.delete("OPENAI_API_KEY")
+      ENV["OPENROUTER_API_KEY"] = "sk-or-test"
+
+      config = Configuration.new
+      assert_equal :openrouter, config.llm_provider
+    ensure
+      ENV["ANTHROPIC_API_KEY"] = original_anthropic
+      ENV["OPENAI_API_KEY"] = original_openai
+      original_openrouter ? ENV["OPENROUTER_API_KEY"] = original_openrouter : ENV.delete("OPENROUTER_API_KEY")
     end
 
     test "auto-detects anthropic when neither key is set" do
       original_anthropic = ENV["ANTHROPIC_API_KEY"]
       original_openai = ENV["OPENAI_API_KEY"]
+      original_openrouter = ENV["OPENROUTER_API_KEY"]
       ENV.delete("ANTHROPIC_API_KEY")
       ENV.delete("OPENAI_API_KEY")
+      ENV.delete("OPENROUTER_API_KEY")
 
       config = Configuration.new
       assert_equal :anthropic, config.llm_provider
     ensure
       ENV["ANTHROPIC_API_KEY"] = original_anthropic
       ENV["OPENAI_API_KEY"] = original_openai
+      original_openrouter ? ENV["OPENROUTER_API_KEY"] = original_openrouter : ENV.delete("OPENROUTER_API_KEY")
     end
 
     test "auto-detects anthropic when both keys are set" do
       original_anthropic = ENV["ANTHROPIC_API_KEY"]
       original_openai = ENV["OPENAI_API_KEY"]
+      original_openrouter = ENV["OPENROUTER_API_KEY"]
       ENV["ANTHROPIC_API_KEY"] = "sk-ant-test"
       ENV["OPENAI_API_KEY"] = "sk-openai-test"
+      ENV.delete("OPENROUTER_API_KEY")
 
       config = Configuration.new
       assert_equal :anthropic, config.llm_provider
     ensure
       ENV["ANTHROPIC_API_KEY"] = original_anthropic
       ENV["OPENAI_API_KEY"] = original_openai
+      original_openrouter ? ENV["OPENROUTER_API_KEY"] = original_openrouter : ENV.delete("OPENROUTER_API_KEY")
     end
 
     test "explicit llm_provider overrides auto-detection" do

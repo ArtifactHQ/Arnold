@@ -53,6 +53,9 @@ module ArnoldPipeline
         when :openai
           require_relative "open_ai"
           OpenAi.new(api_key:, model:, request_timeout:)
+        when :openrouter
+          require_relative "open_router"
+          OpenRouter.new(api_key:, model:, request_timeout:)
         else
           raise ConfigurationError, "Unknown LLM provider: #{provider}"
         end

@@ -10,7 +10,8 @@ module ArnoldPipeline
 
       ENV_VAR_NAMES = {
         "anthropic" => "ANTHROPIC_API_KEY",
-        "openai" => "OPENAI_API_KEY"
+        "openai" => "OPENAI_API_KEY",
+        "openrouter" => "OPENROUTER_API_KEY"
       }.freeze
 
       Setting = Data.define(:key, :label, :value, :source) do
@@ -25,13 +26,14 @@ module ArnoldPipeline
         return true if ArnoldPipeline.configuration.instance_variable_get(:@llm_api_key)&.then { |k| !k.empty? }
         return true if ENV["ANTHROPIC_API_KEY"]&.then { |k| !k.empty? }
         return true if ENV["OPENAI_API_KEY"]&.then { |k| !k.empty? }
+        return true if ENV["OPENROUTER_API_KEY"]&.then { |k| !k.empty? }
         false
       end
 
       def self.prompt_and_configure!
         prompt = TTY::Prompt.new
 
-        provider_name = prompt.select("Which LLM provider?", %w[Anthropic OpenAI])
+        provider_name = prompt.select("Which LLM provider?", %w[Anthropic OpenAI OpenRouter])
         provider = provider_name.downcase.to_sym
 
         api_key = prompt.mask("Enter your #{provider_name} API key:")
@@ -205,15 +207,22 @@ module ArnoldPipeline
       def detect_llm_provider(existing_config)
         anthropic_set = env_var_set?("ANTHROPIC_API_KEY")
         openai_set = env_var_set?("OPENAI_API_KEY")
+        openrouter_set = env_var_set?("OPENROUTER_API_KEY")
+
+        set_count = [anthropic_set, openai_set, openrouter_set].count(true)
 
         if existing_config[:llm_provider]
           Setting.new(key: :llm_provider, label: "Planning AI (llm_provider)", value: existing_config[:llm_provider], source: :config_file)
-        elsif anthropic_set && !openai_set
-          Setting.new(key: :llm_provider, label: "Planning AI (llm_provider)", value: "anthropic", source: :env_detected)
-        elsif openai_set && !anthropic_set
-          Setting.new(key: :llm_provider, label: "Planning AI (llm_provider)", value: "openai", source: :env_detected)
-        elsif anthropic_set && openai_set
-          # Both are set — we'll ask the user to confirm in prompt_for_missing!
+        elsif set_count == 1
+          if anthropic_set
+            Setting.new(key: :llm_provider, label: "Planning AI (llm_provider)", value: "anthropic", source: :env_detected)
+          elsif openai_set
+            Setting.new(key: :llm_provider, label: "Planning AI (llm_provider)", value: "openai", source: :env_detected)
+          else
+            Setting.new(key: :llm_provider, label: "Planning AI (llm_provider)", value: "openrouter", source: :env_detected)
+          end
+        elsif set_count >= 2
+          # Multiple are set — we'll ask the user to confirm in prompt_for_missing!
           Setting.new(key: :llm_provider, label: "Planning AI (llm_provider)", value: nil, source: :missing)
         else
           Setting.new(key: :llm_provider, label: "Planning AI (llm_provider)", value: nil, source: :missing)
@@ -283,7 +292,7 @@ module ArnoldPipeline
       def prompt_for_setting(setting)
         case setting.key
         when :llm_provider
-          name = @prompt.select("Which AI should handle planning and analysis?", %w[Anthropic OpenAI])
+          name = @prompt.select("Which AI should handle planning and analysis?", %w[Anthropic OpenAI OpenRouter])
           name.downcase
         when :claude_code_repo_path
           @prompt.ask("Which repository should Arnold work on?", default: Dir.pwd)
@@ -312,7 +321,7 @@ module ArnoldPipeline
       def prompt_for_edit(setting)
         case setting.key
         when :llm_provider
-          name = @prompt.select("Which AI should handle planning and analysis?", %w[Anthropic OpenAI])
+          name = @prompt.select("Which AI should handle planning and analysis?", %w[Anthropic OpenAI OpenRouter])
           name.downcase
         when :llm_model
           @prompt.ask("AI model:", default: setting.value)
@@ -425,6 +434,7 @@ module ArnoldPipeline
         existing_config[:llm_provider]&.to_s ||
           (env_var_set?("ANTHROPIC_API_KEY") ? "anthropic" : nil) ||
           (env_var_set?("OPENAI_API_KEY") ? "openai" : nil) ||
+          (env_var_set?("OPENROUTER_API_KEY") ? "openrouter" : nil) ||
           "anthropic"
       end
 

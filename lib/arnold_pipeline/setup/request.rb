@@ -1,7 +1,7 @@
 module ArnoldPipeline
   module Setup
     class Request
-      VALID_LLM_PROVIDERS = %w[anthropic openai].freeze
+      VALID_LLM_PROVIDERS = %w[anthropic openai openrouter].freeze
       VALID_EXECUTION_PROVIDERS = %w[github claude_code null].freeze
 
       attr_accessor :project_path, :description, :llm_provider, :llm_api_key,

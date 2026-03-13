@@ -30,7 +30,7 @@ module ArnoldPipeline
               },
               llm_provider: {
                 type: "string",
-                enum: %w[anthropic openai],
+                enum: %w[anthropic openai openrouter],
                 description: "LLM provider to use (default: auto-detected from API key)"
               },
               llm_api_key: {

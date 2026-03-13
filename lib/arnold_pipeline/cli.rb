@@ -20,7 +20,7 @@ module ArnoldPipeline
     desc "run [DESCRIPTION]", "Run the full pipeline from a natural language description"
     option :file, type: :string, aliases: "-f", desc: "Read description from a file instead of argument"
     option :config, type: :string, desc: "Path to YAML config file"
-    option :provider, type: :string, desc: "LLM provider (anthropic or openai)"
+    option :provider, type: :string, desc: "LLM provider (anthropic, openai, or openrouter)"
     option :model, type: :string, desc: "LLM model name"
     option :repo, type: :string, desc: "GitHub repo (owner/repo)"
     option :issue_mention, type: :string, desc: "Mention to include in issue body (e.g. @claude)"
@@ -57,7 +57,7 @@ module ArnoldPipeline
             if $stdout.tty? && $stdin.tty?
               CliModule::SetupWizard.prompt_and_configure!
             else
-              say_error "No API key found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable.", :red
+              say_error "No API key found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY environment variable.", :red
               raise SystemExit.new(1)
             end
           end
@@ -118,7 +118,7 @@ module ArnoldPipeline
 
     desc "resume ID", "Resume a paused or failed pipeline run"
     option :config, type: :string, desc: "Path to YAML config file"
-    option :provider, type: :string, desc: "LLM provider (anthropic or openai)"
+    option :provider, type: :string, desc: "LLM provider (anthropic, openai, or openrouter)"
     option :model, type: :string, desc: "LLM model name"
     option :repo, type: :string, desc: "GitHub repo (owner/repo)"
     option :issue_mention, type: :string, desc: "Mention to include in issue body (e.g. @claude)"
@@ -168,7 +168,7 @@ module ArnoldPipeline
 
     desc "iterate ID CHANGE_REQUEST", "Iterate on a pipeline run's specification with a natural language change"
     option :config, type: :string, desc: "Path to YAML config file"
-    option :provider, type: :string, desc: "LLM provider (anthropic or openai)"
+    option :provider, type: :string, desc: "LLM provider (anthropic, openai, or openrouter)"
     option :model, type: :string, desc: "LLM model name"
     option :dry_run, type: :boolean, default: false, desc: "Show proposed deltas without applying"
     option :json, type: :boolean, default: false, desc: "Output delta details as JSON"
@@ -430,7 +430,7 @@ module ArnoldPipeline
 
     desc "analyze PATH", "Analyze an existing codebase"
     option :config, type: :string, desc: "Path to YAML config file"
-    option :provider, type: :string, desc: "LLM provider (anthropic or openai)"
+    option :provider, type: :string, desc: "LLM provider (anthropic, openai, or openrouter)"
     option :model, type: :string, desc: "LLM model name"
     option :reference_materials, type: :array, desc: "Paths to reference documentation files"
     option :json, type: :boolean, default: false, desc: "Output as JSON"

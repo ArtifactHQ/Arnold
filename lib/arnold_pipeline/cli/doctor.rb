@@ -56,11 +56,13 @@ module ArnoldPipeline
           Check.new(name: "API key", status: :pass, message: "ANTHROPIC_API_KEY configured")
         elsif ENV["OPENAI_API_KEY"]&.then { |k| !k.empty? }
           Check.new(name: "API key", status: :pass, message: "OPENAI_API_KEY configured")
+        elsif ENV["OPENROUTER_API_KEY"]&.then { |k| !k.empty? }
+          Check.new(name: "API key", status: :pass, message: "OPENROUTER_API_KEY configured")
         elsif ArnoldPipeline.configuration.instance_variable_get(:@llm_api_key)&.then { |k| !k.empty? }
           Check.new(name: "API key", status: :pass, message: "configured via config file")
         else
           Check.new(name: "API key", status: :fail, message: "no API key found",
-                    fix: "export ANTHROPIC_API_KEY=sk-ant-... or run 'arnold run --preview' to set up interactively")
+                    fix: "export ANTHROPIC_API_KEY=sk-ant-... or OPENROUTER_API_KEY=sk-or-... or run 'arnold run --preview' to set up interactively")
         end
       end
 

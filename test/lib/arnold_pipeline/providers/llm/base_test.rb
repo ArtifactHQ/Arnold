@@ -25,6 +25,11 @@ module ArnoldPipeline
           assert_kind_of OpenAi, provider
         end
 
+        test "build creates OpenRouter provider" do
+          provider = Llm.build(provider: :openrouter, api_key: "sk-or-test", model: "anthropic/claude-sonnet-4")
+          assert_kind_of OpenRouter, provider
+        end
+
         test "build raises on unknown provider" do
           assert_raises(ConfigurationError) do
             Llm.build(provider: :unknown, api_key: "sk-test", model: "x")
@@ -34,8 +39,10 @@ module ArnoldPipeline
         test "build raises ConfigurationError when api_key is nil" do
           original_anthropic = ENV["ANTHROPIC_API_KEY"]
           original_openai = ENV["OPENAI_API_KEY"]
+          original_openrouter = ENV["OPENROUTER_API_KEY"]
           ENV.delete("ANTHROPIC_API_KEY")
           ENV.delete("OPENAI_API_KEY")
+          ENV.delete("OPENROUTER_API_KEY")
           ArnoldPipeline.configure { |c| c.llm_api_key = nil }
 
           error = assert_raises(ConfigurationError) do
@@ -45,6 +52,7 @@ module ArnoldPipeline
         ensure
           original_anthropic ? ENV["ANTHROPIC_API_KEY"] = original_anthropic : ENV.delete("ANTHROPIC_API_KEY")
           original_openai ? ENV["OPENAI_API_KEY"] = original_openai : ENV.delete("OPENAI_API_KEY")
+          original_openrouter ? ENV["OPENROUTER_API_KEY"] = original_openrouter : ENV.delete("OPENROUTER_API_KEY")
           ArnoldPipeline.reset_configuration!
         end
 

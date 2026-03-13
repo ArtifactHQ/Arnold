@@ -8,14 +8,17 @@ module ArnoldPipeline
         ArnoldPipeline.reset_configuration!
         @original_anthropic = ENV["ANTHROPIC_API_KEY"]
         @original_openai = ENV["OPENAI_API_KEY"]
+        @original_openrouter = ENV["OPENROUTER_API_KEY"]
         @original_shell = ENV["SHELL"]
         ENV.delete("ANTHROPIC_API_KEY")
         ENV.delete("OPENAI_API_KEY")
+        ENV.delete("OPENROUTER_API_KEY")
       end
 
       teardown do
         ENV["ANTHROPIC_API_KEY"] = @original_anthropic if @original_anthropic
         ENV["OPENAI_API_KEY"] = @original_openai if @original_openai
+        @original_openrouter ? ENV["OPENROUTER_API_KEY"] = @original_openrouter : ENV.delete("OPENROUTER_API_KEY")
         ENV["SHELL"] = @original_shell if @original_shell
         ArnoldPipeline.reset_configuration!
       end
@@ -37,13 +40,18 @@ module ArnoldPipeline
         assert SetupWizard.api_key_available?
       end
 
+      test "api_key_available? returns true when OPENROUTER_API_KEY is set" do
+        ENV["OPENROUTER_API_KEY"] = "sk-or-test"
+        assert SetupWizard.api_key_available?
+      end
+
       test "api_key_available? returns false when no key is available" do
         refute SetupWizard.api_key_available?
       end
 
       test "prompt_and_configure! sets api key on configuration" do
         mock_prompt = mock("prompt")
-        mock_prompt.expects(:select).with("Which LLM provider?", %w[Anthropic OpenAI]).returns("Anthropic")
+        mock_prompt.expects(:select).with("Which LLM provider?", %w[Anthropic OpenAI OpenRouter]).returns("Anthropic")
         mock_prompt.expects(:mask).with("Enter your Anthropic API key:").returns("sk-ant-test123")
         mock_prompt.expects(:yes?).with("Save to ~/.arnold_pipeline/config.yml for future use?").returns(false)
 
@@ -538,7 +546,7 @@ module ArnoldPipeline
       test "prompt_for_missing! prompts for missing provider" do
         output = StringIO.new
         mock_prompt = mock("prompt")
-        mock_prompt.expects(:select).with("Which AI should handle planning and analysis?", %w[Anthropic OpenAI]).returns("OpenAI")
+        mock_prompt.expects(:select).with("Which AI should handle planning and analysis?", %w[Anthropic OpenAI OpenRouter]).returns("OpenAI")
 
         wizard = SetupWizard.new(output: output, prompt: mock_prompt)
 
@@ -669,7 +677,7 @@ module ArnoldPipeline
 
         # edit_setting: user selects provider (index 0), then picks OpenAI
         mock_prompt.expects(:select).with("Which setting to edit?", anything, cycle: true).returns(0)
-        mock_prompt.expects(:select).with("Which AI should handle planning and analysis?", %w[Anthropic OpenAI]).returns("OpenAI")
+        mock_prompt.expects(:select).with("Which AI should handle planning and analysis?", %w[Anthropic OpenAI OpenRouter]).returns("OpenAI")
 
         settings = [
           SetupWizard::Setting.new(key: :llm_provider, label: "Planning AI (llm_provider)", value: "anthropic", source: :env_detected),
@@ -705,7 +713,7 @@ module ArnoldPipeline
         ENV["OPENAI_API_KEY"] = "sk-test"
 
         # prompt_for_missing! will prompt for provider since both env vars are set
-        mock_prompt.expects(:select).with("Which AI should handle planning and analysis?", %w[Anthropic OpenAI]).returns("OpenAI")
+        mock_prompt.expects(:select).with("Which AI should handle planning and analysis?", %w[Anthropic OpenAI OpenRouter]).returns("OpenAI")
 
         # confirm_and_save! — user saves immediately
         mock_prompt.expects(:select).with("Save this configuration?", cycle: true).yields(

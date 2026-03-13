@@ -2,19 +2,20 @@ require "arnold_pipeline/providers/execution/base"
 
 module ArnoldPipeline
   class Configuration
-    VALID_LLM_PROVIDERS = %i[anthropic openai].freeze
+    VALID_LLM_PROVIDERS = %i[anthropic openai openrouter].freeze
     VALID_EXECUTION_PROVIDERS = %i[github claude_code].freeze
     VALID_CRITERIA_CHECK_MODES = %i[advisory gating disabled].freeze
     VALID_BROWNFIELD_MODES = %i[assess extend strangle].freeze
 
     PROVIDER_DEFAULTS = {
-      anthropic: { env_key: "ANTHROPIC_API_KEY", model: "claude-sonnet-4-6" },
-      openai:    { env_key: "OPENAI_API_KEY",    model: "gpt-5-mini-2025-08-07" }
+      anthropic:  { env_key: "ANTHROPIC_API_KEY",  model: "claude-sonnet-4-6" },
+      openai:     { env_key: "OPENAI_API_KEY",     model: "gpt-5-mini-2025-08-07" },
+      openrouter: { env_key: "OPENROUTER_API_KEY", model: "anthropic/claude-sonnet-4" }
     }.freeze
 
     BROWNFIELD_MODEL_DEFAULTS = {
-      agent:     { anthropic: "claude-sonnet-4-6", openai: "gpt-5-mini-2025-08-07" },
-      synthesis: { anthropic: "claude-sonnet-4-6", openai: "gpt-5-mini-2025-08-07" }
+      agent:     { anthropic: "claude-sonnet-4-6", openai: "gpt-5-mini-2025-08-07", openrouter: "anthropic/claude-sonnet-4" },
+      synthesis: { anthropic: "claude-sonnet-4-6", openai: "gpt-5-mini-2025-08-07", openrouter: "anthropic/claude-sonnet-4" }
     }.freeze
 
     attr_accessor :execution_provider, :github_token, :github_repo,
@@ -164,6 +165,8 @@ module ArnoldPipeline
         :anthropic
       elsif ENV["OPENAI_API_KEY"] && !ENV["OPENAI_API_KEY"].empty?
         :openai
+      elsif ENV["OPENROUTER_API_KEY"] && !ENV["OPENROUTER_API_KEY"].empty?
+        :openrouter
       else
         :anthropic
       end
