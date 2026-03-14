@@ -83,23 +83,24 @@ Arnold doesn't rewrite your code. It doesn't run tests. It reads, compares, and 
 
 ### 1. Install
 
-Run this from your project's root directory:
+**Claude Code plugin** (recommended):
+
+```
+/plugin marketplace add ArtifactHQ/Arnold-Lite
+/plugin install arnold@arnold-marketplace
+```
+
+Auto-updates, clean uninstall, automatic `/arnold:` namespacing.
+
+**Shell script** (works with any AI coding tool):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold-Lite/main/install.sh | bash
 ```
 
-Takes ~30 seconds. Copies slash commands into `.claude/commands/arnold/` and adds Arnold rules to your CLAUDE.md.
+Run this from your project's root directory. To uninstall: `./install.sh --uninstall` or re-run curl with `bash -s -- --uninstall`. To update, just re-run the install command.
 
-To uninstall:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold-Lite/main/install.sh | bash -s -- --uninstall
-```
-
-To update Arnold to the latest version, just re-run the install command. Commands and CLAUDE.md rules are updated in place.
-
-Arnold commands live in `.claude/commands/arnold/` inside your project. Commit them to Git — team members who clone the repo get Arnold automatically, no install needed.
+Arnold commands live in `.claude/commands/arnold/` inside your project. Commit them to Git — team members who clone the repo get Arnold automatically.
 
 ### 2. Initialize
 

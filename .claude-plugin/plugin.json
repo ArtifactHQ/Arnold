@@ -1,0 +1,19 @@
+{
+  "name": "arnold",
+  "version": "0.1.0",
+  "description": "Documentation-first development toolkit. Write requirements in plain English, build with any coding agent, check that what got built matches what you asked for.",
+  "author": {
+    "name": "Artifact",
+    "url": "https://artifact.new"
+  },
+  "homepage": "https://github.com/ArtifactHQ/Arnold-Lite",
+  "repository": "https://github.com/ArtifactHQ/Arnold-Lite",
+  "license": "MIT",
+  "keywords": [
+    "documentation",
+    "docs-first",
+    "drift-detection",
+    "requirements",
+    "specification"
+  ]
+}
