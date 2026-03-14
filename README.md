@@ -26,9 +26,9 @@ You describe a product. A coding agent builds it. But it doesn't build everythin
 
 That gap between "what I said to build" and "what actually got built" grows quietly over time. That's **documentation drift**, and most teams just live with it.
 
-In AI-assisted development, it's worse. Claude forgets between sessions. Cursor loses context. Your coding agent doesn't know that the docs say one thing and the code does another — unless you check.
+In AI-assisted development, it's worse. Claude forgets between sessions. Cursor loses context. Your coding agent doesn't know that the docs say one thing and the code does another, unless you check.
 
-Arnold checks. It reads your docs and your code, then tells you where they've drifted apart. Not with automated pipelines or CI hooks — with a conversation. You ask Arnold to check. Arnold tells you what's off. You decide what to fix.
+Arnold checks. It reads your docs and your code, then tells you where they've drifted apart. Not with automated pipelines or CI hooks, but with a conversation. You ask Arnold to check. Arnold tells you what's off. You decide what to fix.
 
 The complexity is in the prompts, not your workflow. What you see: describe your product, write docs, build code, check the gap.
 
@@ -106,13 +106,13 @@ That gap between docs and code? Arnold finds it.
 
 ## How Arnold Is Different
 
-**vs. Claude Code alone** — Claude is great at writing code. But every session starts fresh. Arnold gives Claude a persistent, structured source of truth in your `docs/` folder. When you start a new session, Claude reads the docs and knows exactly where things stand.
+**vs. Claude Code alone:** Claude is great at writing code, but every session starts fresh. Arnold gives Claude a persistent, structured source of truth in your `docs/` folder. When you start a new session, Claude reads the docs and knows exactly where things stand.
 
-**vs. Spec tools (OpenSpec, GSD, etc.)** — Most spec tools focus on generating specs. Arnold keeps specs alive. The `/arnold:check` command compares your docs to your code and tells you where they've diverged. That's the feature nobody else has in an open-source Claude Code extension.
+**vs. Spec tools (OpenSpec, GSD, etc.):** Most spec tools focus on generating specs. Arnold keeps specs alive. The `/arnold:check` command compares your docs to your code and tells you where they've diverged. That's the feature nobody else has in an open-source Claude Code extension.
 
-**vs. Jira, Notion, and static docs** — Those tools live outside your codebase. Arnold puts documentation next to your code, in your editor, as markdown files you version-control with Git. When docs and code drift, Arnold sees it.
+**vs. Jira, Notion, and static docs:** Those tools live outside your codebase. Arnold puts documentation next to your code, in your editor, as markdown files you version-control with Git. When docs and code drift, Arnold sees it.
 
-**vs. Just shipping** — Without Arnold, you're flying blind. The docs are wrong, the code is right (or vice versa), and nobody notices until someone needs to understand the system months later. Arnold makes the gap visible in real time.
+**vs. Just shipping:** Without Arnold, you're flying blind. The docs are wrong, the code is right (or vice versa), and nobody notices until someone needs to understand the system months later. Arnold makes the gap visible in real time.
 
 ---
 
@@ -141,9 +141,9 @@ curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold-Lite/main/install
 
 Run this from your project's root directory. To uninstall: `./install.sh --uninstall` or re-run curl with `bash -s -- --uninstall`. To update, just re-run the install command.
 
-Arnold commands live in `.claude/commands/arnold/` inside your project. Commit them to Git — team members who clone the repo get Arnold automatically.
+Arnold commands live in `.claude/commands/arnold/` inside your project. Commit them to Git so team members who clone the repo get Arnold automatically.
 
-**Works with other AI tools too.** Arnold's commands follow the [Agent Skills](https://agentskills.io) standard. Copy the skill folders from `skills/` into `.agents/skills/` in your project. Note: skill names like `init`, `check` are generic -- consider renaming to `arnold-init`, `arnold-check` to avoid conflicts with other tools.
+**Works with other AI tools too.** Arnold's commands follow the [Agent Skills](https://agentskills.io) standard. Copy the skill folders from `skills/` into `.agents/skills/` in your project. Note: skill names like `init`, `check` are generic. Consider renaming to `arnold-init`, `arnold-check` to avoid conflicts with other tools.
 
 The `skills/arnold-rules/` skill contains Arnold's documentation-first development rules. In Claude Code, it loads automatically as background context. In other tools, you can ignore it or reference it manually when needed.
 
@@ -217,13 +217,13 @@ After a coding session, sync your docs. Arnold reads what changed and proposes u
 |---------|-------------|
 | `/arnold:init` | Scaffold a `docs/` folder from your project description |
 | `/arnold:plan` | Generate or refine feature docs, identify gaps |
-| `/arnold:check` | Compare docs to code — find drift, missing docs, undocumented code |
-| `/arnold:update` | Sync docs after coding — propose updates based on changes |
-| `/arnold:status` | Quick snapshot — what's done, in progress, blocked |
+| `/arnold:check` | Compare docs to code. Find drift, missing docs, undocumented code |
+| `/arnold:update` | Sync docs after coding. Propose updates based on changes |
+| `/arnold:status` | Quick snapshot: what's done, in progress, blocked |
 | `/arnold:decide` | Record an architectural or product decision |
-| `/arnold:resolve` | Fix drift items interactively — choose docs or code for each |
-| `/arnold:recap` | Start-of-session briefing — where you left off, what to do next |
-| `/arnold:diff` | Quick drift scan — fast summary without a full check |
+| `/arnold:resolve` | Fix drift items interactively. Choose docs or code for each |
+| `/arnold:recap` | Start-of-session briefing: where you left off, what to do next |
+| `/arnold:diff` | Quick drift scan. Fast summary without a full check |
 | `/arnold:help` | Show all commands, when to use them, and doc structure |
 
 Start with `/arnold:init`. The core loop is **init -> check -> resolve -> update**. Other commands are there when you need them.
@@ -266,10 +266,10 @@ docs/
 
 Arnold tracks where rules come from:
 
-- **(user-stated)** — you said this explicitly
-- **(domain-derived)** — standard for this kind of app
-- **(Arnold-inferred)** — Claude reasoned this should exist
-- **(decided)** — team made a deliberate choice (links to decision record)
+- **(user-stated):** you said this explicitly
+- **(domain-derived):** standard for this kind of app
+- **(Arnold-inferred):** Claude reasoned this should exist
+- **(decided):** team made a deliberate choice (links to decision record)
 
 When `/arnold:check` reports drift, you know whether the rule was something you explicitly asked for or something Arnold assumed.
 
