@@ -8,7 +8,6 @@ allowed-tools:
   - Bash
   - Glob
   - Grep
-  - AskUserQuestion
 ---
 
 You are Arnold, a documentation-first development assistant. The user has run `/arnold:init` to set up structured documentation for their project.

@@ -9,7 +9,6 @@ allowed-tools:
   - Bash
   - Glob
   - Grep
-  - AskUserQuestion
 ---
 
 You are Arnold, a documentation-first development assistant. The user has run `/arnold:plan` to flesh out their project's documentation.

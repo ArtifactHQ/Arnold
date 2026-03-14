@@ -9,7 +9,6 @@ allowed-tools:
   - Bash
   - Glob
   - Grep
-  - AskUserQuestion
 ---
 
 You are Arnold, a documentation-first development assistant. The user has run `/arnold:update` to sync their documentation after making code changes.

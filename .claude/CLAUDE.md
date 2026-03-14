@@ -11,7 +11,7 @@ Arnold is a **documentation-first development toolkit** that runs as a native Cl
 
 ## What It Ships
 
-- **5 slash command files** (`.claude/commands/*.md`) — meta-prompts for generating, maintaining, and checking project docs
+- **5 slash command files** in `commands/arnold/` (legacy) and `skills/` (plugin) — meta-prompts for generating, maintaining, and checking project docs
 - **1 CLAUDE.md template** — rules file encoding the doc-centered philosophy
 - **1 install script** (`install.sh`) — one-line installer that copies commands into any project
 - **1 README** — the pitch, how-to, and install instructions
@@ -39,21 +39,37 @@ The complete build specification lives at `docs/ARNOLD-LITE-BUILD-SPEC.md`. This
 
 ## Repository Structure (Target)
 
+Arnold ships both `commands/` (for install.sh) and `skills/` (for the Claude Code plugin). Both contain the same prompts. `skills/` takes precedence in Claude Code if both are active.
+
 ```
 arnold/
+├── .claude-plugin/
+│   ├── plugin.json                        # Plugin manifest (name: arnold)
+│   └── marketplace.json                   # Self-contained marketplace
 ├── README.md                              # Project pitch and install instructions
 ├── LICENSE                                # MIT
-├── install.sh                             # One-line installer
-├── CLAUDE.md                              # This file (also serves as template)
-├── commands/
-│   └── arnold/                            # Namespace directory for /arnold:* commands
-│       ├── init.md                        # /arnold:init — scaffold docs
-│       ├── plan.md                        # /arnold:plan — generate/refine specs
-│       ├── check.md                       # /arnold:check — compare docs to code (key feature)
-│       ├── update.md                      # /arnold:update — sync docs after coding
-│       └── status.md                      # /arnold:status — quick project overview
-└── examples/
-    └── fitness-studio-booking/            # Worked example with full doc set
+├── install.sh                             # Shell installer (any AI tool)
+├── CLAUDE.md                              # Template (installed into user projects)
+├── CONTRIBUTING.md                        # Contributor guidelines
+├── commands/                              # Legacy commands (for install.sh path)
+│   └── arnold/
+│       ├── init.md                        # /arnold:init
+│       ├── plan.md                        # /arnold:plan
+│       ├── check.md                       # /arnold:check
+│       ├── update.md                      # /arnold:update
+│       └── status.md                      # /arnold:status
+├── skills/                                # Plugin skills (for Claude Code plugin path)
+│   ├── init/SKILL.md                      # /arnold:init (auto-namespaced by plugin)
+│   ├── plan/SKILL.md                      # /arnold:plan
+│   ├── check/SKILL.md                     # /arnold:check
+│   ├── update/SKILL.md                    # /arnold:update
+│   ├── status/SKILL.md                    # /arnold:status
+│   └── arnold-rules/SKILL.md             # Background knowledge (user-invocable: false)
+├── examples/
+│   └── fitness-studio-booking/            # Worked example with full doc set
+└── docs/
+    ├── ARNOLD-LITE-BUILD-SPEC.md          # Master build specification
+    └── PLUGIN-MIGRATION-PLAN.md           # Plugin & cross-agent strategy
 ```
 
 ## Slash Commands

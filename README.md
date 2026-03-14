@@ -90,7 +90,11 @@ Arnold doesn't rewrite your code. It doesn't run tests. It reads, compares, and 
 /plugin install arnold@arnold-marketplace
 ```
 
-Auto-updates, clean uninstall, automatic `/arnold:` namespacing.
+Auto-updates, clean uninstall, automatic `/arnold:` namespacing. To uninstall:
+
+```
+/plugin uninstall arnold@arnold-marketplace
+```
 
 **Shell script** (works with any AI coding tool):
 

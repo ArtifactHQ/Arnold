@@ -6,12 +6,12 @@
   },
   "metadata": {
     "description": "Arnold — documentation-first development toolkit",
-    "version": "1.0.0"
+    "version": "0.1.0"
   },
   "plugins": [
     {
       "name": "arnold",
-      "source": ".",
+      "source": "..",
       "description": "Write requirements in plain English. Build with any coding agent. Check that what got built matches what you asked for.",
       "version": "0.1.0",
       "author": {

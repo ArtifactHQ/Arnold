@@ -16,9 +16,11 @@ engineering, not traditional code.
 
 - **Improve existing commands** -- sharpen wording, fix edge cases, reduce
   token usage.
-- **Add new commands** -- drop a new `.md` file in `commands/arnold/` and reference it
-  from `CLAUDE.md` if needed. Commands in the `arnold/` subdirectory are registered
-  under the `/arnold:` namespace in Claude Code.
+- **Add new commands** -- Arnold has a dual distribution structure. When adding a new
+  command, you must add it to BOTH `commands/arnold/<name>.md` (for the install.sh
+  path) AND `skills/<name>/SKILL.md` (for the Claude Code plugin path). Both files
+  should contain the same prompt content. Commands in the `arnold/` subdirectory are
+  registered under the `/arnold:` namespace in Claude Code.
 - **Improve the CLAUDE.md template** -- better defaults, clearer structure.
 - **Fix the install script** -- compatibility, error handling, docs.
 
@@ -36,6 +38,12 @@ Open a GitHub Issue. Include:
 - Test your changes in Claude Code before submitting.
 - Describe what you changed and why in the PR description.
 - Prompt engineering changes should explain the reasoning behind wording choices.
+
+## Repository Notes
+
+- The `docs/` folder in this repo contains internal project documentation (build
+  specs, migration plans). It is NOT example Arnold output. The worked example lives
+  in `examples/fitness-studio-booking/`.
 
 ## Style Notes
 
