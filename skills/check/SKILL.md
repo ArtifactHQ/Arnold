@@ -176,6 +176,20 @@ Date: [today]
 
 ALIGNMENT SUMMARY
 ━━━━━━━━━━━━━━━━━
+```
+
+If `docs/status.md` has a Check History table with previous entries, compare current findings to the most recent previous check:
+
+```
+TREND:
+  Previous check ([date]): [N] aligned, [N] drifted, [N] gaps
+  This check:              [N] aligned, [N] drifted, [N] gaps
+  → [Improving / Stable / Declining] — [brief note, e.g., "2 new drifts, 1 resolved"]
+```
+
+If no previous check exists, skip the trend section.
+
+```
   🟢 Aligned:    [N] rules / [N] features match
   🔴 Drifted:    [N] mismatches found
   🟡 Gaps:       [N] documentation gaps
@@ -235,6 +249,19 @@ Update `docs/status.md` with findings:
 - Change status markers for features based on check results
 - Note when the last check was run
 - Flag any features that changed status (e.g., 🟢 → 🔴)
+
+**Record check history:** Add or update a "Check History" section at the bottom of `docs/status.md`:
+
+```markdown
+## Check History
+
+| Date | Aligned | Drifted | Gaps | Notes |
+|------|---------|---------|------|-------|
+| [today] | [N] | [N] | [N] | [brief note about key findings] |
+| [previous entries remain] | | | | |
+```
+
+Keep the last 10 entries. This gives the user a visible trend of alignment over time.
 
 ## IMPORTANT NOTES
 

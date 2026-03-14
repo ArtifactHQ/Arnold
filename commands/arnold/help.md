@@ -34,6 +34,12 @@ COMMANDS:
   /arnold:decide    Record a decision in docs/decisions/.
                     Auto-numbers, gathers context, updates references.
 
+  /arnold:resolve   Fix drift items found by /arnold:check.
+                    For each mismatch, choose: docs or code?
+
+  /arnold:recap     Start-of-session briefing.
+                    Where you left off, unresolved drift, next action.
+
   /arnold:help      This reference.
 
 WHEN TO USE WHAT:
@@ -44,6 +50,8 @@ WHEN TO USE WHAT:
   Want to audit alignment?      → /arnold:check
   Where do things stand?        → /arnold:status
   Made a key decision?          → /arnold:decide
+  Check found drift?            → /arnold:resolve
+  Starting a new session?       → /arnold:recap
 
 SCOPING:
 

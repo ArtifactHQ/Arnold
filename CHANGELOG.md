@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2026-03-14
 
 ### Added
-- 7 slash commands: `/arnold:init`, `/arnold:plan`, `/arnold:check`, `/arnold:update`, `/arnold:status`, `/arnold:decide`, `/arnold:help`
+- 9 slash commands: `/arnold:init`, `/arnold:plan`, `/arnold:check`, `/arnold:update`, `/arnold:status`, `/arnold:decide`, `/arnold:resolve`, `/arnold:recap`, `/arnold:help`
 - Claude Code plugin support (`.claude-plugin/plugin.json` + marketplace)
 - Agent Skills format (`skills/`) for cross-agent compatibility
 - Shell installer (`install.sh`) with install, uninstall (`--uninstall`), and upgrade support
@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Marker-based CLAUDE.md injection/removal for clean install/uninstall
 - `/arnold:decide` command for recording architectural and product decisions in docs/decisions/
 - Strengthened `/arnold:check` with vague-docs detection, flow tracing, env var handling, provenance-based prioritization
+- `/arnold:resolve` — interactively fix drift items (choose docs or code)
+- `/arnold:recap` — start-of-session briefing with project context
+- Drift trend tracking in `/arnold:check` (Check History table in status.md)
+- Team onboarding: `/arnold:init` now creates `docs/ABOUT.md` for new team members
+- `/arnold:update` now reads previous check findings to propose targeted drift fixes
 - Improved post-init guidance (nudges user toward first check)
 
 ### Fixed

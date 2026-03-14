@@ -86,4 +86,6 @@ Track where rules come from:
 - `/arnold:update` — sync docs after a coding session
 - `/arnold:status` — quick project overview
 - `/arnold:decide` — record a decision in docs/decisions/
+- `/arnold:resolve` — fix drift items interactively
+- `/arnold:recap` — start-of-session briefing
 - `/arnold:help` — show all commands, when to use them, and doc structure

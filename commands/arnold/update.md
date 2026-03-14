@@ -42,6 +42,15 @@ Try these approaches in order:
 - Read `git log --oneline -5` to see recent commits
 - Focus on files that touch feature logic, not formatting/config changes
 
+**Option A.5: Check previous /arnold:check findings**
+
+Read `docs/status.md`. If it has a "Check History" table or features marked as 🔴 Drifted:
+- Note which features have unresolved drift
+- When proposing updates, prioritize docs for drifted features
+- If drift items exist, include them in your proposals: "The last /arnold:check found [feature] has drifted — [specific drift]. Updating docs to match current code."
+
+This connects the check → update loop: things flagged by check get addressed by update.
+
 **Option B: Ask the user**
 If Git isn't available or diff is too large, ask:
 ```
@@ -80,6 +89,10 @@ Based on your recent changes, here's what I'd update:
 🔍 VERIFY:
   5. unknowns.md — "cancellation refund policy" — was this resolved?
      (I see refund logic in payments/refund.js)
+
+🔴 RESOLVE DRIFT (from last /arnold:check):
+  [N]. [feature]/[file].md — [drift description from status.md]
+     → Propose: [update docs to match code / flag for manual review]
 
 Apply all? Or pick specific ones? (e.g., "just 1 and 3")
 ```

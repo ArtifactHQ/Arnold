@@ -230,6 +230,7 @@ This step is shared by all paths. Adapt content based on what you learned.
 docs/
 ├── overview.md
 ├── status.md
+├── ABOUT.md
 ├── [feature-1]/
 │   └── overview.md
 ├── [feature-2]/
@@ -343,6 +344,42 @@ and things to figure out before shipping.
 - **How we'll know:** [Observable signal]
 ```
 
+### Write about file (docs/ABOUT.md)
+
+```markdown
+# About This Documentation
+
+This project uses [Arnold](https://github.com/ArtifactHQ/Arnold-Lite) for documentation-first development.
+
+## For New Team Members
+
+The `docs/` folder is the source of truth for what this project should be and how it should behave. Read `overview.md` first, then browse feature folders.
+
+## Quick Start
+
+If you have Arnold installed, these commands are available:
+
+- `/arnold:status` — see where the project stands
+- `/arnold:check` — compare docs to code, find drift
+- `/arnold:help` — full command reference
+
+If you don't have Arnold, you can still read and edit docs manually — they're just markdown.
+
+## Structure
+
+```
+docs/
+├── overview.md           Project vision and goals
+├── status.md             Current state of each feature
+├── ABOUT.md              This file
+├── [feature]/            One folder per feature
+│   ├── overview.md       What it does, core rules
+│   └── [flow].md         Step-by-step user flows
+├── decisions/            Why we chose what we chose
+└── unknowns.md           Open questions and bets
+```
+```
+
 ### Write status (docs/status.md)
 
 ```markdown
@@ -384,6 +421,7 @@ I've scaffolded your project:
 docs/
 ├── overview.md .................. Your project vision
 ├── status.md .................... Current state
+├── ABOUT.md ..................... Onboarding for new team members
 ├── [feature-1]/
 │   └── overview.md .............. [brief description]
 ├── [feature-2]/
@@ -415,6 +453,7 @@ I've documented your existing project:
 docs/
 ├── overview.md .................. Project overview (from code scan + your input)
 ├── status.md .................... Current state of each feature
+├── ABOUT.md ..................... Onboarding for new team members
 ├── [feature-1]/
 │   └── overview.md .............. [status] — [brief description]
 ├── [feature-2]/
