@@ -175,6 +175,7 @@ After a coding session, sync your docs. Arnold reads what changed and proposes u
 | `/arnold:check` | Compare docs to code — find drift, missing docs, undocumented code |
 | `/arnold:update` | Sync docs after coding — propose updates based on changes |
 | `/arnold:status` | Quick snapshot — what's done, in progress, blocked |
+| `/arnold:help` | Show all commands, when to use them, and doc structure |
 
 ---
 

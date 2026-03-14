@@ -85,3 +85,4 @@ Track where rules come from:
 - `/arnold:check` — compare docs to code, find drift
 - `/arnold:update` — sync docs after a coding session
 - `/arnold:status` — quick project overview
+- `/arnold:help` — show all commands, when to use them, and doc structure

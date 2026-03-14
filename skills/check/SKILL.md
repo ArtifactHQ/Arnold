@@ -75,6 +75,9 @@ Feature: booking
 
 ## STEP 2: SCAN THE CODEBASE
 
+**Start with git (if available):**
+If the project has git, run `git log --name-only -5` to see recently changed files. Prioritize scanning these files first — recent changes are the most likely source of drift. If git is not available, proceed with the directory-tree scan below.
+
 Read the project systematically:
 
 1. **Directory tree** — understand the structure
@@ -137,9 +140,11 @@ How to identify drift:
 
 ### 🟡 GAPS (NOT DRIFT)
 
-**Documented but not built:**
-- Feature has docs, no corresponding code exists
-- This is normal during planning phase — only flag if docs say "Implemented"
+**Documented but not built (expected):**
+- Feature has docs with status 🔵 Not Started — no code exists. This is normal during planning.
+
+**Documented but not built (unexpected):**
+- Feature docs say 🟢 Implemented or 🟡 In Progress, but no corresponding code exists. This IS a problem — flag it.
 
 **Built but not documented:**
 - Code exists for something not in docs
@@ -187,8 +192,11 @@ Built but not documented:
   • [code file/path] — [what it does, where to document it]
   • [code file/path] — [what it does]
 
-Documented but not built:
-  • [feature]/ — [status: expected if planning, unexpected if "Implemented"]
+Documented but not built (expected — planning phase):
+  • [feature]/ — 🔵 Not Started (no action needed)
+
+Documented but not built (unexpected — should exist):
+  • [feature]/ — 🟢 Implemented / 🟡 In Progress but no code found
 
 Doc health:
   • [feature]/ — needs [flow docs / edge cases / acceptance criteria]

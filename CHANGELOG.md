@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2026-03-14
 
 ### Added
-- 5 slash commands: `/arnold:init`, `/arnold:plan`, `/arnold:check`, `/arnold:update`, `/arnold:status`
+- 6 slash commands: `/arnold:init`, `/arnold:plan`, `/arnold:check`, `/arnold:update`, `/arnold:status`, `/arnold:help`
 - Claude Code plugin support (`.claude-plugin/plugin.json` + marketplace)
 - Agent Skills format (`skills/`) for cross-agent compatibility
 - Shell installer (`install.sh`) with install, uninstall (`--uninstall`), and upgrade support

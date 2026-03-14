@@ -33,6 +33,7 @@ Read `docs/overview.md` and `docs/status.md`. Present a concise summary of where
 
 1. Read `docs/overview.md` for project context
 2. Read `docs/status.md` for current state
+   If `docs/status.md` does not exist, fall back to reading statuses from each `docs/*/overview.md` file and assembling the status summary from those. Note in the output: "docs/status.md not found — assembled status from feature overviews. Run /arnold:check to regenerate it."
 3. Quickly scan `docs/*/overview.md` for feature statuses
 4. Check `docs/unknowns.md` for overdue questions
 5. Present a compact summary

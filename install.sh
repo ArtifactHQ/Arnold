@@ -168,7 +168,7 @@ if [ ! -d ".git" ] && [ ! -f "package.json" ] && [ ! -f "requirements.txt" ] && 
     echo ""
     # Handle both interactive and piped (curl | bash) usage
     if [ -t 0 ]; then
-        read -p "  Install here anyway? (y/N) " -n 1 -r
+        read -p "  Install here anyway? (y/N) " -n 1 -r || true
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             echo "  No worries. cd into your project and try again."
@@ -193,7 +193,7 @@ if [ "$PLUGIN_DETECTED" = true ]; then
     print_info "If you're using Claude Code, the plugin is recommended: /plugin install arnold"
     echo ""
     if [ -t 0 ]; then
-        read -p "  Continue with shell install anyway? (y/N) " -n 1 -r
+        read -p "  Continue with shell install anyway? (y/N) " -n 1 -r || true
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             echo "  Install cancelled."
@@ -222,8 +222,10 @@ mkdir -p /tmp/arnold-install
 
 # Check if we're running from a cloned repo (verify it's actually Arnold's source)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+IS_LOCAL_INSTALL=false
 if [ -d "${SCRIPT_DIR}/commands/arnold" ] && [ -f "${SCRIPT_DIR}/commands/arnold/init.md" ] && grep -q "arnold:init" "${SCRIPT_DIR}/commands/arnold/init.md" 2>/dev/null; then
     # Local install from cloned repo
+    IS_LOCAL_INSTALL=true
     for cmd in "${COMMANDS[@]}"; do
         if [ -f "${SCRIPT_DIR}/commands/arnold/${cmd}.md" ]; then
             cp "${SCRIPT_DIR}/commands/arnold/${cmd}.md" ".claude/commands/arnold/${cmd}.md"
@@ -254,10 +256,13 @@ fi
 
 # Handle CLAUDE.md
 CLAUDE_MD_SOURCE=""
-if [ -f "${SCRIPT_DIR}/CLAUDE.md" ] && grep -q "Arnold" "${SCRIPT_DIR}/CLAUDE.md" 2>/dev/null; then
+if [ "$IS_LOCAL_INSTALL" = true ] && [ -f "${SCRIPT_DIR}/CLAUDE.md" ]; then
     CLAUDE_MD_SOURCE="${SCRIPT_DIR}/CLAUDE.md"
-elif curl -fsSL "${ARNOLD_RAW_BASE}/CLAUDE.md" -o "/tmp/arnold-install/CLAUDE.md" 2>/dev/null && [ -s "/tmp/arnold-install/CLAUDE.md" ]; then
-    CLAUDE_MD_SOURCE="/tmp/arnold-install/CLAUDE.md"
+else
+    mkdir -p /tmp/arnold-install
+    if curl -fsSL "${ARNOLD_RAW_BASE}/CLAUDE.md" -o "/tmp/arnold-install/CLAUDE.md" 2>/dev/null && [ -s "/tmp/arnold-install/CLAUDE.md" ]; then
+        CLAUDE_MD_SOURCE="/tmp/arnold-install/CLAUDE.md"
+    fi
 fi
 
 if [ -n "${CLAUDE_MD_SOURCE}" ]; then
@@ -319,11 +324,13 @@ echo -e "${GREEN}${BOLD}Arnold is installed.${NC}"
 echo ""
 echo "  Next steps:"
 echo "    1. Open Claude Code in this project"
-echo "    2. Run /arnold:init to scaffold your docs"
-echo "    3. Run /arnold:plan to flesh out feature specs"
+echo "    2. Run /arnold:init      — scaffold docs from your project"
+echo "    3. Run /arnold:plan      — flesh out feature specs"
 echo "    4. Build your code"
-echo "    5. Run /arnold:check to see if docs and code are aligned"
-echo "    6. Run /arnold:update to sync docs after code changes"
+echo "    5. Run /arnold:check     — compare docs to code, find drift"
+echo "    6. Run /arnold:update    — sync docs after code changes"
+echo ""
+echo "    Run /arnold:help anytime for the full command reference."
 echo ""
 echo "  To uninstall:"
 echo "    curl -fsSL https://raw.githubusercontent.com/${ARNOLD_REPO}/${ARNOLD_BRANCH}/install.sh | bash -s -- --uninstall"
