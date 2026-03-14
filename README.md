@@ -1,16 +1,16 @@
 <div align="center">
 <h1>Arnold</h1>
 <p>
-<strong>Write requirements in plain English. Build with any coding agent.<br>Check that what got built matches what you asked for.</strong>
+<strong>Write requirements in plain English. Build with any coding agent. Check that what got built matches what you asked for.</strong>
 </p>
 <p>
-<a href="https://github.com/ArtifactHQ/arnold"><img src="https://img.shields.io/github/stars/ArtifactHQ/arnold?style=for-the-badge&logo=github&color=181717" alt="GitHub stars" /></a>
+<a href="https://github.com/ArtifactHQ/Arnold-Lite"><img src="https://img.shields.io/github/stars/ArtifactHQ/Arnold-Lite?style=for-the-badge&logo=github&color=181717" alt="GitHub stars" /></a>
 <a href="https://discord.gg/m6sTcWSbZm"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord" /></a>
 <a href="https://x.com/madebyartifact"><img src="https://img.shields.io/badge/X-@madebyartifact-000000?style=for-the-badge&logo=x&logoColor=white" alt="X (Twitter)" /></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License" /></a>
 </p>
 <br>
-<pre><code>curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/arnold/main/install.sh | bash</code></pre>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold-Lite/main/install.sh | bash</code></pre>
 <p><strong>No API key. No database. No Ruby. Works with Claude Code out of the box.</strong></p>
 <br>
 <p>
@@ -36,16 +36,6 @@ The complexity is in the prompts, not your workflow. What you see: describe your
 
 ---
 
-## What Arnold Does
-
-**Write product requirements through conversation.** Describe what you want in plain language. Arnold turns that into structured, feature-organized documentation: overviews, user flows, edge cases, acceptance criteria, decision records. Product-focused documents, not technical specifications.
-
-**Keep docs next to your code.** Arnold puts a `docs/` folder in your project, organized by feature the way you actually think about your product. Auth in one place. Payments in another. Versioned with Git, readable by anyone.
-
-**Check for drift between docs and code.** This is the big one. After code is written, run `/check` and Arnold reads both your docs and your codebase. It finds what's documented but not built, what's built but not documented, and where the code has diverged from the spec. You decide what to fix.
-
----
-
 ## How It Works
 
 ```
@@ -54,9 +44,6 @@ The complexity is in the prompts, not your workflow. What you see: describe your
           v
   Arnold scaffolds structured docs
   (organized by feature, like a wiki)
-          |
-          v
-  You review and refine
           |
           v
   You build with Claude Code, Cursor, whatever
@@ -76,19 +63,19 @@ The complexity is in the prompts, not your workflow. What you see: describe your
   Keep building. Docs stay honest.
 ```
 
-Arnold doesn't rewrite your code or run tests. It reads, compares, and reports. You're always in control.
+Arnold doesn't rewrite your code. It doesn't run tests. It reads, compares, and reports. You're always in control.
 
 ---
 
 ## How Arnold Is Different
 
-**vs. Claude Code alone** — Claude is great at writing code. But every session starts fresh. Arnold gives Claude a persistent, structured source of truth in your `docs/` folder. Start a new session, Claude reads the docs, knows where things stand.
+**vs. Claude Code alone** — Claude is great at writing code. But every session starts fresh. Arnold gives Claude a persistent, structured source of truth in your `docs/` folder. When you start a new session, Claude reads the docs and knows exactly where things stand.
 
-**vs. Spec tools (OpenSpec, GSD, etc.)** — Most spec tools focus on generating specs. Arnold keeps specs alive. The `/check` command compares your docs to your code and surfaces where they've diverged. That's the feature nobody else has in an open-source Claude Code extension.
+**vs. Spec tools (OpenSpec, GSD, etc.)** — Most spec tools focus on generating specs. Arnold keeps specs alive. The `/arnold:check` command compares your docs to your code and tells you where they've diverged. That's the feature nobody else has in an open-source Claude Code extension.
 
-**vs. Jira, Notion, static docs** — Those tools live outside your codebase. Arnold puts documentation right next to your code, in your editor, as markdown files you version-control with Git. When docs and code drift, Arnold sees it.
+**vs. Jira, Notion, and static docs** — Those tools live outside your codebase. Arnold puts documentation next to your code, in your editor, as markdown files you version-control with Git. When docs and code drift, Arnold sees it.
 
-**vs. Just shipping** — Without Arnold, you're flying blind. The docs are wrong, the code is right (or vice versa), and nobody notices until someone needs to understand the system months later. Arnold makes the gap visible now.
+**vs. Just shipping** — Without Arnold, you're flying blind. The docs are wrong, the code is right (or vice versa), and nobody notices until someone needs to understand the system months later. Arnold makes the gap visible in real time.
 
 ---
 
@@ -96,26 +83,38 @@ Arnold doesn't rewrite your code or run tests. It reads, compares, and reports. 
 
 ### 1. Install
 
+Run this from your project's root directory:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/arnold/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold-Lite/main/install.sh | bash
 ```
 
-Takes ~30 seconds. Copies slash commands into `.claude/commands/` and sets up your CLAUDE.md.
+Takes ~30 seconds. Copies slash commands into `.claude/commands/arnold/` and adds Arnold rules to your CLAUDE.md.
+
+To uninstall:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold-Lite/main/install.sh | bash -s -- --uninstall
+```
+
+To update Arnold to the latest version, just re-run the install command. Commands and CLAUDE.md rules are updated in place.
+
+Arnold commands live in `.claude/commands/arnold/` inside your project. Commit them to Git — team members who clone the repo get Arnold automatically, no install needed.
 
 ### 2. Initialize
 
 In Claude Code:
 
 ```
-/init
+/arnold:init
 ```
 
-Describe your project. Arnold creates a `docs/` folder organized by feature:
+Describe your project. Arnold creates a `docs/` folder organized by feature. Make sure to commit your `docs/` folder to version control.
 
 ```
 docs/
-├── overview.md           # Project north star
-├── status.md             # What's done, in progress, blocked
+├── overview.md           # Your project vision
+├── status.md             # What's done, what's next
 ├── auth/                 # Feature: authentication
 │   └── overview.md
 ├── booking/              # Feature: booking system
@@ -129,10 +128,10 @@ docs/
 ### 3. Plan
 
 ```
-/plan
+/arnold:plan
 ```
 
-Arnold reads your docs and codebase, then proposes more detailed documentation: step-by-step flows, edge cases, acceptance criteria. Approve what looks useful.
+Arnold reads your docs and codebase, then proposes more detailed documentation: flow docs, edge cases, acceptance criteria.
 
 ### 4. Build
 
@@ -141,24 +140,22 @@ Write code however you normally do. Claude Code, Cursor, by hand.
 ### 5. Check
 
 ```
-/check
+/arnold:check
 ```
 
 **This is the one.** Arnold reads your docs AND your code, then reports:
 
 - What's documented but not built yet
 - What's built but not documented
-- Where code has drifted from docs
-
-Use `/check` after every significant coding session.
+- Where code has drifted from docs (e.g., docs say session timeout is 24 hours, code says 72)
 
 ### 6. Update
 
 ```
-/update
+/arnold:update
 ```
 
-After coding, sync your docs. Arnold reads what changed and proposes updates to keep things aligned.
+After a coding session, sync your docs. Arnold reads what changed and proposes updates.
 
 ---
 
@@ -166,86 +163,70 @@ After coding, sync your docs. Arnold reads what changed and proposes updates to 
 
 | Command | What It Does |
 |---------|-------------|
-| `/init` | Scaffold a `docs/` folder from your project description |
-| `/plan` | Generate or refine feature docs, identify gaps |
-| `/check` | Compare docs to code — find drift, missing docs, undocumented code |
-| `/update` | Sync docs after coding — propose updates based on what changed |
-| `/status` | Quick snapshot — what's done, in progress, blocked |
+| `/arnold:init` | Scaffold a `docs/` folder from your project description |
+| `/arnold:plan` | Generate or refine feature docs, identify gaps |
+| `/arnold:check` | Compare docs to code — find drift, missing docs, undocumented code |
+| `/arnold:update` | Sync docs after coding — propose updates based on changes |
+| `/arnold:status` | Quick snapshot — what's done, in progress, blocked |
 
 ---
 
-## Doc Structure
+## Doc Structure: Organized by Feature
 
-Arnold organizes docs **by feature**, the way you actually think about your product. Not by document type.
+Arnold organizes docs by feature, the way you think about your product. Not by document type.
 
 ```
 docs/
-├── overview.md
-│     Project mission, core features, current status.
+├── overview.md              # Project north star
+├── status.md                # Current state
 │
-├── status.md
-│     What's done, in progress, blocked, unknown.
-│
-├── auth/
-│   ├── overview.md          What auth does, core rules, assumptions
-│   ├── login-flow.md        Step-by-step happy path + errors
-│   └── edge-cases.md        Session expiry, lockouts, token handling
+├── auth/                    # One folder per feature
+│   ├── overview.md          # What auth does, core rules
+│   ├── login-flow.md        # Step-by-step happy path + errors
+│   └── edge-cases.md        # Session expiry, lockouts, etc.
 │
 ├── booking/
 │   ├── overview.md
 │   ├── reserve-spot.md
-│   ├── cancellation.md
-│   └── edge-cases.md
+│   └── cancellation.md
 │
-├── payments/
-│   ├── overview.md
-│   └── stripe-integration.md
-│
-├── decisions/
+├── decisions/               # Cross-cutting decisions
 │   ├── 001-chose-stripe.md
-│   └── 002-no-overbooking.md
+│   └── 002-went-serverless.md
 │
-└── unknowns.md
-      Open questions, bets we're making, risks.
+└── unknowns.md              # Open questions, bets, risks
 ```
 
 **Why this works:**
-
 - When building login, `auth/` is all you need
 - When someone asks "how do refunds work?" → `booking/cancellation.md`
-- It scales — add features by adding folders, not by reorganizing everything
-- A developer or PM can browse `docs/` and understand the project in 5 minutes
+- It scales: add features by adding folders
+- It reads naturally: a developer or PM can browse `docs/` and understand the project in 5 minutes
 
----
+### Source Provenance
 
-## Provenance: Where Did This Rule Come From?
+Arnold tracks where rules come from:
 
-Arnold tracks where requirements originate:
+- **(user-stated)** — you said this explicitly
+- **(domain-derived)** — standard for this kind of app
+- **(Arnold-inferred)** — Claude reasoned this should exist
+- **(decided)** — team made a deliberate choice (links to decision record)
 
-```markdown
-## Core Rules
-
-- Passwords must be at least 8 characters (Arnold-inferred — security best practice)
-- Sessions expire after 24 hours (domain-derived — web app standard)
-- Users can only book one spot per class (user-stated — Chris, kickoff meeting)
-- Stripe is the payment processor (decided — see decisions/001-chose-stripe.md)
-```
-
-When `/check` reports drift, knowing the source matters. A user-stated rule that drifted is a bigger deal than an Arnold-inferred default.
+When `/arnold:check` reports drift, you know whether the rule was something you explicitly asked for or something Arnold assumed.
 
 ---
 
 ## What Arnold Doesn't Do
 
-**Doesn't rewrite your code.** Arnold reads and reports. You decide what to fix.
+**Doesn't rewrite your code.** Arnold reads and reports. You decide.
 
-**Doesn't run automatically.** No CI hooks, no background processes. You run `/check` when you want.
+**Doesn't run automatically.** No CI hooks, no background processes. You run `/arnold:check` when you want to check.
 
-**Doesn't require an API key.** If you have Claude Code, you have Arnold.
+**Doesn't require an API key.** It's Claude Code slash commands. If you have Claude Code, you have Arnold.
 
-**Doesn't store data.** No database. Docs are markdown files in your repo.
+**Doesn't store data.** No database. Docs are markdown files in your repo, versioned with Git.
 
-**Doesn't replace your judgment.** Sometimes docs are right and code is draft. Sometimes code diverged intentionally. Arnold flags the gap. You decide.
+**Doesn't replace human judgment.** Sometimes docs are right and code is draft. Sometimes code diverged intentionally. Arnold flags the gap. You decide what to do about it.
 
 ---
 
@@ -253,52 +234,28 @@ When `/check` reports drift, knowing the source matters. A user-stated rule that
 
 <details>
 <summary><strong>Do I need an API key?</strong></summary>
-
-No. Arnold runs inside Claude Code. No backend, no separate API key, no authentication.
-
+No. Arnold runs in Claude Code. No backend, no separate API key.
 </details>
 
 <details>
 <summary><strong>Can I use Arnold on an existing project?</strong></summary>
-
-Yes. Run `/init` on an existing codebase. Arnold reads your code and scaffolds docs to match. Then `/check` to find gaps.
-
+Yes. Run <code>/arnold:init</code> on an existing codebase. Arnold reads your code and scaffolds docs that match. Then <code>/arnold:check</code> to find gaps.
 </details>
 
 <details>
 <summary><strong>How does Arnold handle large codebases?</strong></summary>
-
-Claude Code has a context window. For large projects, `/check` focuses on specific features or recent changes. You can scope it: "check just the auth feature."
-
+Claude Code has a context window. For large projects, <code>/arnold:check</code> focuses on specific features or changed files. You can also scope checks: "check just the auth feature."
 </details>
 
 <details>
 <summary><strong>Is this just for web apps?</strong></summary>
-
-No. Any project where documentation matters: CLIs, libraries, APIs, data pipelines, mobile apps.
-
+No. Any project with documentation: CLIs, libraries, APIs, data pipelines, mobile apps.
 </details>
 
 <details>
 <summary><strong>Can I customize the doc structure?</strong></summary>
-
-Yes. Feature-based organization is a strong default, not a requirement. Rearrange after `/init` runs.
-
+Yes. The feature-based structure is a strong default, not a requirement. Edit after <code>/arnold:init</code> runs.
 </details>
-
----
-
-## Contributing
-
-Arnold is open source. We welcome bug reports, feature requests, doc improvements, and new slash command ideas.
-
-```bash
-git clone https://github.com/ArtifactHQ/arnold.git
-cd arnold
-# Edit commands/ and CLAUDE.md, test in Claude Code
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
@@ -306,12 +263,16 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 Arnold is the free, open-source documentation layer from [Artifact](https://artifact.new).
 
-If you love the doc structure but want **automated drift detection running in CI** — that's Arnold Engine, the private tooling behind [Artifact Services](https://artifact.new).
+If you love the doc structure but want **automated drift detection** running in CI — that's Arnold Engine, the private tooling we use for [Artifact Services](https://artifact.new).
 
 ---
 
 <div align="center">
-<p><strong>Arnold doesn't write your code. It makes sure your code matches your vision.</strong></p>
-<p>Hold on to your docs. 🦕</p>
-<p>Built by <a href="https://artifact.new">Artifact</a>.</p>
+
+**Arnold doesn't write your code. It makes sure your code matches your vision.**
+
+**Hold on to your docs.** 🦕
+
+Built by [Artifact](https://artifact.new).
+
 </div>

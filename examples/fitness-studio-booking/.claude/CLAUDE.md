@@ -1,4 +1,4 @@
-## Arnold — Documentation-First Development
+# Arnold — Documentation-First Development
 
 This project uses Arnold for doc-centered development.
 The `docs/` folder is the source of truth for what this
@@ -85,3 +85,15 @@ Track where rules come from:
 - `/arnold:check` — compare docs to code, find drift
 - `/arnold:update` — sync docs after a coding session
 - `/arnold:status` — quick project overview
+
+## Project Context
+
+This is a fitness studio booking platform. Studio owners list classes,
+users browse and book spots, payments are handled via Stripe, and
+users can sync booked classes to their calendars.
+
+Core features: Classes, Booking, Payments, Accounts, Calendar Sync
+
+## Current Focus
+
+Building the booking flow (reserve spot, cancellation, capacity management).
