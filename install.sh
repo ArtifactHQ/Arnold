@@ -87,7 +87,7 @@ if [ "$UNINSTALL" = true ]; then
     # Remove command files
     if [ -d ".claude/commands/arnold" ]; then
         # Check for user-added files beyond Arnold's defaults
-        ARNOLD_COMMANDS=("init.md" "plan.md" "check.md" "update.md" "status.md")
+        ARNOLD_COMMANDS=("init.md" "plan.md" "check.md" "update.md" "status.md" "help.md" "decide.md")
         EXTRA_FILES=()
         for f in .claude/commands/arnold/*.md; do
             [ -f "$f" ] || continue
@@ -213,7 +213,7 @@ else
 fi
 
 # Download command files
-COMMANDS=("init" "plan" "check" "update" "status")
+COMMANDS=("init" "plan" "check" "update" "status" "help" "decide")
 
 print_info "Downloading Arnold commands..."
 

@@ -31,6 +31,9 @@ COMMANDS:
   /arnold:status    Quick project overview.
                     Features, unknowns, last check date.
 
+  /arnold:decide    Record a decision in docs/decisions/.
+                    Auto-numbers, gathers context, updates references.
+
   /arnold:help      This reference.
 
 WHEN TO USE WHAT:
@@ -40,6 +43,7 @@ WHEN TO USE WHAT:
   Just finished coding?         → /arnold:update
   Want to audit alignment?      → /arnold:check
   Where do things stand?        → /arnold:status
+  Made a key decision?          → /arnold:decide
 
 SCOPING:
 

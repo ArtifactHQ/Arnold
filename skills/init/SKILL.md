@@ -402,7 +402,10 @@ Open questions I flagged:
 
 Next: Run /arnold:plan to flesh out flows, edge cases, and acceptance criteria.
 
-Or just start building — Arnold will keep the docs honest. 🦕
+When you've built your first feature, run /arnold:check to see
+if the code matches what you documented. That's where Arnold shines.
+
+Hold on to your docs. 🦕
 ```
 
 For **brownfield**:
@@ -428,8 +431,11 @@ Things I noticed in the code:
   • [Observation 2]
   • [Observation 3]
 
-Next: Run /arnold:check to see how well these docs match your code.
-Then /arnold:plan to flesh out flows and edge cases.
+I documented what I found in your code, but I probably got
+some things wrong — and that's the point.
 
-Your code was already here. Now your docs are too. 🦕
+→ Run /arnold:check NOW to see where docs and code disagree.
+  That's Arnold's signature move, and it works best right here.
+
+Then /arnold:plan to flesh out flows and edge cases.
 ```

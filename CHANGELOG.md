@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2026-03-14
 
 ### Added
-- 6 slash commands: `/arnold:init`, `/arnold:plan`, `/arnold:check`, `/arnold:update`, `/arnold:status`, `/arnold:help`
+- 7 slash commands: `/arnold:init`, `/arnold:plan`, `/arnold:check`, `/arnold:update`, `/arnold:status`, `/arnold:decide`, `/arnold:help`
 - Claude Code plugin support (`.claude-plugin/plugin.json` + marketplace)
 - Agent Skills format (`skills/`) for cross-agent compatibility
 - Shell installer (`install.sh`) with install, uninstall (`--uninstall`), and upgrade support
@@ -19,3 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Worked example: fitness studio booking platform with 17 doc files
 - Background knowledge skill (`arnold-rules`) for plugin users
 - Marker-based CLAUDE.md injection/removal for clean install/uninstall
+- `/arnold:decide` command for recording architectural and product decisions in docs/decisions/
+- Strengthened `/arnold:check` with vague-docs detection, flow tracing, env var handling, provenance-based prioritization
+- Improved post-init guidance (nudges user toward first check)
+
+### Fixed
+- install.sh now installs `/arnold:help` (was missing from COMMANDS array)

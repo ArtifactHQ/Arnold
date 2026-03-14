@@ -71,6 +71,12 @@ Feature: booking
   ...
 ```
 
+**Quality gate:** After building the DOC MAP, assess whether the rules are specific enough for drift detection. If most Core Rules are vague summaries without testable values (e.g., "authentication should be secure" instead of "passwords must be at least 8 characters"), note this in your report:
+
+"⚠ Doc quality notice: [N] features have vague rules without specific values. Drift detection works best with testable rules. Run /arnold:plan to add specific acceptance criteria."
+
+Proceed with the check using whatever specific rules exist, but flag this so the user knows the coverage is limited.
+
 ## STEP 2: SCAN THE CODEBASE
 
 **Start with git (if available):**
@@ -96,6 +102,8 @@ What to look for in code (matching against doc rules):
 - **Flow behavior** — does the happy path match the documented flow?
 - **Error handling** — do error cases match documented edge cases?
 - **Feature existence** — is there code for documented features?
+- **Flow logic** — For each documented flow (step-by-step paths in flow docs), find the entry point in code (route handler, controller, event handler). Trace the call chain to the service layer. Check branch conditions against documented error cases. Cite the specific conditional and the specific doc statement it matches or contradicts.
+- **Environment variables** — If a constant is set via environment variable (e.g., `process.env.SESSION_TIMEOUT`), check `.env.example`, config defaults, and any documentation of env vars. If no default is visible, flag as: "Value unverifiable — confirm [VAR_NAME] matches documented value of [N]."
 
 **Token management:** For large codebases, don't try to read everything. Prioritize:
 1. Files directly related to documented features
@@ -177,6 +185,8 @@ ALIGNMENT SUMMARY
    📄 Docs say: [what docs say] (source: [file])
    💻 Code has: [what code does] (source: [file:line])
    → [Brief recommendation: "Update docs to match code" or "Fix code to match docs" or "Decide which is correct"]
+
+**Priority by provenance:** Drift in user-stated rules is more urgent than drift in Arnold-inferred rules. When listing drift items, put user-stated and decided rules first, then domain-derived, then Arnold-inferred.
 
 2. [Feature]: [Another drift]
    📄 Docs say: ...
