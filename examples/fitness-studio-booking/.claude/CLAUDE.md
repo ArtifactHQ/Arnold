@@ -87,6 +87,9 @@ Track where rules come from:
 - `/arnold:status` — quick project overview
 - `/arnold:resolve` — fix drift items interactively
 - `/arnold:recap` — start-of-session briefing
+- `/arnold:diff` — quick drift scan
+- `/arnold:decide` — record a decision in docs/decisions/
+- `/arnold:help` — show all commands and usage guide
 
 ## Project Context
 

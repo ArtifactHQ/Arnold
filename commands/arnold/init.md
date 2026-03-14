@@ -22,12 +22,15 @@ Before doing anything else, silently assess the project:
 
 2. **Check for existing docs:** Does a `docs/` folder already exist? Does it contain markdown files?
 
-3. **Route to the correct path:**
+3. **Check for monorepo structure:** Look for `packages/`, `apps/`, `services/`, or `modules/` directories at the root, each potentially containing their own project files (package.json, go.mod, etc.). Also check for workspace config: `pnpm-workspace.yaml`, `lerna.json`, root `package.json` with `workspaces` field, `Cargo.toml` with `[workspace]`.
+
+4. **Route to the correct path:**
    - **No code, no docs → GREENFIELD** (Path A)
    - **Code exists, no docs → BROWNFIELD** (Path B)
    - **`docs/` exists but contains no markdown files → treat as GREENFIELD** (Path A). Note to user: "Found an empty docs/ folder — I'll scaffold Arnold docs inside it."
    - **Code exists, docs exist (with markdown files) → EXISTING DOCS** (Path C)
    - **No code, docs exist → treat as GREENFIELD** with a note that docs already exist
+   - **Monorepo detected → MONOREPO** (Path M)
 
 ---
 
@@ -217,6 +220,45 @@ Wait for their choice.
 ### STEP C4: CREATE FILES
 
 Jump to **STEP CREATE** below, adjusted for whichever option the user chose.
+
+---
+
+## PATH M: MONOREPO (Multiple packages/services detected)
+
+### STEP M1: IDENTIFY PACKAGES
+
+List the packages/services found:
+
+```
+🦕 This looks like a monorepo with [N] packages:
+
+  • [package-1]/ — [brief: detected from package.json name or directory]
+  • [package-2]/ — [brief]
+  • [package-3]/ — [brief]
+
+I can document Arnold at two levels:
+
+1. **Repo-level** — One docs/ at the root covering the whole project.
+   Good for: shared architecture, cross-cutting concerns, the big picture.
+
+2. **Package-level** — A docs/ inside each package for its own features.
+   Good for: independent services, team-per-package setups.
+
+3. **Both** — Root docs/ for the project, plus package-level docs/.
+   Good for: large monorepos where teams own packages but share infrastructure.
+
+Which approach fits your project?
+```
+
+Wait for user response.
+
+### STEP M2: SCAFFOLD BASED ON CHOICE
+
+**If repo-level:** Proceed as Brownfield (Path B) treating the whole monorepo as one project. List packages as features or feature groups.
+
+**If package-level:** Ask which package to start with. Run brownfield init scoped to that package, creating `[package]/docs/` instead of root `docs/`.
+
+**If both:** Create root `docs/` with project-wide overview referencing packages, plus guide the user to run `/arnold:init` inside each package later.
 
 ---
 

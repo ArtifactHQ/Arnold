@@ -18,7 +18,7 @@ set -euo pipefail
 #   ./install.sh --uninstall
 # ══════════════════════════════════════════════
 
-ARNOLD_VERSION="0.1.0"
+ARNOLD_VERSION="0.2.0"
 ARNOLD_REPO="ArtifactHQ/Arnold-Lite"
 ARNOLD_BRANCH="main"
 ARNOLD_RAW_BASE="https://raw.githubusercontent.com/${ARNOLD_REPO}/${ARNOLD_BRANCH}"
@@ -87,7 +87,7 @@ if [ "$UNINSTALL" = true ]; then
     # Remove command files
     if [ -d ".claude/commands/arnold" ]; then
         # Check for user-added files beyond Arnold's defaults
-        ARNOLD_COMMANDS=("init.md" "plan.md" "check.md" "update.md" "status.md" "help.md" "decide.md" "resolve.md" "recap.md")
+        ARNOLD_COMMANDS=("init.md" "plan.md" "check.md" "update.md" "status.md" "help.md" "decide.md" "resolve.md" "recap.md" "diff.md")
         EXTRA_FILES=()
         for f in .claude/commands/arnold/*.md; do
             [ -f "$f" ] || continue
@@ -213,7 +213,7 @@ else
 fi
 
 # Download command files
-COMMANDS=("init" "plan" "check" "update" "status" "help" "decide" "resolve" "recap")
+COMMANDS=("init" "plan" "check" "update" "status" "help" "decide" "resolve" "recap" "diff")
 
 print_info "Downloading Arnold commands..."
 

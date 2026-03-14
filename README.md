@@ -178,6 +178,7 @@ After a coding session, sync your docs. Arnold reads what changed and proposes u
 | `/arnold:decide` | Record an architectural or product decision |
 | `/arnold:resolve` | Fix drift items interactively — choose docs or code for each |
 | `/arnold:recap` | Start-of-session briefing — where you left off, what to do next |
+| `/arnold:diff` | Quick drift scan — fast summary without a full check |
 | `/arnold:help` | Show all commands, when to use them, and doc structure |
 
 ---

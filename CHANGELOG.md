@@ -5,6 +5,31 @@ All notable changes to Arnold will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-03-14
+
+### Added
+- /arnold:resolve — interactively fix drift items (choose docs or code)
+- /arnold:recap — start-of-session briefing with context and next action
+- /arnold:decide — record decisions with auto-numbering and cross-references
+- /arnold:diff — quick lightweight drift scan without full check
+- /arnold:help — context-aware command reference with personalized suggestions
+- Drift trend tracking in /arnold:check (Check History table in status.md)
+- Team onboarding: /arnold:init creates docs/ABOUT.md for new team members
+- Monorepo detection and multi-package support in /arnold:init
+- Check-to-update pipeline: /arnold:update reads previous check findings
+
+### Improved
+- /arnold:check: vague-docs quality gate, flow tracing, env var handling
+- /arnold:check: provenance-based drift prioritization (user-stated first)
+- /arnold:init: double-run protection, empty docs/ handling
+- /arnold:init: improved brownfield post-init guidance
+- install.sh: plugin detection, CLAUDE.md source fix, Ctrl-D handling
+
+### Fixed
+- install.sh: help.md was advertised but never installed
+- install.sh: CLAUDE_MD_SOURCE used user's own file during curl install
+- Removed invalid AskUserQuestion from allowed-tools
+
 ## [0.1.0] - 2026-03-14
 
 ### Added
@@ -19,14 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Worked example: fitness studio booking platform with 17 doc files
 - Background knowledge skill (`arnold-rules`) for plugin users
 - Marker-based CLAUDE.md injection/removal for clean install/uninstall
-- `/arnold:decide` command for recording architectural and product decisions in docs/decisions/
-- Strengthened `/arnold:check` with vague-docs detection, flow tracing, env var handling, provenance-based prioritization
-- `/arnold:resolve` — interactively fix drift items (choose docs or code)
-- `/arnold:recap` — start-of-session briefing with project context
-- Drift trend tracking in `/arnold:check` (Check History table in status.md)
-- Team onboarding: `/arnold:init` now creates `docs/ABOUT.md` for new team members
-- `/arnold:update` now reads previous check findings to propose targeted drift fixes
-- Improved post-init guidance (nudges user toward first check)
 
 ### Fixed
 - install.sh now installs `/arnold:help` (was missing from COMMANDS array)
