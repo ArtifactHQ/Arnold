@@ -1,7 +1,8 @@
 ---
 name: plan
 description: "Plan — generate or refine feature specs, identify gaps"
-argument-hint: "[feature-name]"
+metadata:
+  argument-hint: "[feature-name]"
 allowed-tools:
   - Read
   - Write

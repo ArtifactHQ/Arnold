@@ -14,7 +14,7 @@
 <p><strong>No API key. No database. No Ruby. Works with Claude Code out of the box.</strong></p>
 <br>
 <p>
-<a href="#why-we-built-this">Why We Built This</a> · <a href="#how-it-works">How It Works</a> · <a href="#quick-start">Quick Start</a> · <a href="#commands">Commands</a> · <a href="#doc-structure">Doc Structure</a>
+<a href="#why-we-built-this">Why We Built This</a> · <a href="#how-it-works">How It Works</a> · <a href="#what-drift-detection-looks-like">Drift Detection</a> · <a href="#quick-start">Quick Start</a> · <a href="#commands">Commands</a> · <a href="#doc-structure">Doc Structure</a>
 </p>
 </div>
 
@@ -67,6 +67,43 @@ Arnold doesn't rewrite your code. It doesn't run tests. It reads, compares, and 
 
 ---
 
+## What Drift Detection Looks Like
+
+When you run `/arnold:check`, Arnold reads your docs and your code, then shows you exactly where they disagree:
+
+```
+🦕 ARNOLD CHECK REPORT
+━━━━━━━━━━━━━━━━━━━━━━
+
+Scanned: 4 feature docs, 23 source files
+
+🔴 DRIFT DETECTED
+━━━━━━━━━━━━━━━━━
+
+1. auth: Session timeout
+   📄 Docs say: "Sessions expire after 24 hours" (docs/auth/overview.md)
+   💻 Code has: SESSION_TTL = 72 * 60 * 60 (src/config/auth.js)
+   → Docs say 24hr, code says 72hr. Which is right?
+
+2. booking: Capacity limit
+   📄 Docs say: "Maximum 20 spots per class" (docs/booking/overview.md)
+   💻 Code has: MAX_CAPACITY = 30 (src/models/class.js)
+   → Docs say 20, code says 30.
+
+🟢 ALIGNED
+━━━━━━━━━━
+
+  ✓ auth: Rate limit is 5 attempts per minute
+  ✓ payments: Stripe is the payment processor
+  ✓ booking: Users cannot book the same class twice
+
+Run /arnold:resolve to fix drift items. 🦕
+```
+
+That gap between docs and code? Arnold finds it.
+
+---
+
 ## How Arnold Is Different
 
 **vs. Claude Code alone** — Claude is great at writing code. But every session starts fresh. Arnold gives Claude a persistent, structured source of truth in your `docs/` folder. When you start a new session, Claude reads the docs and knows exactly where things stand.
@@ -106,7 +143,15 @@ Run this from your project's root directory. To uninstall: `./install.sh --unins
 
 Arnold commands live in `.claude/commands/arnold/` inside your project. Commit them to Git — team members who clone the repo get Arnold automatically.
 
-**Works with other AI tools too.** Arnold's commands follow the [Agent Skills](https://agentskills.io) standard. Copy the `skills/` directory into your project's `.agents/skills/` folder to use Arnold with Cursor, Windsurf, Gemini CLI, Codex, and 30+ other tools.
+**Works with other AI tools too.** Arnold's commands follow the [Agent Skills](https://agentskills.io) standard. Copy the skill folders from `skills/` into `.agents/skills/` in your project. Note: skill names like `init`, `check` are generic -- consider renaming to `arnold-init`, `arnold-check` to avoid conflicts with other tools.
+
+The `skills/arnold-rules/` skill contains Arnold's documentation-first development rules. In Claude Code, it loads automatically as background context. In other tools, you can ignore it or reference it manually when needed.
+
+Arnold's development rules are in `CLAUDE.md`. For other tools, copy this content to your tool's equivalent:
+- **Cursor:** `.cursor/rules/arnold.md`
+- **Windsurf:** `.windsurf/rules/arnold.md`
+- **Gemini CLI:** `GEMINI.md`
+- **Codex:** `AGENTS.md`
 
 ### 2. Initialize
 
@@ -180,6 +225,8 @@ After a coding session, sync your docs. Arnold reads what changed and proposes u
 | `/arnold:recap` | Start-of-session briefing — where you left off, what to do next |
 | `/arnold:diff` | Quick drift scan — fast summary without a full check |
 | `/arnold:help` | Show all commands, when to use them, and doc structure |
+
+Start with `/arnold:init`. The core loop is **init -> check -> resolve -> update**. Other commands are there when you need them.
 
 ---
 

@@ -8,14 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.0] - 2026-03-14
 
 ### Added
-- /arnold:resolve — interactively fix drift items (choose docs or code)
-- /arnold:recap — start-of-session briefing with context and next action
-- /arnold:decide — record decisions with auto-numbering and cross-references
 - /arnold:diff — quick lightweight drift scan without full check
-- /arnold:help — context-aware command reference with personalized suggestions
 - Drift trend tracking in /arnold:check (Check History table in status.md)
-- Team onboarding: /arnold:init creates docs/ABOUT.md for new team members
+- Context-aware /arnold:help with personalized suggestions
 - Monorepo detection and multi-package support in /arnold:init
+- Team onboarding: /arnold:init creates docs/ABOUT.md for new team members
 - Check-to-update pipeline: /arnold:update reads previous check findings
 
 ### Improved

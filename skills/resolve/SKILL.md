@@ -1,7 +1,8 @@
 ---
 name: resolve
 description: "Resolve — fix drift items found by /arnold:check"
-argument-hint: "[feature-name]"
+metadata:
+  argument-hint: "[feature-name]"
 allowed-tools:
   - Read
   - Write

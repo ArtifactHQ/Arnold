@@ -1,7 +1,8 @@
 ---
 name: decide
 description: "Decide — record an architectural or product decision"
-argument-hint: "[decision topic]"
+metadata:
+  argument-hint: "[decision topic]"
 allowed-tools:
   - Read
   - Write

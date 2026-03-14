@@ -1,7 +1,8 @@
 ---
 name: update
 description: "Update — sync docs after a coding session"
-argument-hint: "[feature-name]"
+metadata:
+  argument-hint: "[feature-name]"
 allowed-tools:
   - Read
   - Write

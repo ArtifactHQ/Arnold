@@ -1,7 +1,8 @@
 ---
 name: diff
 description: "Diff — quick drift summary without a full check"
-argument-hint: "[feature-name]"
+metadata:
+  argument-hint: "[feature-name]"
 allowed-tools:
   - Read
   - Bash
