@@ -263,8 +263,6 @@ Yes. The feature-based structure is a strong default, not a requirement. Edit af
 
 Arnold is the free, open-source documentation layer from [Artifact](https://artifact.new).
 
-If you love the doc structure but want **automated drift detection** running in CI — that's Arnold Engine, the private tooling we use for [Artifact Services](https://artifact.new).
-
 ---
 
 <div align="center">
