@@ -2,7 +2,7 @@
 
 > **Date:** March 14, 2026
 > **Authors:** Chris Sotraidis + Claude
-> **Status:** Research complete, ready for decision
+> **Status:** Phase 1 and Phase 2 complete — plugin manifest and skills shipped
 
 ---
 
@@ -469,8 +469,8 @@ Arnold-Lite/
 
 | Phase | What | When |
 |-------|------|------|
-| **v0.1.0** (now) | Shell script install, Claude Code commands | Done |
-| **v0.2.0** | Add plugin manifest + marketplace.json + skills/ directory | Next sprint |
+| **v0.1.0** | Shell script install, Claude Code commands | Done |
+| **v0.2.0** | Add plugin manifest + marketplace.json + skills/ directory | Done |
 | **v0.3.0** | Update install.sh for cross-agent support (.agents/skills/) | Following sprint |
 | **v1.0.0** | Submit to Anthropic marketplace, deprecate commands/ | When stable |
 

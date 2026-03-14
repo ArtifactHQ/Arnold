@@ -1,6 +1,6 @@
 ---
 name: arnold-rules
-description: "Arnold documentation-first development rules — always active when Arnold plugin is installed. Guides Claude to check docs/ before writing code, maintain feature-based doc structure, and track provenance of requirements."
+description: "Arnold documentation-first development rules. ALWAYS reference these rules when: (1) the user asks to write code and a docs/ folder exists, (2) the user runs any /arnold: command, (3) the user mentions documentation, specs, or requirements. These rules define the doc structure, status markers, provenance tags, and workflow for docs-driven development."
 user-invocable: false
 ---
 

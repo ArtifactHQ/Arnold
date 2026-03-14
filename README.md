@@ -106,6 +106,8 @@ Run this from your project's root directory. To uninstall: `./install.sh --unins
 
 Arnold commands live in `.claude/commands/arnold/` inside your project. Commit them to Git — team members who clone the repo get Arnold automatically.
 
+**Works with other AI tools too.** Arnold's commands follow the [Agent Skills](https://agentskills.io) standard. Copy the `skills/` directory into your project's `.agents/skills/` folder to use Arnold with Cursor, Windsurf, Gemini CLI, Codex, and 30+ other tools.
+
 ### 2. Initialize
 
 In Claude Code:
@@ -261,6 +263,12 @@ No. Any project with documentation: CLIs, libraries, APIs, data pipelines, mobil
 <summary><strong>Can I customize the doc structure?</strong></summary>
 Yes. The feature-based structure is a strong default, not a requirement. Edit after <code>/arnold:init</code> runs.
 </details>
+
+---
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ---
 

@@ -179,6 +179,31 @@ if [ ! -d ".git" ] && [ ! -f "package.json" ] && [ ! -f "requirements.txt" ] && 
     fi
 fi
 
+# Check for existing plugin installation
+PLUGIN_DETECTED=false
+if [ -f "${HOME}/.claude/settings.json" ] && grep -q "arnold" "${HOME}/.claude/settings.json" 2>/dev/null; then
+    PLUGIN_DETECTED=true
+elif [ -d "${HOME}/.claude/plugins/cache" ] && ls "${HOME}/.claude/plugins/cache/" 2>/dev/null | grep -qi "arnold"; then
+    PLUGIN_DETECTED=true
+fi
+
+if [ "$PLUGIN_DETECTED" = true ]; then
+    print_warning "Arnold appears to be installed as a Claude Code plugin."
+    print_info "Using both the plugin and shell install may cause duplicate commands."
+    print_info "If you're using Claude Code, the plugin is recommended: /plugin install arnold"
+    echo ""
+    if [ -t 0 ]; then
+        read -p "  Continue with shell install anyway? (y/N) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "  Install cancelled."
+            exit 0
+        fi
+    else
+        print_warning "Running in non-interactive mode — continuing with install"
+    fi
+fi
+
 # Create .claude/commands/arnold/ directory (namespace for Arnold commands)
 if [ -d ".claude/commands/arnold" ]; then
     print_info "Updating existing Arnold commands..."
