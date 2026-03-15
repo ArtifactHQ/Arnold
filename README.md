@@ -161,7 +161,11 @@ In Claude Code:
 /arnold:init
 ```
 
-Describe your project. Arnold creates a `docs/` folder organized by feature. Make sure to commit your `docs/` folder to version control.
+Describe your project. Arnold creates a `docs/` folder organized by feature. On existing codebases, Arnold scans your code and generates docs from what it finds.
+
+For a fully automatic scan with no prompts, use `/arnold:init --auto`.
+
+Make sure to commit your `docs/` folder to version control.
 
 ```
 docs/
