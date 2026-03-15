@@ -34,7 +34,7 @@ Arnold checks. It reads your docs and your code, then tells you where they've dr
 
 The complexity is in the prompts, not your workflow. What you see: describe your product, write docs, build code, check the gap.
 
-— **Artifact**
+**Artifact**
 
 ---
 

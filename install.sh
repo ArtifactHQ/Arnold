@@ -275,14 +275,22 @@ IS_LOCAL_INSTALL=false
 if [ -d "${SCRIPT_DIR}/commands/arnold" ] && [ -f "${SCRIPT_DIR}/commands/arnold/init.md" ] && grep -q "arnold:init" "${SCRIPT_DIR}/commands/arnold/init.md" 2>/dev/null; then
     # Local install from cloned repo
     IS_LOCAL_INSTALL=true
+    LOCAL_FAILURES=0
     for cmd in "${COMMANDS[@]}"; do
-        if [ -f "${SCRIPT_DIR}/commands/arnold/${cmd}.md" ]; then
+        if [ -f "${SCRIPT_DIR}/commands/arnold/${cmd}.md" ] && grep -q "^---" "${SCRIPT_DIR}/commands/arnold/${cmd}.md" 2>/dev/null; then
             cp "${SCRIPT_DIR}/commands/arnold/${cmd}.md" ".claude/commands/arnold/${cmd}.md"
             print_success "  /arnold:${cmd}"
         else
-            print_error "  /arnold:${cmd} — file not found in ${SCRIPT_DIR}/commands/arnold/"
+            print_error "  /arnold:${cmd} — file missing or invalid in ${SCRIPT_DIR}/commands/arnold/"
+            LOCAL_FAILURES=$((LOCAL_FAILURES + 1))
         fi
     done
+
+    if [ "${LOCAL_FAILURES}" -gt 0 ]; then
+        echo ""
+        print_error "Some commands were missing or invalid. Please check your local repo."
+        exit 1
+    fi
 else
     # Remote install from GitHub
     DOWNLOAD_FAILURES=0

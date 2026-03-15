@@ -1,6 +1,7 @@
 ---
 name: init
 description: "Initialize Arnold — scaffold docs for your project"
+argument-hint: "[--auto]"
 allowed-tools:
   - Read
   - Write

@@ -2,7 +2,7 @@
 
 Arnold is a documentation-first development toolkit for Claude Code. It ships as
 slash commands (markdown files in `commands/`), a `CLAUDE.md` template, and an
-install script. There is no runtime and no server -- the value lives in prompt
+install script. There is no runtime and no server. The value lives in prompt
 engineering, not traditional code.
 
 ## Getting Started
@@ -14,15 +14,15 @@ engineering, not traditional code.
 
 ## What to Contribute
 
-- **Improve existing commands** -- sharpen wording, fix edge cases, reduce
+- **Improve existing commands.** Sharpen wording, fix edge cases, reduce
   token usage.
-- **Add new commands** -- Arnold has a dual distribution structure. When adding a new
+- **Add new commands.** Arnold has a dual distribution structure. When adding a new
   command, you must add it to BOTH `commands/arnold/<name>.md` (for the install.sh
   path) AND `skills/<name>/SKILL.md` (for the Claude Code plugin path). Both files
   should contain the same prompt content. Commands in the `arnold/` subdirectory are
   registered under the `/arnold:` namespace in Claude Code.
-- **Improve the CLAUDE.md template** -- better defaults, clearer structure.
-- **Fix the install script** -- compatibility, error handling, docs.
+- **Improve the CLAUDE.md template.** Better defaults, clearer structure.
+- **Fix the install script.** Compatibility, error handling, docs.
 
 ## Bug Reports and Feature Requests
 
@@ -48,7 +48,7 @@ Open a GitHub Issue. Include:
 ## Style Notes
 
 - Write clear, direct English. Avoid jargon.
-- Keep markdown files concise -- shorter prompts cost fewer tokens.
+- Keep markdown files concise. Shorter prompts cost fewer tokens.
 - Do not add runtime dependencies. Arnold is markdown and shell only.
 
 ## License

@@ -22,5 +22,5 @@ Last /arnold:check: 2026-03-13
 ## What's Next
 
 - [ ] Build cancellation flow for booking
-- [ ] Integrate Stripe (decision: 001-chose-stripe.md)
+- [ ] Integrate Stripe (decision: decisions/001-chose-stripe.md)
 - [ ] Resolve: refund vs. credit policy (unknowns.md)
