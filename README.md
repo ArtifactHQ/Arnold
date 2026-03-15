@@ -11,7 +11,7 @@
 </p>
 <br>
 <pre><code>curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold-Lite/main/install.sh | bash</code></pre>
-<p><strong>No API key. No database. No Ruby. Works with Claude Code out of the box.</strong></p>
+<p><strong>No API key. No database. No Ruby. Runs inside Claude Code, Cursor, Windsurf, and 30+ AI coding agents.</strong></p>
 <br>
 <p>
 <a href="#why-we-built-this">Why We Built This</a> · <a href="#how-it-works">How It Works</a> · <a href="#what-drift-detection-looks-like">Drift Detection</a> · <a href="#quick-start">Quick Start</a> · <a href="#commands">Commands</a> · <a href="#doc-structure">Doc Structure</a>
@@ -19,6 +19,8 @@
 </div>
 
 ---
+
+> **Arnold is a set of commands for AI coding agents.** It works inside Claude Code, Cursor, Windsurf, Gemini CLI, and other tools that support slash commands or Agent Skills. Arnold is not a standalone CLI. You need an AI coding agent to use it.
 
 ## Why We Built This
 
@@ -145,7 +147,7 @@ Run this from your project's root directory. To uninstall: `./install.sh --unins
 
 Arnold commands live in `.claude/commands/arnold/` inside your project. Commit them to Git so team members who clone the repo get Arnold automatically.
 
-**Works with other AI tools too.** Arnold's commands follow the [Agent Skills](https://agentskills.io) standard. Copy the skill folders from `skills/` into `.agents/skills/` in your project. Note: skill names like `init`, `check` are generic. Consider renaming to `arnold-init`, `arnold-check` to avoid conflicts with other tools.
+**Works with other AI coding agents too.** Arnold's commands follow the [Agent Skills](https://agentskills.io) standard. Copy the skill folders from `skills/` into `.agents/skills/` in your project. Note: skill names like `init`, `check` are generic. Consider renaming to `arnold-init`, `arnold-check` to avoid conflicts with other tools.
 
 The `skills/arnold-rules/` skill contains Arnold's documentation-first development rules. In Claude Code, it loads automatically as background context. In other tools, you can ignore it or reference it manually when needed.
 
@@ -290,6 +292,8 @@ When `/arnold:check` reports drift, you know whether the rule was something you 
 **Doesn't require an API key.** It's Claude Code slash commands. If you have Claude Code, you have Arnold.
 
 **Doesn't store data.** No database. Docs are markdown files in your repo, versioned with Git.
+
+**Doesn't run on its own.** Arnold is not a CLI binary or background service. It runs inside your AI coding agent (Claude Code, Cursor, Windsurf, etc.) as slash commands. The agent does the reading, comparing, and writing. Arnold provides the instructions.
 
 **Doesn't replace human judgment.** Sometimes docs are right and code is draft. Sometimes code diverged intentionally. Arnold flags the gap. You decide what to do about it.
 

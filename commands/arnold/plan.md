@@ -23,7 +23,7 @@ If no argument is provided, plan the entire project.
 
 ## STEP 0: CHECK FOR DOCS
 
-First, check if `docs/overview.md` exists. If it does not, tell the user: "No Arnold docs found. Run /arnold:init first to scaffold your project." Stop here.
+First, check if `docs/overview.md` exists. If it does not, tell the user: "No `docs/overview.md` found. Run `/arnold:init` to scaffold your project, or create `docs/overview.md` manually." Stop here.
 
 ## YOUR JOB
 

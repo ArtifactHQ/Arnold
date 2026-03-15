@@ -1,8 +1,7 @@
 ---
 name: resolve
 description: "Resolve — fix drift items found by /arnold:check"
-metadata:
-  argument-hint: "[feature-name]"
+argument-hint: "[feature-name]"
 allowed-tools:
   - Read
   - Write
@@ -24,13 +23,15 @@ If the user provided arguments, treat that as a feature scope. For example, `/ar
 
 ## STEP 0: CHECK FOR DOCS
 
-First, check if `docs/overview.md` exists. If not, tell the user: "No Arnold docs found. Run /arnold:init first." Stop here.
+First, check if `docs/overview.md` exists. If not, tell the user: "No `docs/overview.md` found. Run `/arnold:init` to scaffold your project, or create `docs/overview.md` manually." Stop here.
 
 ## STEP 1: FIND DRIFT
 
-Read docs and code the same way `/arnold:check` does — but focused on finding specific, actionable drift items. Build a list of mismatches where docs say one thing and code does another.
+First, check if `docs/.arnold-snapshot.json` exists. If it does, read it. Use entries where `"status": "drifted"` as your drift list — they already have exact doc values, code values, file paths, and symbols from the last check. Present these directly without re-scanning.
 
-If `docs/status.md` has a recent check date and drift was flagged there, use that as a starting point.
+If `docs/status.md` has features marked 🔴 Drifted, cross-reference with the snapshot for details.
+
+Only fall back to a fresh scan (reading docs and code like /arnold:check) if no snapshot exists.
 
 If no drift is found, say:
 

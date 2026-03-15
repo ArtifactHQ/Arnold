@@ -1,8 +1,7 @@
 ---
 name: check
 description: "Check — compare docs to code, find drift and gaps"
-metadata:
-  argument-hint: "[feature-name]"
+argument-hint: "[feature-name]"
 allowed-tools:
   - Read
   - Write

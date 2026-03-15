@@ -20,7 +20,7 @@ First, check if `docs/overview.md` exists. If it does not:
 
 Say exactly:
 ```
-No Arnold docs found. Run /arnold:init first to scaffold your project.
+No `docs/overview.md` found. Run `/arnold:init` to scaffold your project, or create `docs/overview.md` manually.
 ```
 
 Stop here. Do not proceed.

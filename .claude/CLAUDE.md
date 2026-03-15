@@ -57,13 +57,23 @@ arnold/
 │       ├── plan.md                        # /arnold:plan
 │       ├── check.md                       # /arnold:check
 │       ├── update.md                      # /arnold:update
-│       └── status.md                      # /arnold:status
+│       ├── status.md                      # /arnold:status
+│       ├── help.md                        # /arnold:help
+│       ├── decide.md                      # /arnold:decide
+│       ├── resolve.md                     # /arnold:resolve
+│       ├── recap.md                       # /arnold:recap
+│       └── diff.md                        # /arnold:diff
 ├── skills/                                # Plugin skills (for Claude Code plugin path)
 │   ├── init/SKILL.md                      # /arnold:init (auto-namespaced by plugin)
 │   ├── plan/SKILL.md                      # /arnold:plan
 │   ├── check/SKILL.md                     # /arnold:check
 │   ├── update/SKILL.md                    # /arnold:update
 │   ├── status/SKILL.md                    # /arnold:status
+│   ├── help/SKILL.md                      # /arnold:help
+│   ├── decide/SKILL.md                    # /arnold:decide
+│   ├── resolve/SKILL.md                   # /arnold:resolve
+│   ├── recap/SKILL.md                     # /arnold:recap
+│   ├── diff/SKILL.md                      # /arnold:diff
 │   └── arnold-rules/SKILL.md             # Background knowledge (user-invocable: false)
 ├── examples/
 │   └── fitness-studio-booking/            # Worked example with full doc set

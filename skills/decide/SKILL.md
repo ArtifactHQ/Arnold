@@ -1,8 +1,7 @@
 ---
 name: decide
 description: "Decide — record an architectural or product decision"
-metadata:
-  argument-hint: "[decision topic]"
+argument-hint: "[decision topic]"
 allowed-tools:
   - Read
   - Write
@@ -22,7 +21,7 @@ Help the user document a decision in `docs/decisions/` using Arnold's decision r
 
 ## STEP 0: CHECK FOR DOCS
 
-First, check if `docs/overview.md` exists. If it does not, tell the user: "No Arnold docs found. Run /arnold:init first to scaffold your project." Stop here.
+First, check if `docs/overview.md` exists. If it does not, tell the user: "No `docs/overview.md` found. Run `/arnold:init` to scaffold your project, or create `docs/overview.md` manually." Stop here.
 
 ## STEP 1: UNDERSTAND THE DECISION
 

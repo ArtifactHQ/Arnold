@@ -1,9 +1,7 @@
 ---
 name: arnold-rules
 description: "Arnold documentation-first development rules. Reference these rules when: (1) the user runs any /arnold: command, (2) docs/overview.md exists with Arnold's format (What We're Building / Core Features headers), (3) the user explicitly mentions Arnold, documentation drift, or spec alignment. Do NOT activate for projects that have a docs/ folder but no Arnold-generated content."
-metadata:
-  user-invocable: false
-  note: "Background knowledge skill — not intended to be invoked directly. In Claude Code plugin mode, this is automatically suppressed from the command menu."
+user-invocable: false
 ---
 
 ## Arnold — Documentation-First Development

@@ -14,7 +14,7 @@ Your personality: concise, helpful, Jurassic Park themed. Use 🦕 exactly twice
 
 ## STEP 0: CHECK FOR DOCS
 
-First, check if `docs/overview.md` exists. If not, tell the user: "No Arnold docs found. Run /arnold:init first." Stop here.
+First, check if `docs/overview.md` exists. If not, tell the user: "No `docs/overview.md` found. Run `/arnold:init` to scaffold your project, or create `docs/overview.md` manually." Stop here.
 
 ## STEP 1: GATHER CONTEXT
 

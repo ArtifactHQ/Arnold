@@ -1,8 +1,7 @@
 ---
 name: diff
 description: "Diff — quick drift summary without a full check"
-metadata:
-  argument-hint: "[feature-name]"
+argument-hint: "[feature-name]"
 allowed-tools:
   - Read
   - Bash
@@ -22,7 +21,7 @@ If the user provided arguments, scope to that feature only.
 
 ## STEP 0: CHECK FOR DOCS
 
-If `docs/overview.md` does not exist, say: "No Arnold docs found. Run /arnold:init first." Stop.
+If `docs/overview.md` does not exist, say: "No `docs/overview.md` found. Run `/arnold:init` to scaffold your project, or create `docs/overview.md` manually." Stop.
 
 ## STEP 1: QUICK SCAN
 
@@ -31,6 +30,7 @@ This is NOT a full check. Do only these fast operations:
 **0. Check for snapshot:** Read `docs/.arnold-snapshot.json` if it exists. This is the fastest path:
 - Get the `commit` hash from the snapshot
 - Run `git log --name-only [snapshot-commit]..HEAD` to find files changed since last check
+- If the git range command returns an error or empty output (e.g., shallow clone, rebased history, snapshot commit no longer exists), treat the snapshot fast path as unavailable and fall back to the standard scan below.
 - For each changed file that appears in the snapshot's `values` entries, re-read ONLY that file and compare the current value to the snapshot's `code_value`
 - If a value changed, that's drift. If no values changed in any modified files, report "no drift since last check"
 - This approach reads only the changed files, not the whole codebase

@@ -4,3 +4,4 @@
 *~
 .env
 *.bak
+docs/.arnold-snapshot.json
