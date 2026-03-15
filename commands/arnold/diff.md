@@ -25,6 +25,15 @@ If `docs/overview.md` does not exist, say: "No Arnold docs found. Run /arnold:in
 
 This is NOT a full check. Do only these fast operations:
 
+**0. Check for snapshot:** Read `docs/.arnold-snapshot.json` if it exists. This is the fastest path:
+- Get the `commit` hash from the snapshot
+- Run `git log --name-only [snapshot-commit]..HEAD` to find files changed since last check
+- For each changed file that appears in the snapshot's `values` entries, re-read ONLY that file and compare the current value to the snapshot's `code_value`
+- If a value changed, that's drift. If no values changed in any modified files, report "no drift since last check"
+- This approach reads only the changed files, not the whole codebase
+
+If no snapshot exists, fall back to the current approach (read config files, check git diff).
+
 1. **Read `docs/status.md`** — note feature statuses and last check date
 2. **Read config/constants files** — look for the highest-signal, lowest-cost drift sources:
    - `.env.example`, `config/`, constants files, `package.json` (version, scripts)

@@ -74,6 +74,41 @@ for arg in "$@"; do
         --uninstall|-u)
             UNINSTALL=true
             ;;
+        --version|-v)
+            echo "Arnold v${ARNOLD_VERSION}"
+            exit 0
+            ;;
+        --verify)
+            echo "Verifying Arnold installation..."
+            VERIFY_OK=true
+            for cmd in init plan check update status help decide resolve recap diff; do
+                if [ -f ".claude/commands/arnold/${cmd}.md" ]; then
+                    if grep -q "arnold:" ".claude/commands/arnold/${cmd}.md" 2>/dev/null; then
+                        echo "  ✓ /arnold:${cmd}"
+                    else
+                        echo "  ✗ /arnold:${cmd} — file exists but appears corrupted"
+                        VERIFY_OK=false
+                    fi
+                else
+                    echo "  ✗ /arnold:${cmd} — not found"
+                    VERIFY_OK=false
+                fi
+            done
+            # Check CLAUDE.md
+            if grep -q "Arnold Rules" "./CLAUDE.md" 2>/dev/null || grep -q "Arnold Rules" ".claude/CLAUDE.md" 2>/dev/null; then
+                echo "  ✓ CLAUDE.md rules"
+            else
+                echo "  ✗ CLAUDE.md rules — not found"
+                VERIFY_OK=false
+            fi
+            echo ""
+            if [ "$VERIFY_OK" = true ]; then
+                echo "Arnold v${ARNOLD_VERSION} is installed correctly."
+            else
+                echo "Arnold installation is incomplete. Re-run the install command."
+            fi
+            exit 0
+            ;;
     esac
 done
 
@@ -115,6 +150,11 @@ if [ "$UNINSTALL" = true ]; then
 
         rm -rf .claude/commands/arnold
         print_success "Removed .claude/commands/arnold/"
+
+        if [ -f "${HOME}/.claude/settings.json" ] && grep -q "arnold" "${HOME}/.claude/settings.json" 2>/dev/null; then
+            print_warning "Arnold may also be installed as a Claude Code plugin."
+            print_info "To fully remove: /plugin uninstall arnold@arnold-marketplace"
+        fi
     else
         print_info "No Arnold commands found"
     fi
@@ -206,7 +246,16 @@ fi
 
 # Create .claude/commands/arnold/ directory (namespace for Arnold commands)
 if [ -d ".claude/commands/arnold" ]; then
-    print_info "Updating existing Arnold commands..."
+    if [ -f ".claude/commands/arnold/.version" ]; then
+        OLD_VERSION=$(cat .claude/commands/arnold/.version)
+        if [ "$OLD_VERSION" = "$ARNOLD_VERSION" ]; then
+            print_info "Reinstalling Arnold v${ARNOLD_VERSION}..."
+        else
+            print_info "Upgrading Arnold v${OLD_VERSION} → v${ARNOLD_VERSION}"
+        fi
+    else
+        print_info "Updating existing Arnold commands..."
+    fi
 else
     mkdir -p .claude/commands/arnold
     print_success "Created .claude/commands/arnold/"
@@ -238,7 +287,7 @@ else
     # Remote install from GitHub
     DOWNLOAD_FAILURES=0
     for cmd in "${COMMANDS[@]}"; do
-        if curl -fsSL "${ARNOLD_RAW_BASE}/commands/arnold/${cmd}.md" -o "/tmp/arnold-install/${cmd}.md" 2>/dev/null && [ -s "/tmp/arnold-install/${cmd}.md" ]; then
+        if curl -fsSL "${ARNOLD_RAW_BASE}/commands/arnold/${cmd}.md" -o "/tmp/arnold-install/${cmd}.md" 2>/dev/null && [ -s "/tmp/arnold-install/${cmd}.md" ] && grep -q "^---" "/tmp/arnold-install/${cmd}.md" 2>/dev/null; then
             cp "/tmp/arnold-install/${cmd}.md" ".claude/commands/arnold/${cmd}.md"
             print_success "  /arnold:${cmd}"
         else
@@ -250,9 +299,13 @@ else
     if [ "${DOWNLOAD_FAILURES}" -gt 0 ]; then
         echo ""
         print_error "Some commands failed to download. Please check your network connection and try again."
+        print_info "To clean up: rm -rf .claude/commands/arnold"
         exit 1
     fi
 fi
+
+# Write version file
+echo "${ARNOLD_VERSION}" > .claude/commands/arnold/.version
 
 # Handle CLAUDE.md
 CLAUDE_MD_SOURCE=""
@@ -320,7 +373,7 @@ fi
 
 # Done
 echo ""
-echo -e "${GREEN}${BOLD}Arnold is installed.${NC}"
+echo -e "${GREEN}${BOLD}Arnold v${ARNOLD_VERSION} is installed.${NC}"
 echo ""
 echo "  Next steps:"
 echo "    1. Open Claude Code in this project"

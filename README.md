@@ -102,6 +102,8 @@ Run /arnold:resolve to fix drift items. 🦕
 
 That gap between docs and code? Arnold finds it.
 
+Arnold gets smarter with each check. After your first `/arnold:check`, Arnold saves a snapshot of every comparison it made. Future checks and `/arnold:diff` scans use that snapshot to detect changes instantly, only re-reading files that changed since the last check.
+
 ---
 
 ## How Arnold Is Different

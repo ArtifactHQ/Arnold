@@ -85,6 +85,12 @@ Proceed with the check using whatever specific rules exist, but flag this so the
 **Start with git (if available):**
 If the project has git, run `git log --name-only -5` to see recently changed files. Prioritize scanning these files first — recent changes are the most likely source of drift. If git is not available, proceed with the directory-tree scan below.
 
+**Compare timestamps:** If `docs/.arnold-snapshot.json` exists, read the `commit` field. Use `git log --name-only [snapshot-commit]..HEAD` to see all files changed since the last check. Focus your scan on these files first. This makes repeat checks much faster.
+
+**Drift direction:** When you find drift, check which side changed more recently:
+`git log -1 --format=%ci -- [doc file]` vs `git log -1 --format=%ci -- [code file]`
+Report: "Doc last modified [date], code last modified [date]." This helps the user decide which side to update.
+
 Read the project systematically:
 
 1. **Directory tree** — understand the structure
@@ -106,7 +112,8 @@ What to look for in code (matching against doc rules):
 - **Error handling** — do error cases match documented edge cases?
 - **Feature existence** — is there code for documented features?
 - **Flow logic** — For each documented flow (step-by-step paths in flow docs), find the entry point in code (route handler, controller, event handler). Trace the call chain to the service layer. Check branch conditions against documented error cases. Cite the specific conditional and the specific doc statement it matches or contradicts.
-- **Environment variables** — If a constant is set via environment variable (e.g., `process.env.SESSION_TIMEOUT`), check `.env.example`, config defaults, and any documentation of env vars. If no default is visible, flag as: "Value unverifiable — confirm [VAR_NAME] matches documented value of [N]."
+- **Feature flags and conditional enablement:** Search for patterns: `featureFlags.`, `feature_flags[`, `isEnabled(`, `process.env.FEATURE_`, `FF_`, `ENABLE_`. If documented feature code is gated behind a flag, note: "⚠ Feature-flagged: [feature] code exists but is gated behind [flag]. May not be live."
+- **Environment variables** — If a constant is set via environment variable (e.g., `process.env.SESSION_TIMEOUT`), check `.env.example`, config defaults, and any documentation of env vars. If no default is visible, flag as: "Value unverifiable — confirm [VAR_NAME] matches documented value of [N]." If a constant uses an env var with a matching default (e.g., `process.env.RATE_LIMIT || 100` and docs say 100), report as aligned but add: "⚠ Environment-overridable: defaults to [N] (matches docs) but can be overridden by [VAR_NAME]. Check deployment config to verify production value."
 
 **Token management:** For large codebases, don't try to read everything. Prioritize:
 1. Files directly related to documented features
@@ -128,6 +135,18 @@ Example:
   docs/auth/overview.md: "Rate limited at 5 per minute"
   src/middleware/rate-limiter.js: MAX_ATTEMPTS = 5, WINDOW_MS = 60000
 ```
+
+**Self-referential check:** If a rule's provenance is `(code-derived)` and it was created by `/arnold:init`, the alignment is self-referential (Arnold wrote both sides). Note in the report: "ℹ This alignment was established by Arnold during init. Confirm documented behavior matches actual system behavior, not just the constant value."
+
+### Confidence Levels
+
+Assign a confidence level to each finding:
+
+- **HIGH:** User-stated rule, directly verified in non-flag-gated code with no env override. The comparison is unambiguous.
+- **MEDIUM:** Code-derived rule, or env-overridable value with matching default, or code exists but in a complex call chain. The comparison is likely correct but has caveats.
+- **LOW:** Code-derived + env-overridable, or feature-flagged code, or value only found in test/config files. The comparison may not reflect production behavior.
+
+Include the confidence level in the report for each item.
 
 ### 🔴 DRIFTED
 Docs say one thing, code does another. THIS IS THE KEY FINDING.
@@ -263,6 +282,33 @@ Update `docs/status.md` with findings:
 ```
 
 Keep the last 10 entries. This gives the user a visible trend of alignment over time.
+
+**Create value snapshot:** Write a file `docs/.arnold-snapshot.json` containing every doc-vs-code comparison you made during this check:
+
+```json
+{
+  "checked_at": "[today's date]",
+  "commit": "[current git commit hash, or 'no-git' if unavailable]",
+  "version": "0.2.0",
+  "values": {
+    "[feature].[rule-name]": {
+      "doc_value": "[what docs say]",
+      "code_value": "[what code has]",
+      "doc_file": "[docs/feature/overview.md]",
+      "code_file": "[src/path/to/file.js]",
+      "code_symbol": "[CONSTANT_NAME or function name]",
+      "status": "[aligned|drifted|gap|unverifiable]",
+      "confidence": "[high|medium|low]",
+      "provenance": "[user-stated|code-derived|Arnold-inferred|domain-derived|decided]"
+    }
+  }
+}
+```
+
+This snapshot enables future checks to be faster and more precise:
+- `/arnold:diff` can read the snapshot and only re-check files changed since that commit
+- `/arnold:resolve` can reference exact values and file locations
+- Trend tracking becomes precise (value-level, not just count-level)
 
 ## IMPORTANT NOTES
 
