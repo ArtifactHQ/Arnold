@@ -89,4 +89,5 @@ Track where rules come from:
 - `/arnold:resolve` — fix drift items interactively
 - `/arnold:recap` — start-of-session briefing
 - `/arnold:diff` — quick drift scan
+- `/arnold:spec` — decompose a spec document into feature-based docs
 - `/arnold:help` — show all commands, when to use them, and doc structure

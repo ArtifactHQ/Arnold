@@ -81,7 +81,7 @@ for arg in "$@"; do
         --verify)
             echo "Verifying Arnold installation..."
             VERIFY_OK=true
-            for cmd in init plan check update status help decide resolve recap diff; do
+            for cmd in init plan check update status help decide resolve recap diff spec; do
                 if [ -f ".claude/commands/arnold/${cmd}.md" ]; then
                     if grep -q "arnold:" ".claude/commands/arnold/${cmd}.md" 2>/dev/null; then
                         echo "  ✓ /arnold:${cmd}"
@@ -122,7 +122,7 @@ if [ "$UNINSTALL" = true ]; then
     # Remove command files
     if [ -d ".claude/commands/arnold" ]; then
         # Check for user-added files beyond Arnold's defaults
-        ARNOLD_COMMANDS=("init.md" "plan.md" "check.md" "update.md" "status.md" "help.md" "decide.md" "resolve.md" "recap.md" "diff.md")
+        ARNOLD_COMMANDS=("init.md" "plan.md" "check.md" "update.md" "status.md" "help.md" "decide.md" "resolve.md" "recap.md" "diff.md" "spec.md")
         EXTRA_FILES=()
         for f in .claude/commands/arnold/*.md; do
             [ -f "$f" ] || continue
@@ -262,7 +262,7 @@ else
 fi
 
 # Download command files
-COMMANDS=("init" "plan" "check" "update" "status" "help" "decide" "resolve" "recap" "diff")
+COMMANDS=("init" "plan" "check" "update" "status" "help" "decide" "resolve" "recap" "diff" "spec")
 
 print_info "Downloading Arnold commands..."
 

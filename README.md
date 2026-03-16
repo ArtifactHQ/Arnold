@@ -169,6 +169,8 @@ Describe your project. Arnold creates a `docs/` folder organized by feature. On 
 
 For a fully automatic scan with no prompts, use `/arnold:init --auto`.
 
+**Already have a spec document?** If you have a PRD, research doc, or build plan in `docs/`, run `/arnold:spec` instead. Arnold will read your document, extract features, rules, decisions, and unknowns, and create the full doc structure from it.
+
 Make sure to commit your `docs/` folder to version control.
 
 ```
@@ -232,9 +234,10 @@ After a coding session, sync your docs. Arnold reads what changed and proposes u
 | `/arnold:resolve` | Fix drift items interactively. Choose docs or code for each |
 | `/arnold:recap` | Start-of-session briefing: where you left off, what to do next |
 | `/arnold:diff` | Quick drift scan. Fast summary without a full check |
+| `/arnold:spec` | Decompose a spec document into feature-based docs |
 | `/arnold:help` | Show all commands, when to use them, and doc structure |
 
-Start with `/arnold:init`. The core loop is **init -> check -> resolve -> update**. Other commands are there when you need them.
+Start with `/arnold:init` (or `/arnold:spec` if you already have a PRD). The core loop is **init (or spec) -> check -> resolve -> update**. Other commands are there when you need them.
 
 ---
 

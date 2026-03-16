@@ -55,6 +55,9 @@ COMMANDS:
   /arnold:diff      Quick drift scan — config values + recent changes.
                     Faster than /arnold:check, less thorough.
 
+  /arnold:spec      Decompose a spec/PRD into feature docs.
+                    Reads your document, extracts everything buildable.
+
   /arnold:help      This reference.
 
 WHEN TO USE WHAT:
@@ -67,6 +70,7 @@ WHEN TO USE WHAT:
   Made a key decision?          → /arnold:decide
   Check found drift?            → /arnold:resolve
   Starting a new session?       → /arnold:recap
+  Have a spec or PRD already?           → /arnold:spec
   Quick sanity check?           → /arnold:diff
 
 SCOPING:

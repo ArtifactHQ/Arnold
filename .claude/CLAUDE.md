@@ -11,7 +11,7 @@ Arnold is a **documentation-first development toolkit** that runs as a native Cl
 
 ## What It Ships
 
-- **10 slash command files** in `commands/arnold/` (legacy) and `skills/` (plugin) — meta-prompts for generating, maintaining, and checking project docs
+- **11 slash command files** in `commands/arnold/` (legacy) and `skills/` (plugin) — meta-prompts for generating, maintaining, and checking project docs
 - **1 CLAUDE.md template** — rules file encoding the doc-centered philosophy
 - **1 install script** (`install.sh`) — one-line installer that copies commands into any project
 - **1 README** — the pitch, how-to, and install instructions
@@ -62,7 +62,8 @@ arnold/
 │       ├── decide.md                      # /arnold:decide
 │       ├── resolve.md                     # /arnold:resolve
 │       ├── recap.md                       # /arnold:recap
-│       └── diff.md                        # /arnold:diff
+│       ├── diff.md                        # /arnold:diff
+│       └── spec.md                        # /arnold:spec
 ├── skills/                                # Plugin skills (for Claude Code plugin path)
 │   ├── init/SKILL.md                      # /arnold:init (auto-namespaced by plugin)
 │   ├── plan/SKILL.md                      # /arnold:plan
@@ -74,6 +75,7 @@ arnold/
 │   ├── resolve/SKILL.md                   # /arnold:resolve
 │   ├── recap/SKILL.md                     # /arnold:recap
 │   ├── diff/SKILL.md                      # /arnold:diff
+│   ├── spec/SKILL.md                      # /arnold:spec
 │   └── arnold-rules/SKILL.md             # Background knowledge (user-invocable: false)
 ├── examples/
 │   └── fitness-studio-booking/            # Worked example with full doc set
@@ -95,6 +97,7 @@ arnold/
 | `/arnold:resolve` | Fix drift items interactively — choose docs or code for each |
 | `/arnold:recap` | Start-of-session briefing — where you left off, what to do next |
 | `/arnold:diff` | Quick drift scan — fast summary without a full check |
+| `/arnold:spec` | Decompose a spec document into feature-based docs |
 | `/arnold:help` | Show all commands, when to use them, and doc structure |
 
 ## Doc Organization Philosophy

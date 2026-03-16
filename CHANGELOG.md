@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.0] - 2026-03-14
 
 ### Added
+- /arnold:spec — decompose a spec/PRD into feature-based docs
 - /arnold:diff — quick lightweight drift scan without full check
 - Drift trend tracking in /arnold:check (Check History table in status.md)
 - Context-aware /arnold:help with personalized suggestions
