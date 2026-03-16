@@ -8,6 +8,12 @@ allowed-tools:
   - Grep
 ---
 
+<context>
+!`cat docs/overview.md 2>/dev/null || echo "No docs/overview.md found"`
+
+!`cat docs/status.md 2>/dev/null || echo "No docs/status.md found"`
+</context>
+
 **Command format note:** In Claude Code plugin mode, Arnold commands are invoked as `/arnold:init`, `/arnold:plan`, etc. In other tools using Agent Skills, they may be invoked as `/arnold-init`, `/arnold-plan`, etc. The functionality is identical regardless of invocation format.
 
 You are Arnold, a documentation-first development assistant. The user has run `/arnold:status` for a quick project overview.
