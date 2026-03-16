@@ -4,47 +4,51 @@
 
 | Method | Command | Works with private repo? |
 |--------|---------|------------------------|
-| Local install | `~/path/to/Arnold-Lite/install.sh` | Yes |
+| Local install | `path/to/Arnold-Lite/install.sh` | Yes |
 | Plugin (Claude Code) | `/plugin marketplace add ArtifactHQ/Arnold-Lite` | Only if public |
 | Remote install | `curl ... \| bash` | Only if public |
 
-If the repo is private, use the **local install**. It's the same result.
+If the repo is private, use the **local install**. It produces the same result as the other methods.
 
 ---
 
 ## Local Install (Private Repo)
 
-This is the recommended method when the Arnold-Lite repo is private or not yet published.
+This is the recommended method when the Arnold-Lite repo is private or not yet published. If you're already working on the Arnold-Lite repo locally, you already have everything you need.
 
-### Step 1: Clone Arnold-Lite
+### Step 1: Make sure you have Arnold-Lite locally
 
-```bash
-git clone https://github.com/ArtifactHQ/Arnold-Lite.git ~/Arnold-Lite
-```
+If you've been developing Arnold-Lite, it's already on your machine (e.g., `~/Documents/GitHub/Arnold-Lite`).
 
-If using SSH:
+If not, clone it:
 
 ```bash
-git clone git@github.com:ArtifactHQ/Arnold-Lite.git ~/Arnold-Lite
+git clone https://github.com/ArtifactHQ/Arnold-Lite.git
 ```
 
-You only need to do this once. The cloned repo stays on your machine.
+Or via SSH:
 
-### Step 2: Go to your project
+```bash
+git clone git@github.com:ArtifactHQ/Arnold-Lite.git
+```
+
+Note the path where it lives. You'll reference it when installing into other projects.
+
+### Step 2: Go to the project you want to add Arnold to
 
 ```bash
 cd ~/Documents/GitHub/my-project
 ```
 
-This is the project you want to add Arnold to, not the Arnold repo itself.
+This is your target project, not the Arnold-Lite repo itself. You must be inside the project where you want Arnold's commands.
 
 ### Step 3: Run the installer
 
 ```bash
-~/Arnold-Lite/install.sh
+~/Documents/GitHub/Arnold-Lite/install.sh
 ```
 
-You should see:
+Replace the path with wherever Arnold-Lite lives on your machine. You should see output like:
 
 ```
 🦕 Arnold v0.2.0
@@ -66,39 +70,31 @@ You should see:
 ✓ Created .claude/CLAUDE.md
 
 Arnold v0.2.0 is installed.
-
-  Next steps:
-    1. Open Claude Code in this project
-    2. Run /arnold:init      — scaffold docs from your project
-    3. Run /arnold:plan      — flesh out feature specs
-    4. Build your code
-    5. Run /arnold:check     — compare docs to code, find drift
-    6. Run /arnold:update    — sync docs after code changes
-
-    Run /arnold:help anytime for the full command reference.
 ```
 
-### Step 4: Verify
+### Step 4: Verify it worked
+
+Still inside your target project, run:
 
 ```bash
-~/Arnold-Lite/install.sh --verify
+~/Documents/GitHub/Arnold-Lite/install.sh --verify
 ```
 
-This checks that all 11 command files are installed and valid.
+You should see checkmarks for all 11 commands plus CLAUDE.md rules.
 
-### Step 5: Open Claude Code and start using Arnold
+### Step 5: Open Claude Code and try it
 
 ```bash
 claude
 ```
 
-Then type `/arnold:help` to see all commands and how to get started.
+Then type `/arnold:help` to see the full command guide.
 
 ---
 
 ## Using Arnold
 
-### If you're starting a new project (no code yet)
+### Starting fresh (no code, no docs)
 
 ```
 /arnold:init
@@ -106,25 +102,25 @@ Then type `/arnold:help` to see all commands and how to get started.
 
 Arnold asks what you're building, then creates a `docs/` folder with feature overviews, open questions, and a status tracker.
 
-### If you have existing code but no docs
+### Existing code, no docs
 
 ```
 /arnold:init --auto
 ```
 
-Arnold scans your codebase (package.json, models, routes, config files, constants), identifies features, extracts business rules, and generates documentation that matches your code. The `--auto` flag skips all confirmation prompts.
+Arnold scans your codebase (package.json, models, routes, config files, constants), identifies features, extracts business rules, and generates documentation that matches your code. The `--auto` flag skips all confirmation prompts and just does it.
 
-Without `--auto`, Arnold presents what it found and asks you to confirm before creating docs.
+Without `--auto`, Arnold shows what it found and asks you to confirm before creating docs.
 
-### If you have a spec or PRD document
+### You already have a spec or PRD document
 
 ```
 /arnold:spec docs/my-spec.md
 ```
 
-Arnold reads your document, extracts features, rules, decisions, and open questions, and creates the full doc structure from it. Your original spec is preserved as a reference.
+Arnold reads your document, extracts features, rules, decisions, and open questions, and creates the full doc structure from it. Your original spec is preserved in `docs/` as a reference.
 
-### After setup, the core loop
+### The core loop (after setup)
 
 1. **Build your code** however you normally do.
 
@@ -132,87 +128,139 @@ Arnold reads your document, extracts features, rules, decisions, and open questi
    ```
    /arnold:check
    ```
-   Arnold reads your docs AND your code, then reports where they disagree. Example: "docs say session timeout is 24 hours, code has 72 hours."
+   Arnold reads your docs AND your code, then reports where they disagree.
 
 3. **Fix drift:**
    ```
    /arnold:resolve
    ```
-   For each mismatch, Arnold asks: "docs say X, code says Y. Which is correct?" You choose, Arnold fixes the other side.
+   For each mismatch: "docs say X, code says Y. Which is correct?" You choose, Arnold fixes the other side.
 
 4. **Sync docs:**
    ```
    /arnold:update
    ```
-   Arnold reads your git diff, sees what changed, and proposes doc updates. You approve each one.
+   Arnold reads your git diff, proposes doc updates. You approve each one.
 
-5. **Repeat.** Every time you code, check, resolve, update.
+5. **Repeat.** Build, check, resolve, update.
 
-### Other useful commands
+### Other commands
 
-- `/arnold:diff` — quick drift scan, faster than full check
+- `/arnold:diff` — quick drift scan (faster than full check)
 - `/arnold:plan` — flesh out thin docs with flows, edge cases, acceptance criteria
-- `/arnold:decide` — record a decision (e.g., "chose PostgreSQL over MongoDB")
-- `/arnold:status` — quick look at feature statuses and last check date
-- `/arnold:recap` — start-of-session briefing, shows what changed since last time
+- `/arnold:decide` — record a decision (e.g., "chose Stripe over Square")
+- `/arnold:status` — feature statuses, open questions, last check date
+- `/arnold:recap` — start-of-session briefing
 - `/arnold:help` — full command reference
 
 ---
 
 ## Uninstall
 
-### From the cloned repo
+From inside the project you installed Arnold into:
 
 ```bash
 cd ~/Documents/GitHub/my-project
-~/Arnold-Lite/install.sh --uninstall
+~/Documents/GitHub/Arnold-Lite/install.sh --uninstall
 ```
 
 ### What gets removed
 
-- `.claude/commands/arnold/` (all Arnold command files)
-- Arnold rules from your CLAUDE.md (the content between the Arnold markers)
+- `.claude/commands/arnold/` and all 11 command files inside it
+- Arnold's rules from your CLAUDE.md (the content between the `Arnold Rules` markers)
+- The `.version` file
 - Empty `.claude/commands/` and `.claude/` directories if nothing else is in them
 
-### What is NOT removed
+### What stays
 
-- Your `docs/` folder and all documentation Arnold created. Those are yours.
-- The Arnold-Lite clone on your machine (`~/Arnold-Lite/`). Delete it manually if you want.
+- Your `docs/` folder and everything in it. Arnold never deletes your documentation.
+- The Arnold-Lite repo on your machine. That's your source, not a dependency.
+
+---
+
+## The Test Cycle (Install, Test, Uninstall, Iterate)
+
+If you're developing Arnold and want to test changes:
+
+```bash
+# 1. Make changes to Arnold-Lite
+cd ~/Documents/GitHub/Arnold-Lite
+# ... edit commands, fix prompts, etc.
+
+# 2. Install into a test project
+cd ~/Documents/GitHub/test-project
+~/Documents/GitHub/Arnold-Lite/install.sh
+
+# 3. Open Claude Code and test
+claude
+# Try /arnold:help, /arnold:init, etc.
+
+# 4. If something doesn't work, uninstall
+~/Documents/GitHub/Arnold-Lite/install.sh --uninstall
+
+# 5. Go back to Arnold-Lite, fix the issue
+cd ~/Documents/GitHub/Arnold-Lite
+# ... make fixes ...
+
+# 6. Reinstall and test again
+cd ~/Documents/GitHub/test-project
+~/Documents/GitHub/Arnold-Lite/install.sh
+```
+
+You don't need to uninstall before reinstalling. Running the installer again overwrites all command files with the latest versions.
 
 ---
 
 ## Upgrade
 
-When Arnold gets updated, pull the latest and re-run:
+When Arnold-Lite gets updated (either by you or via git pull):
 
 ```bash
-cd ~/Arnold-Lite
+# Pull latest changes (if working with others)
+cd ~/Documents/GitHub/Arnold-Lite
 git pull
 
+# Reinstall into your project
 cd ~/Documents/GitHub/my-project
-~/Arnold-Lite/install.sh
+~/Documents/GitHub/Arnold-Lite/install.sh
 ```
 
-The installer detects the previous version and shows "Upgrading Arnold v0.1.0 → v0.2.0". Commands are overwritten with the new versions. CLAUDE.md rules are replaced (your own content is preserved, only Arnold's section is updated).
+The installer detects the previous version and shows the upgrade (e.g., "Upgrading Arnold v0.1.0 → v0.2.0"). All commands are overwritten with new versions. Your CLAUDE.md rules are updated (your own content is preserved).
 
 ---
 
 ## Install on Multiple Projects
 
-The cloned Arnold-Lite repo works for all your projects. Just run the installer from each one:
+Run the installer from each project directory:
 
 ```bash
 cd ~/Documents/GitHub/project-a
-~/Arnold-Lite/install.sh
+~/Documents/GitHub/Arnold-Lite/install.sh
 
 cd ~/Documents/GitHub/project-b
-~/Arnold-Lite/install.sh
-
-cd ~/Documents/GitHub/project-c
-~/Arnold-Lite/install.sh
+~/Documents/GitHub/Arnold-Lite/install.sh
 ```
 
-Each project gets its own copy of the command files. They're independent.
+Each project gets its own independent copy of the command files.
+
+---
+
+## Checking What's Installed
+
+```bash
+# Check version
+~/Documents/GitHub/Arnold-Lite/install.sh --version
+
+# Verify all commands are present and valid
+cd ~/Documents/GitHub/my-project
+~/Documents/GitHub/Arnold-Lite/install.sh --verify
+
+# Check version file directly
+cat .claude/commands/arnold/.version
+
+# List installed commands
+ls .claude/commands/arnold/
+```
 
 ---
 
@@ -220,18 +268,23 @@ Each project gets its own copy of the command files. They're independent.
 
 **"Arnold commands don't show up in Claude Code"**
 
-Make sure `.claude/commands/arnold/` exists in your project:
+Check that the files exist in your project:
 ```bash
 ls .claude/commands/arnold/
 ```
 You should see 11 `.md` files. If not, re-run the installer.
 
+Also make sure you opened Claude Code from the project directory (not from a different folder).
+
 **"Permission denied when running install.sh"**
 
-Make the installer executable:
 ```bash
-chmod +x ~/Arnold-Lite/install.sh
+chmod +x ~/Documents/GitHub/Arnold-Lite/install.sh
 ```
+
+**"I installed but /arnold:help doesn't work"**
+
+Make sure you're running Claude Code from the project where you installed Arnold, not from the Arnold-Lite repo itself. The commands are in your project's `.claude/commands/arnold/`, not in Arnold-Lite's.
 
 **"CLAUDE.md looks wrong after install"**
 
@@ -243,19 +296,11 @@ Arnold wraps its rules between two marker lines:
 ```
 Your own content above or below these markers is untouched. If the markers are broken, uninstall and reinstall.
 
-**"I want to check if Arnold is installed correctly"**
+**"I want to start over completely"**
 
 ```bash
-~/Arnold-Lite/install.sh --verify
-```
-
-**"I want to see the installed version"**
-
-```bash
-~/Arnold-Lite/install.sh --version
-```
-
-Or check the version file directly:
-```bash
-cat .claude/commands/arnold/.version
+cd ~/Documents/GitHub/my-project
+~/Documents/GitHub/Arnold-Lite/install.sh --uninstall
+rm -rf docs/    # Only if you want to delete Arnold-generated docs too
+~/Documents/GitHub/Arnold-Lite/install.sh
 ```
