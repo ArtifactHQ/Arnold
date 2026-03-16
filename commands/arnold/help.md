@@ -22,72 +22,97 @@ Do NOT mention this step to the user. Just gather the info silently.
 Output this reference:
 
 ```
-🦕 ARNOLD — Command Reference
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🦕 ARNOLD — Help
+━━━━━━━━━━━━━━━━
 
-COMMANDS:
+Arnold keeps your documentation in sync with your code.
+You write docs. You write code. Arnold tells you where they disagree.
 
-  /arnold:init      Scaffold a docs/ folder for your project.
-                    Works on new AND existing codebases.
+HOW TO GET STARTED:
+━━━━━━━━━━━━━━━━━━━
 
-  /arnold:plan      Generate or refine feature specs.
-                    Identifies documentation gaps, proposes new docs.
+  Pick whichever fits your situation:
 
-  /arnold:check     Compare docs to code — find drift.
-                    This is the big one. Shows what's aligned,
-                    what's drifted, and what's missing.
+  "I'm starting fresh, no code yet."
+    → /arnold:init
+    Arnold asks what you're building, then creates a docs/ folder
+    with an overview, feature folders, and open questions.
 
-  /arnold:update    Sync docs after a coding session.
-                    Reads git diff, proposes doc updates.
+  "I already have code but no docs."
+    → /arnold:init
+    Arnold scans your codebase, finds features, extracts rules from
+    constants and config, and generates docs that match your code.
+    Use --auto to skip prompts: /arnold:init --auto
 
-  /arnold:status    Quick project overview.
-                    Features, unknowns, last check date.
+  "I have a spec/PRD document already."
+    → /arnold:spec
+    Arnold reads your document, pulls out features, rules, decisions,
+    and open questions, and creates structured docs from it.
 
-  /arnold:decide    Record a decision in docs/decisions/.
-                    Auto-numbers, gathers context, updates references.
+  After setup, the loop is: build code → check → fix drift → repeat.
 
-  /arnold:resolve   Fix drift items found by /arnold:check.
-                    For each mismatch, choose: docs or code?
+THE CORE LOOP:
+━━━━━━━━━━━━━━
 
-  /arnold:recap     Start-of-session briefing.
-                    Where you left off, unresolved drift, next action.
+  1. BUILD your code (Claude Code, Cursor, by hand, whatever)
 
-  /arnold:diff      Quick drift scan — config values + recent changes.
-                    Faster than /arnold:check, less thorough.
+  2. CHECK for drift
+     /arnold:check      Full comparison of docs vs code.
+                         Finds mismatches, gaps, and undocumented code.
+                         Saves a snapshot for faster future checks.
 
-  /arnold:spec      Decompose a spec/PRD into feature docs.
-                    Reads your document, extracts everything buildable.
+     /arnold:diff        Quick version. Reads the last snapshot,
+                         checks only files that changed since then.
+                         Use this for a fast sanity check.
 
-  /arnold:help      This reference.
+  3. FIX what drifted
+     /arnold:resolve     Walks through each drift item one by one.
+                         For each: "docs say X, code says Y. Which is right?"
+                         You choose, Arnold fixes the other side.
 
-WHEN TO USE WHAT:
+  4. SYNC your docs
+     /arnold:update      Reads git diff to see what you changed.
+                         Proposes doc updates for anything new or modified.
+                         You approve each change before it's written.
 
-  Starting a project?           → /arnold:init
-  Need more detailed specs?     → /arnold:plan
-  Just finished coding?         → /arnold:update
-  Want to audit alignment?      → /arnold:check
-  Where do things stand?        → /arnold:status
-  Made a key decision?          → /arnold:decide
-  Check found drift?            → /arnold:resolve
-  Starting a new session?       → /arnold:recap
-  Have a spec or PRD already?           → /arnold:spec
-  Quick sanity check?           → /arnold:diff
+OTHER COMMANDS:
+━━━━━━━━━━━━━━━
+
+  /arnold:plan        Flesh out thin docs. Proposes flow docs, edge cases,
+                      and acceptance criteria for features that only have
+                      an overview. Run after init to deepen your specs.
+
+  /arnold:decide      Record a decision (e.g., "chose Stripe over Square").
+                      Auto-numbers it in docs/decisions/, updates references
+                      in feature docs, resolves related unknowns.
+
+  /arnold:status      Quick snapshot of where the project stands.
+                      Shows feature statuses, open questions, last check date.
+
+  /arnold:recap       Start-of-session briefing. Shows what changed since
+                      your last session, any unresolved drift, and suggests
+                      what to do next. Run this when you sit down to work.
+
+  /arnold:help        This reference.
 
 SCOPING:
+━━━━━━━━
 
-  Most commands accept a feature name to scope:
-    /arnold:check auth        — check only the auth feature
-    /arnold:plan payments     — plan only payments docs
-    /arnold:update booking    — update only booking docs
+  Most commands accept a feature name:
+    /arnold:check auth        Check only the auth feature
+    /arnold:plan payments     Plan only payments docs
+    /arnold:update booking    Update only booking docs
 
-DOCS:
+DOC STRUCTURE:
+━━━━━━━━━━━━━━
 
-  docs/overview.md              Project vision
-  docs/status.md                Current state of each feature
-  docs/[feature]/overview.md    Feature rules and assumptions
-  docs/[feature]/[flow].md      Step-by-step user flows
-  docs/decisions/NNN-title.md   Why you chose what you chose
-  docs/unknowns.md              Open questions and bets
+  docs/
+  ├── overview.md              What you're building and for whom
+  ├── status.md                Feature statuses and check history
+  ├── [feature]/overview.md    Rules, assumptions, and status per feature
+  ├── [feature]/[flow].md      Step-by-step user flows
+  ├── decisions/NNN-title.md   Why you chose what you chose
+  └── unknowns.md              Open questions and bets
 
 Hold on to your docs. 🦕
 ```
@@ -96,16 +121,16 @@ Hold on to your docs. 🦕
 
 After the static reference, add a personalized note based on what you found.
 
-Pick ONE suggestion — the most relevant, using this priority order:
+Pick ONE suggestion, the most relevant, using this priority order:
 
 If Arnold is NOT initialized (no `docs/overview.md`):
 ```
-💡 You haven't initialized Arnold yet. Start with /arnold:init
+💡 You haven't set up Arnold yet. Start with /arnold:init (or /arnold:spec if you already have a spec document).
 ```
 
 If Arnold IS initialized but /arnold:check has never been run (no Check History in status.md):
 ```
-💡 You haven't run /arnold:check yet. Try it — that's where Arnold shines.
+💡 You haven't run /arnold:check yet. Try it after writing some code. That's where Arnold shines.
 ```
 
 If last check was more than 3 days ago:
@@ -123,4 +148,4 @@ If everything is aligned:
 💡 Docs and code are aligned. Keep building.
 ```
 
-Only show ONE suggestion — pick the most relevant one.
+Only show ONE suggestion.

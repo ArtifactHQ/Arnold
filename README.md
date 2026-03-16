@@ -223,21 +223,31 @@ After a coding session, sync your docs. Arnold reads what changed and proposes u
 
 ## Commands
 
-| Command | What It Does |
-|---------|-------------|
-| `/arnold:init` | Scaffold a `docs/` folder from your project description |
-| `/arnold:plan` | Generate or refine feature docs, identify gaps |
-| `/arnold:check` | Compare docs to code. Find drift, missing docs, undocumented code |
-| `/arnold:update` | Sync docs after coding. Propose updates based on changes |
-| `/arnold:status` | Quick snapshot: what's done, in progress, blocked |
-| `/arnold:decide` | Record an architectural or product decision |
-| `/arnold:resolve` | Fix drift items interactively. Choose docs or code for each |
-| `/arnold:recap` | Start-of-session briefing: where you left off, what to do next |
-| `/arnold:diff` | Quick drift scan. Fast summary without a full check |
-| `/arnold:spec` | Decompose a spec document into feature-based docs |
-| `/arnold:help` | Show all commands, when to use them, and doc structure |
+**Setup (run once):**
 
-Start with `/arnold:init` (or `/arnold:spec` if you already have a PRD). The core loop is **init (or spec) -> check -> resolve -> update**. Other commands are there when you need them.
+| Command | When to Use It |
+|---------|---------------|
+| `/arnold:init` | Starting a new project, or adding Arnold to an existing codebase. Arnold asks what you're building (or scans your code) and creates the docs/ folder. Use `--auto` to skip prompts. |
+| `/arnold:spec` | You already have a spec, PRD, or research document. Arnold reads it, extracts features and rules, and creates structured docs from it. |
+
+**The core loop (run regularly):**
+
+| Command | When to Use It |
+|---------|---------------|
+| `/arnold:check` | After coding. Compares every documented rule against your code. Finds where docs say one thing and code does another. This is Arnold's main feature. |
+| `/arnold:resolve` | After check finds drift. Walks through each mismatch: "docs say X, code says Y, which is right?" You choose, Arnold fixes the other side. |
+| `/arnold:update` | After coding. Reads your git diff, proposes doc updates for anything new or changed. You approve each change. |
+| `/arnold:diff` | Quick version of check. Reads the last snapshot, only checks files that changed. Use for a fast sanity check between full checks. |
+
+**When you need them:**
+
+| Command | When to Use It |
+|---------|---------------|
+| `/arnold:plan` | Docs are thin. Arnold proposes flow docs, edge cases, and acceptance criteria to flesh out features that only have an overview. |
+| `/arnold:decide` | You made a decision (e.g., "chose Stripe over Square"). Arnold records it in docs/decisions/ with context and trade-offs. |
+| `/arnold:status` | Quick look at where things stand. Feature statuses, open questions, last check date. |
+| `/arnold:recap` | Starting a new coding session. Shows what changed, any unresolved drift, and suggests what to do next. |
+| `/arnold:help` | Full command reference with "how to get started" guide. |
 
 ---
 
