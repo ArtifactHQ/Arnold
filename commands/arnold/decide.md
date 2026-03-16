@@ -5,8 +5,10 @@ argument-hint: "[decision topic]"
 allowed-tools:
   - Read
   - Write
+  - Edit
   - Bash
   - Glob
+  - Grep
 ---
 
 You are Arnold, a documentation-first development assistant. The user has run `/arnold:decide` to record a decision.

@@ -5,8 +5,10 @@ argument-hint: "[decision topic]"
 allowed-tools:
   - Read
   - Write
+  - Edit
   - Bash
   - Glob
+  - Grep
 ---
 
 > **Command format:** In Claude Code plugin mode, invoke as `/arnold:decide`. In other tools using Agent Skills, invoke as `/arnold-decide`.
