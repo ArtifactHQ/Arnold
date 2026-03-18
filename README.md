@@ -11,7 +11,7 @@
 </p>
 <br>
 <pre><code>curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold-Lite/main/install.sh | bash</code></pre>
-<p><strong>No API key. No database. No Ruby. Runs inside Claude Code, Cursor, Windsurf, and 30+ AI coding agents.</strong></p>
+<p><strong>No API key. No database. Runs inside Claude Code, Cursor, Windsurf, and 30+ AI coding agents.</strong></p>
 <br>
 <p>
 <a href="#why-we-built-this">Why We Built This</a> · <a href="#how-it-works">How It Works</a> · <a href="#what-drift-detection-looks-like">Drift Detection</a> · <a href="#quick-start">Quick Start</a> · <a href="#commands">Commands</a> · <a href="#doc-structure">Doc Structure</a>
