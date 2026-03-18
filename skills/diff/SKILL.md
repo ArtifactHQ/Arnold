@@ -31,30 +31,42 @@ If the user provided arguments, scope to that feature only.
 
 If `docs/overview.md` does not exist, say: "No `docs/overview.md` found. Run `/arnold:init` to scaffold your project, or create `docs/overview.md` manually." Stop.
 
-## STEP 1: QUICK SCAN
+## STEP 1: INCREMENTAL SCAN
 
-This is NOT a full check. Do only these fast operations:
+This is NOT a mini-check. It's a targeted scan of ONLY what changed.
 
-**0. Check for snapshot:** Read `docs/.arnold-snapshot.json` if it exists. This is the fastest path:
-- Get the `commit` hash from the snapshot
-- Run `git log --name-only [snapshot-commit]..HEAD` to find files changed since last check
-- If the git range command returns an error or empty output (e.g., shallow clone, rebased history, snapshot commit no longer exists), treat the snapshot fast path as unavailable and fall back to the standard scan below.
-- For each changed file that appears in the snapshot's `values` entries, re-read ONLY that file and compare the current value to the snapshot's `code_value`
-- If a value changed, that's drift. If no values changed in any modified files, report "no drift since last check"
-- This approach reads only the changed files, not the whole codebase
+**Path A: Snapshot exists + Git available (fastest)**
+1. Read `docs/.arnold-snapshot.json` — get the `commit` hash
+2. Run `git diff --name-only [snapshot-commit]..HEAD` to find changed files
+3. If the git range returns an error (shallow clone, rebased history, missing commit), fall through to Path B
+4. Categorize changed files:
+   - **Code files changed:** For each that appears in the snapshot's `values` entries, re-read ONLY that value (the specific line/constant) and compare to snapshot's `code_value`. If changed → drift.
+   - **Doc files changed:** For each changed doc in `docs/`, note it as "docs updated since last check — may need re-check"
+   - **New files:** Flag as "new file since last check — not yet tracked"
+5. If zero code files overlap with snapshot values and zero doc files changed → "No drift since last check"
+6. Do NOT read full files. Only read the specific constants/values tracked in the snapshot.
 
-If no snapshot exists, fall back to the current approach (read config files, check git diff).
+**Path B: No snapshot, Git available**
+1. Run `git diff --name-only HEAD~5` to find recently changed files
+2. Read `docs/status.md` for feature statuses
+3. For each changed source file, check if it maps to a documented feature folder
+4. Read only the Core Rules section from relevant feature overviews (docs/[feature]/[feature]-overview.md)
+5. Spot-check: do any documented constants/values in Core Rules have different values in the changed files?
+6. Report findings as "potential drift — run /arnold:check to confirm"
 
-1. **Read `docs/status.md`** — note feature statuses and last check date
-2. **Read config/constants files** — look for the highest-signal, lowest-cost drift sources:
-   - `.env.example`, `config/`, constants files, `package.json` (version, scripts)
-   - Compare any documented numeric values (timeouts, limits, rates) against code constants
-3. **Check git** (if available): `git diff --name-only HEAD~3` — what changed in last 3 commits?
-   - For each changed file that maps to a documented feature, flag it as "potentially drifted — [file] changed since last check"
-4. **Read feature overviews** — just the Core Rules sections, not full docs
-   - Compare documented rules against config values found in step 2
+**Path C: No snapshot, no Git**
+1. Read `docs/status.md`
+2. Read config/constants files (the highest-signal, lowest-cost sources)
+3. Compare documented rules against config values
+4. This is the least precise path — recommend running /arnold:check
 
-Skip: flow tracing, full code scans, edge case analysis, acceptance criteria. That's what /arnold:check is for.
+**What diff does NOT do (that's /arnold:check's job):**
+- Read the entire codebase
+- Trace feature implementations across files
+- Validate acceptance criteria
+- Check for undocumented code
+- Create or update snapshots
+- Modify any files
 
 ## STEP 2: OUTPUT
 
@@ -72,6 +84,8 @@ POTENTIAL DRIFT:
 NO OBVIOUS DRIFT:
   ✓ [feature] — config values match docs
   ✓ [feature] — no changes since last check
+
+CONFIDENCE: [High — snapshot comparison / Medium — git diff heuristic / Low — no snapshot, no git]
 
 [If potential drift found:]
 Run /arnold:check for a full analysis, or /arnold:resolve to fix now.

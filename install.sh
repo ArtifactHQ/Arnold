@@ -18,7 +18,7 @@ set -euo pipefail
 #   ./install.sh --uninstall
 # ══════════════════════════════════════════════
 
-ARNOLD_VERSION="0.2.0"
+ARNOLD_VERSION="0.3.0"
 ARNOLD_REPO="ArtifactHQ/Arnold-Lite"
 ARNOLD_BRANCH="main"
 ARNOLD_RAW_BASE="https://raw.githubusercontent.com/${ARNOLD_REPO}/${ARNOLD_BRANCH}"
@@ -81,7 +81,7 @@ for arg in "$@"; do
         --verify)
             echo "Verifying Arnold installation..."
             VERIFY_OK=true
-            for cmd in init plan check update status help decide resolve recap diff spec; do
+            for cmd in init plan check update status help decide resolve recap diff spec bug archive milestone; do
                 if [ -f ".claude/commands/arnold/${cmd}.md" ]; then
                     if grep -q "arnold:" ".claude/commands/arnold/${cmd}.md" 2>/dev/null; then
                         echo "  ✓ /arnold:${cmd}"
@@ -122,7 +122,7 @@ if [ "$UNINSTALL" = true ]; then
     # Remove command files
     if [ -d ".claude/commands/arnold" ]; then
         # Check for user-added files beyond Arnold's defaults
-        ARNOLD_COMMANDS=("init.md" "plan.md" "check.md" "update.md" "status.md" "help.md" "decide.md" "resolve.md" "recap.md" "diff.md" "spec.md")
+        ARNOLD_COMMANDS=("init.md" "plan.md" "check.md" "update.md" "status.md" "help.md" "decide.md" "resolve.md" "recap.md" "diff.md" "spec.md" "bug.md" "archive.md" "milestone.md")
         EXTRA_FILES=()
         for f in .claude/commands/arnold/*.md; do
             [ -f "$f" ] || continue
@@ -262,7 +262,7 @@ else
 fi
 
 # Download command files
-COMMANDS=("init" "plan" "check" "update" "status" "help" "decide" "resolve" "recap" "diff" "spec")
+COMMANDS=("init" "plan" "check" "update" "status" "help" "decide" "resolve" "recap" "diff" "spec" "bug" "archive" "milestone")
 
 print_info "Downloading Arnold commands..."
 

@@ -37,10 +37,12 @@ Read `docs/overview.md` and `docs/status.md`. Present a concise summary of where
 
 1. Read `docs/overview.md` for project context
 2. Read `docs/status.md` for current state
-   If `docs/status.md` does not exist, fall back to reading statuses from each `docs/*/overview.md` file and assembling the status summary from those. Note in the output: "docs/status.md not found — assembled status from feature overviews. Run /arnold:check to regenerate it."
-3. Quickly scan `docs/*/overview.md` for feature statuses
+   If `docs/status.md` does not exist, fall back to reading statuses from each `docs/*/*-overview.md` file and assembling the status summary from those. Note in the output: "docs/status.md not found — assembled status from feature overviews. Run /arnold:check to regenerate it."
+3. Quickly scan `docs/*/*-overview.md` for feature statuses
 4. Check `docs/unknowns.md` for overdue questions
-5. Present a compact summary
+5. Check `docs/issues/` for open bugs (count files, note severities)
+6. Check `docs/milestones.md` for milestone progress
+7. Check `docs/requests.md` for feature request count
 
 ## OUTPUT FORMAT
 
@@ -57,6 +59,17 @@ FEATURES:
   🔵 [feature] — not started
   🔴 [feature] — drifted (if flagged by previous /arnold:check)
 
+MILESTONES: (if docs/milestones.md exists)
+  [Milestone 1]: [N/M features] — [status]
+  [Milestone 2]: [N/M features] — [status]
+
+ISSUES: (if docs/issues/ exists)
+  [N] open bugs ([N] critical, [N] major, [N] minor)
+  Most urgent: "[bug title]" — [severity]
+
+REQUESTS: (if docs/requests.md exists)
+  [N] feature requests pending
+
 UNKNOWNS:
   [N] open questions ([N] overdue)
   Most urgent: "[question text]" — due [date]
@@ -71,8 +84,12 @@ QUICK ACTIONS:
   • /arnold:plan — flesh out thin feature docs
   • /arnold:check — see if docs and code are aligned
   • /arnold:update — sync docs after coding
+  • /arnold:bug — record a bug
+  • /arnold:milestone — define project phases
 
 Hold on to your docs. 🦕
 ```
+
+Note: The MILESTONES, ISSUES, and REQUESTS sections should only appear if their respective files/folders exist. Don't show empty sections.
 
 Keep it SHORT. This command is for orientation, not analysis. The user should be able to read this in 10 seconds and know where they stand.

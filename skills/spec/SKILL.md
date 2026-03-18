@@ -154,11 +154,11 @@ docs/
 ├── ABOUT.md                    Team onboarding file
 ├── [original-spec-filename]    PRESERVED — the original spec stays in docs/
 ├── [feature-1]/
-│   └── overview.md             Rules, assumptions, and status from spec
+│   └── [feature-1]-overview.md Rules, assumptions, and status from spec
 ├── [feature-2]/
-│   └── overview.md
+│   └── [feature-2]-overview.md
 ├── [feature-N]/
-│   └── overview.md
+│   └── [feature-N]-overview.md
 ├── decisions/
 │   ├── 001-[decision].md       Extracted from spec
 │   └── 002-[decision].md
@@ -167,7 +167,7 @@ docs/
 
 **Critical: Preserve the original spec.** Do NOT delete, move, or modify the original spec document. It stays in `docs/` as the canonical reference. Arnold's feature docs are derived from it. The spec is the source of truth; Arnold's docs are the structured view.
 
-### For each feature overview (docs/[feature]/overview.md):
+### For each feature overview (docs/[feature]/[feature]-overview.md):
 
 Pull content from the spec, restructured into Arnold's format:
 
@@ -292,7 +292,7 @@ All features as 🔵 Not Started with notes about spec coverage.
 If the spec contains step-by-step flow descriptions (user journeys, processes), create flow docs in the relevant feature folder:
 
 ```
-docs/[feature]/[flow-name].md
+docs/[feature]/[feature]-[flow-name].md
 ```
 
 Using Arnold's flow template:
@@ -333,10 +333,10 @@ CREATED:
   docs/status.md .................... [N] features, all 🔵 Not Started
   docs/ABOUT.md ..................... Team onboarding
   docs/[feature-1]/
-  │   └── overview.md .............. [N] rules extracted
-  │   └── [flow].md ................ [if flow docs created]
+  │   └── [feature-1]-overview.md .. [N] rules extracted
+  │   └── [feature-1]-[flow].md .... [if flow docs created]
   docs/[feature-2]/
-  │   └── overview.md .............. [N] rules extracted
+  │   └── [feature-2]-overview.md .. [N] rules extracted
   docs/decisions/
   │   ├── 001-[decision].md
   │   └── 002-[decision].md

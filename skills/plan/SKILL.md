@@ -36,7 +36,7 @@ Read the existing docs and codebase. Identify documentation gaps. Propose new do
 Read all files in `docs/`:
 - `docs/overview.md`
 - `docs/status.md`
-- All `docs/*/overview.md` (feature overviews)
+- All `docs/*/*-overview.md` (feature overviews)
 - Any flow docs, edge-case docs
 - `docs/unknowns.md`
 - `docs/decisions/*.md`

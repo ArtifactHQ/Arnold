@@ -35,13 +35,19 @@ Docs are organized by **feature**, not by document type:
 docs/
 ├── overview.md          # Project vision and goals
 ├── status.md            # What's done, in progress, blocked
+├── milestones.md        # Phase tracking (if using milestones)
 ├── [feature-name]/      # One folder per feature
-│   ├── overview.md      # What it does, core rules, assumptions
-│   ├── [flow].md        # Step-by-step user flows
-│   └── edge-cases.md    # Error handling and unusual scenarios
+│   ├── [feature-name]-overview.md   # What it does, core rules, assumptions
+│   ├── [feature-name]-[flow].md     # Step-by-step user flows
+│   └── [feature-name]-edge-cases.md # Error handling and unusual scenarios
+├── issues/              # Bug reports (auto-numbered)
+│   └── NNN-title.md     # Severity, repro steps, affected feature
 ├── decisions/           # Why we chose what we chose
 │   └── NNN-title.md     # Auto-numbered decision records
-└── unknowns.md          # Open questions and bets
+├── requests.md          # Feature requests and enhancements
+├── unknowns.md          # Open questions and bets
+├── archive/             # Stale docs kept for historical record
+└── reference/           # Legacy docs, original specs
 ```
 
 ## Conventions
@@ -49,7 +55,7 @@ docs/
 ### Feature Folders
 - Lowercase, hyphen-separated: `auth/`, `booking/`, `calendar-sync/`
 - Named by what the feature IS, not what it does: `auth` not `login`
-- Every feature folder has an `overview.md` at minimum
+- Every feature folder has a `[feature]-overview.md` at minimum (e.g., `auth/auth-overview.md`)
 
 ### Status Markers
 - 🟢 Implemented — working, documented, aligned
@@ -91,3 +97,12 @@ Track where rules come from:
 - `/arnold:check` — compare docs to code, find drift
 - `/arnold:update` — sync docs after a coding session
 - `/arnold:status` — quick project overview
+- `/arnold:decide` — record a decision in docs/decisions/
+- `/arnold:resolve` — fix drift items interactively
+- `/arnold:recap` — start-of-session briefing
+- `/arnold:diff` — quick drift scan
+- `/arnold:spec` — decompose a spec document into feature-based docs
+- `/arnold:help` — show all commands, when to use them, and doc structure
+- `/arnold:bug` — record a structured bug report in docs/issues/
+- `/arnold:milestone` — define and track phased work with feature rollup
+- `/arnold:archive` — move stale or reference docs to archive/reference folders

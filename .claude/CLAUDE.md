@@ -11,7 +11,7 @@ Arnold is a **documentation-first development toolkit** that runs as a native Cl
 
 ## What It Ships
 
-- **11 slash command files** in `commands/arnold/` (legacy) and `skills/` (plugin) — meta-prompts for generating, maintaining, and checking project docs
+- **14 slash command files** in `commands/arnold/` (legacy) and `skills/` (plugin) — meta-prompts for generating, maintaining, and checking project docs
 - **1 CLAUDE.md template** — rules file encoding the doc-centered philosophy
 - **1 install script** (`install.sh`) — one-line installer that copies commands into any project
 - **1 README** — the pitch, how-to, and install instructions
@@ -63,7 +63,10 @@ arnold/
 │       ├── resolve.md                     # /arnold:resolve
 │       ├── recap.md                       # /arnold:recap
 │       ├── diff.md                        # /arnold:diff
-│       └── spec.md                        # /arnold:spec
+│       ├── spec.md                        # /arnold:spec
+│       ├── bug.md                         # /arnold:bug
+│       ├── archive.md                     # /arnold:archive
+│       └── milestone.md                   # /arnold:milestone
 ├── skills/                                # Plugin skills (for Claude Code plugin path)
 │   ├── init/SKILL.md                      # /arnold:init (auto-namespaced by plugin)
 │   ├── plan/SKILL.md                      # /arnold:plan
@@ -76,6 +79,9 @@ arnold/
 │   ├── recap/SKILL.md                     # /arnold:recap
 │   ├── diff/SKILL.md                      # /arnold:diff
 │   ├── spec/SKILL.md                      # /arnold:spec
+│   ├── bug/SKILL.md                       # /arnold:bug
+│   ├── archive/SKILL.md                   # /arnold:archive
+│   ├── milestone/SKILL.md                 # /arnold:milestone
 │   └── arnold-rules/SKILL.md             # Background knowledge (user-invocable: false)
 ├── examples/
 │   └── fitness-studio-booking/            # Worked example with full doc set
@@ -99,6 +105,9 @@ arnold/
 | `/arnold:diff` | Quick drift scan — fast summary without a full check |
 | `/arnold:spec` | Decompose a spec document into feature-based docs |
 | `/arnold:help` | Show all commands, when to use them, and doc structure |
+| `/arnold:bug` | Record a structured bug report in docs/issues/ |
+| `/arnold:archive` | Move stale or reference docs to archive/reference folders |
+| `/arnold:milestone` | Define and track phased work with feature rollup |
 
 ## Doc Organization Philosophy
 
@@ -108,12 +117,19 @@ Docs are organized **by feature** (like a wiki), not by document type (like a fi
 docs/
 ├── overview.md           # Project north star
 ├── status.md             # Current state
+├── milestones.md         # Phase tracking (if using milestones)
 ├── [feature-name]/       # One folder per feature
-│   ├── overview.md       # What it does, core rules
-│   ├── [flow].md         # Step-by-step user flows
-│   └── edge-cases.md     # Error handling, unusual scenarios
+│   ├── [feature]-overview.md   # What it does, core rules
+│   ├── [feature]-[flow].md     # Step-by-step user flows
+│   └── [feature]-edge-cases.md # Error handling, unusual scenarios
+├── issues/               # Bug reports (auto-numbered)
+│   └── NNN-title.md
 ├── decisions/            # Why we chose what we chose
-└── unknowns.md           # Open questions and bets
+│   └── NNN-title.md
+├── requests.md           # Feature requests and enhancements
+├── unknowns.md           # Open questions and bets
+├── archive/              # Stale docs kept for historical record
+└── reference/            # Legacy docs, original specs
 ```
 
 ## Conventions

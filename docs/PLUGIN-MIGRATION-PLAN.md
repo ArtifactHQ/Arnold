@@ -471,7 +471,7 @@ Arnold-Lite/
 |-------|------|------|
 | **v0.1.0** | Shell script install, Claude Code commands | Done |
 | **v0.2.0** | Add plugin manifest + marketplace.json + skills/ directory | Done |
-| **v0.3.0** | Update install.sh for cross-agent support (.agents/skills/) | Following sprint |
+| **v0.3.0** | 3 new commands (bug, archive, milestone), feature-prefixed filenames, enhanced diff/update/status | Done |
 | **v1.0.0** | Submit to Anthropic marketplace, deprecate commands/ | When stable |
 
 ---

@@ -129,7 +129,7 @@ Docs and code agree. Rule is documented, code implements it correctly.
 Example:
 ```
 ✓ auth: Rate limit is 5 attempts per minute
-  docs/auth/overview.md: "Rate limited at 5 per minute"
+  docs/auth/auth-overview.md: "Rate limited at 5 per minute"
   src/middleware/rate-limiter.js: MAX_ATTEMPTS = 5, WINDOW_MS = 60000
 ```
 
@@ -151,7 +151,7 @@ Docs say one thing, code does another. THIS IS THE KEY FINDING.
 Example:
 ```
 ✗ auth: Session timeout
-  docs/auth/overview.md says: "Sessions expire after 24 hours"
+  docs/auth/auth-overview.md says: "Sessions expire after 24 hours"
   src/config/auth.js has: SESSION_TTL = 72 * 60 * 60  (= 72 hours)
   → Docs say 24hr, code says 72hr. Which is right?
 ```
@@ -286,12 +286,12 @@ Keep the last 10 entries. This gives the user a visible trend of alignment over 
 {
   "checked_at": "[today's date]",
   "commit": "[current git commit hash, or 'no-git' if unavailable]",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "values": {
     "[feature].[rule-name]": {
       "doc_value": "[what docs say]",
       "code_value": "[what code has]",
-      "doc_file": "[docs/feature/overview.md]",
+      "doc_file": "[docs/feature/feature-overview.md]",
       "code_file": "[src/path/to/file.js]",
       "code_symbol": "[CONSTANT_NAME or function name]",
       "status": "[aligned|drifted|gap|unverifiable]",

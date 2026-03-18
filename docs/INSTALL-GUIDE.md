@@ -51,7 +51,7 @@ This is your target project, not the Arnold-Lite repo itself. You must be inside
 Replace the path with wherever Arnold-Lite lives on your machine. You should see output like:
 
 ```
-🦕 Arnold v0.2.0
+🦕 Arnold v0.3.0
    Hold on to your docs.
 
 ✓ Created .claude/commands/arnold/
@@ -67,9 +67,12 @@ Replace the path with wherever Arnold-Lite lives on your machine. You should see
 ✓   /arnold:recap
 ✓   /arnold:diff
 ✓   /arnold:spec
+✓   /arnold:bug
+✓   /arnold:archive
+✓   /arnold:milestone
 ✓ Created .claude/CLAUDE.md
 
-Arnold v0.2.0 is installed.
+Arnold v0.3.0 is installed.
 ```
 
 ### Step 4: Verify it worked
@@ -80,7 +83,7 @@ Still inside your target project, run:
 ~/Documents/GitHub/Arnold-Lite/install.sh --verify
 ```
 
-You should see checkmarks for all 11 commands plus CLAUDE.md rules.
+You should see checkmarks for all 14 commands plus CLAUDE.md rules.
 
 ### Step 5: Open Claude Code and try it
 
@@ -151,6 +154,9 @@ Arnold reads your document, extracts features, rules, decisions, and open questi
 - `/arnold:decide` — record a decision (e.g., "chose Stripe over Square")
 - `/arnold:status` — feature statuses, open questions, last check date
 - `/arnold:recap` — start-of-session briefing
+- `/arnold:bug` — record a structured bug report in docs/issues/
+- `/arnold:milestone` — define and track phased work
+- `/arnold:archive` — move stale or reference docs to archive/reference folders
 - `/arnold:help` — full command reference
 
 ---
@@ -166,7 +172,7 @@ cd ~/Documents/GitHub/my-project
 
 ### What gets removed
 
-- `.claude/commands/arnold/` and all 11 command files inside it
+- `.claude/commands/arnold/` and all 14 command files inside it
 - Arnold's rules from your CLAUDE.md (the content between the `Arnold Rules` markers)
 - The `.version` file
 - Empty `.claude/commands/` and `.claude/` directories if nothing else is in them
@@ -225,7 +231,7 @@ cd ~/Documents/GitHub/my-project
 ~/Documents/GitHub/Arnold-Lite/install.sh
 ```
 
-The installer detects the previous version and shows the upgrade (e.g., "Upgrading Arnold v0.1.0 → v0.2.0"). All commands are overwritten with new versions. Your CLAUDE.md rules are updated (your own content is preserved).
+The installer detects the previous version and shows the upgrade (e.g., "Upgrading Arnold v0.2.0 → v0.3.0"). All commands are overwritten with new versions. Your CLAUDE.md rules are updated (your own content is preserved).
 
 ---
 
@@ -272,7 +278,7 @@ Check that the files exist in your project:
 ```bash
 ls .claude/commands/arnold/
 ```
-You should see 11 `.md` files. If not, re-run the installer.
+You should see 14 `.md` files. If not, re-run the installer.
 
 Also make sure you opened Claude Code from the project directory (not from a different folder).
 
