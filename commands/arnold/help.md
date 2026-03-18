@@ -75,6 +75,10 @@ THE CORE LOOP:
                          Proposes doc updates for anything new or modified.
                          You approve each change before it's written.
 
+     /arnold:update --quick  Batch mode. Scans git changes, proposes
+                         status updates in bulk. For catching up
+                         after a coding sprint.
+
 OTHER COMMANDS:
 ━━━━━━━━━━━━━━━
 
@@ -95,6 +99,18 @@ OTHER COMMANDS:
 
   /arnold:help        This reference.
 
+  /arnold:bug         Record a bug. Creates a structured report in
+                      docs/issues/ with severity, repro steps, and
+                      affected feature. Auto-numbered.
+
+  /arnold:milestone   Define project phases. Groups features into
+                      milestones with rollup status tracking.
+                      Shows progress: "3/5 features complete."
+
+  /arnold:archive     Move stale docs to docs/archive/ or legacy
+                      reference docs to docs/reference/.
+                      Use --reference for informational docs.
+
 SCOPING:
 ━━━━━━━━
 
@@ -109,10 +125,16 @@ DOC STRUCTURE:
   docs/
   ├── overview.md              What you're building and for whom
   ├── status.md                Feature statuses and check history
-  ├── [feature]/overview.md    Rules, assumptions, and status per feature
-  ├── [feature]/[flow].md      Step-by-step user flows
+  ├── milestones.md            Phase tracking with feature rollup
+  ├── [feature]/
+  │   └── [feature]-overview.md  Rules, assumptions, and status
+  │   └── [feature]-[flow].md    Step-by-step user flows
+  ├── issues/NNN-title.md      Bug reports with severity and status
   ├── decisions/NNN-title.md   Why you chose what you chose
-  └── unknowns.md              Open questions and bets
+  ├── requests.md              Feature requests and enhancements
+  ├── unknowns.md              Open questions and bets
+  ├── archive/                 Stale docs kept for history
+  └── reference/               Legacy docs, original specs
 
 Hold on to your docs. 🦕
 ```

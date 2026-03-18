@@ -1,7 +1,7 @@
 ---
 name: arnold:update
-description: "Update — sync docs after a coding session"
-argument-hint: "[feature-name]"
+description: "Update — sync docs after a coding session (use --quick for batch mode)"
+argument-hint: "[feature-name] [--quick]"
 allowed-tools:
   - Read
   - Write
@@ -20,6 +20,49 @@ Your personality: helpful, efficient, Jurassic Park themed. Use 🦕 exactly twi
 If the user provided arguments with this command, treat that as a feature scope. For example, `/arnold:update auth` means only update docs for the auth feature — read only `docs/auth/` and corresponding code. Skip other features entirely.
 
 If no argument is provided, update the entire project.
+
+## QUICK MODE
+
+If the user's input includes `--quick` (e.g., `/arnold:update --quick`), use batch mode:
+
+This is for rapid catch-up after intense coding sessions. Instead of the full update flow:
+
+1. Run `git log --oneline --since="8 hours ago"` and `git diff --stat` to see all recent changes
+2. Read `docs/status.md` for current feature statuses
+3. Scan changed files and map them to feature folders
+4. Generate a batch of proposed status changes:
+
+```
+🦕 QUICK UPDATE — Batch Status Sync
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Changes detected since last update:
+  [N] files changed across [N] features
+
+Proposed updates:
+  ☐ [feature-1]: 🔵 → 🟡 (new files: [file1], [file2])
+  ☐ [feature-2]: 🟡 → 🟢 (all documented flows now have code)
+  ☐ [feature-3]: no change
+  ☐ docs/status.md — update last modified date
+
+Apply all? Or uncheck specific ones? (e.g., "skip feature-2")
+```
+
+5. On approval, batch-apply all status changes to feature overviews and status.md
+6. Do NOT create new doc files, write flow docs, or propose decision records in quick mode — that's for full `/arnold:update`
+7. Output:
+
+```
+Updated [N] feature statuses:
+  ✓ [feature-1]: 🟡 In Progress
+  ✓ [feature-2]: 🟢 Implemented
+Updated docs/status.md
+
+For a thorough doc sync (new flows, decisions, edge cases):
+  /arnold:update [feature-name]
+
+Hold on to your docs. 🦕
+```
 
 ## STEP 0: CHECK FOR DOCS
 
@@ -78,12 +121,12 @@ Present proposals clearly:
 Based on your recent changes, here's what I'd update:
 
 📝 UPDATE EXISTING:
-  1. auth/overview.md — session timeout changed from 24hr to 72hr in code
+  1. auth/auth-overview.md — session timeout changed from 24hr to 72hr in code
      → Update Core Rules section to reflect 72hr timeout
-  2. booking/overview.md — status should be 🟡 In Progress (code exists now)
+  2. booking/booking-overview.md — status should be 🟡 In Progress (code exists now)
 
 📄 CREATE NEW:
-  3. booking/reserve-spot.md — new booking flow is in code but not documented
+  3. booking/booking-reserve-spot.md — new booking flow is in code but not documented
   4. decisions/003-switched-to-redis.md — you replaced in-memory sessions with Redis
 
 🔍 VERIFY:
@@ -114,9 +157,9 @@ Update `docs/status.md` with:
 
 ```
 Updated [N] docs:
-  ✓ auth/overview.md — session timeout now 72hr
-  ✓ booking/overview.md — status: 🟡 In Progress
-  + booking/reserve-spot.md (new)
+  ✓ auth/auth-overview.md — session timeout now 72hr
+  ✓ booking/booking-overview.md — status: 🟡 In Progress
+  + booking/booking-reserve-spot.md (new)
   + decisions/003-switched-to-redis.md (new)
 
 Updated docs/status.md

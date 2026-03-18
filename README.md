@@ -83,12 +83,12 @@ Scanned: 4 feature docs, 23 source files
 ━━━━━━━━━━━━━━━━━
 
 1. auth: Session timeout
-   📄 Docs say: "Sessions expire after 24 hours" (docs/auth/overview.md)
+   📄 Docs say: "Sessions expire after 24 hours" (docs/auth/auth-overview.md)
    💻 Code has: SESSION_TTL = 72 * 60 * 60 (src/config/auth.js)
    → Docs say 24hr, code says 72hr. Which is right?
 
 2. booking: Capacity limit
-   📄 Docs say: "Maximum 20 spots per class" (docs/booking/overview.md)
+   📄 Docs say: "Maximum 20 spots per class" (docs/booking/booking-overview.md)
    💻 Code has: MAX_CAPACITY = 30 (src/models/class.js)
    → Docs say 20, code says 30.
 
@@ -178,11 +178,11 @@ docs/
 ├── overview.md           # Your project vision
 ├── status.md             # What's done, what's next
 ├── auth/                 # Feature: authentication
-│   └── overview.md
+│   └── auth-overview.md
 ├── booking/              # Feature: booking system
-│   └── overview.md
+│   └── booking-overview.md
 ├── payments/             # Feature: payments
-│   └── overview.md
+│   └── payments-overview.md
 ├── decisions/            # Why you chose what you chose
 └── unknowns.md           # Open questions and bets
 ```
@@ -238,6 +238,7 @@ After a coding session, sync your docs. Arnold reads what changed and proposes u
 | `/arnold:resolve` | After check finds drift. Walks through each mismatch: "docs say X, code says Y, which is right?" You choose, Arnold fixes the other side. |
 | `/arnold:update` | After coding. Reads your git diff, proposes doc updates for anything new or changed. You approve each change. |
 | `/arnold:diff` | Quick version of check. Reads the last snapshot, only checks files that changed. Use for a fast sanity check between full checks. |
+| `/arnold:update --quick` | After a coding sprint. Batch mode: scans recent git changes, proposes status updates in bulk for fast confirmation. |
 
 **When you need them:**
 
@@ -248,6 +249,9 @@ After a coding session, sync your docs. Arnold reads what changed and proposes u
 | `/arnold:status` | Quick look at where things stand. Feature statuses, open questions, last check date. |
 | `/arnold:recap` | Starting a new coding session. Shows what changed, any unresolved drift, and suggests what to do next. |
 | `/arnold:help` | Full command reference with "how to get started" guide. |
+| `/arnold:bug` | You found a bug. Records it in docs/issues/ with severity, repro steps, and affected feature. Auto-numbered. |
+| `/arnold:milestone` | Your project has phases. Groups features into milestones with rollup status (e.g., "3/5 features complete"). |
+| `/arnold:archive` | Docs are getting stale. Moves outdated docs to docs/archive/ or legacy reference docs to docs/reference/. |
 
 ---
 
@@ -259,22 +263,29 @@ Arnold organizes docs by feature, the way you think about your product. Not by d
 docs/
 ├── overview.md              # Project north star
 ├── status.md                # Current state
+├── milestones.md            # Phase tracking (optional)
 │
 ├── auth/                    # One folder per feature
-│   ├── overview.md          # What auth does, core rules
-│   ├── login-flow.md        # Step-by-step happy path + errors
-│   └── edge-cases.md        # Session expiry, lockouts, etc.
+│   ├── auth-overview.md     # What auth does, core rules
+│   ├── auth-login-flow.md   # Step-by-step happy path + errors
+│   └── auth-edge-cases.md   # Session expiry, lockouts, etc.
 │
 ├── booking/
-│   ├── overview.md
-│   ├── reserve-spot.md
-│   └── cancellation.md
+│   ├── booking-overview.md
+│   ├── booking-reserve-spot.md
+│   └── booking-cancellation.md
+│
+├── issues/                  # Bug reports
+│   └── 001-session-timeout-crash.md
 │
 ├── decisions/               # Cross-cutting decisions
 │   ├── 001-chose-stripe.md
 │   └── 002-went-serverless.md
 │
-└── unknowns.md              # Open questions, bets, risks
+├── requests.md              # Feature requests
+├── unknowns.md              # Open questions, bets, risks
+├── archive/                 # Stale docs (historical)
+└── reference/               # Legacy docs, original specs
 ```
 
 **Why this works:**

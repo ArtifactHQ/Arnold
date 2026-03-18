@@ -5,6 +5,25 @@ All notable changes to Arnold will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-03-18
+
+### Added
+- /arnold:bug — structured bug recording in docs/issues/ with severity, repro steps, auto-numbering
+- /arnold:milestone — define and track phased work with feature rollup status
+- /arnold:archive — move stale docs to docs/archive/ or reference docs to docs/reference/
+- /arnold:update --quick — batch mode for rapid post-sprint doc sync
+- New doc structure: docs/issues/, docs/archive/, docs/reference/, docs/milestones.md, docs/requests.md
+- Milestone progress rollup in /arnold:status
+- Bug and feature request counts in /arnold:status
+- Decision record: docs/decisions/001-v2-expansion-scope.md documenting expansion choices
+
+### Changed
+- Feature-prefixed filenames: docs/auth/auth-overview.md instead of docs/auth/overview.md
+- /arnold:diff rewritten for truly incremental scanning (3 detection paths based on available data)
+- /arnold:status shows milestones, bugs, and requests sections (when present)
+- arnold-rules background skill updated with full command list and expanded doc structure
+- Version bumped across install.sh, plugin.json, marketplace.json
+
 ## [0.2.0] - 2026-03-14
 
 ### Added
