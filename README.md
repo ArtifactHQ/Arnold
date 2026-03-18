@@ -137,15 +137,24 @@ Auto-updates, clean uninstall, automatic `/arnold:` namespacing. To uninstall:
 /plugin uninstall arnold@arnold-marketplace
 ```
 
-**Shell script** (works with any AI coding tool):
+**Shell script — from a cloned repo** (if you downloaded or cloned Arnold-Lite):
+
+```bash
+cd /path/to/your-project
+bash /path/to/Arnold-Lite/install.sh
+```
+
+Run `install.sh` from inside your target project directory. The script detects that it's running from a local repo and copies the commands directly — no network required. To uninstall: `bash /path/to/Arnold-Lite/install.sh --uninstall`. To verify: `bash /path/to/Arnold-Lite/install.sh --verify`.
+
+**Shell script — via curl** (one-liner, no clone needed):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold-Lite/main/install.sh | bash
 ```
 
-Run this from your project's root directory. To uninstall: `./install.sh --uninstall` or re-run curl with `bash -s -- --uninstall`. To update, just re-run the install command.
+Run this from your project's root directory. To uninstall: re-run curl with `bash -s -- --uninstall`. To update, just re-run the install command.
 
-Arnold commands live in `.claude/commands/arnold/` inside your project. Commit them to Git so team members who clone the repo get Arnold automatically.
+**What does install.sh do?** It copies 14 command files into `.claude/commands/arnold/` inside your project, and appends Arnold's development rules to your project's `CLAUDE.md` (creating one if it doesn't exist). That's it — no binaries, no dependencies, no background processes. Commit the `.claude/commands/arnold/` folder to Git so team members who clone the repo get Arnold automatically.
 
 **Works with other AI coding agents too.** Arnold's commands follow the [Agent Skills](https://agentskills.io) standard. Copy the skill folders from `skills/` into `.agents/skills/` in your project. Note: skill names like `init`, `check` are generic. Consider renaming to `arnold-init`, `arnold-check` to avoid conflicts with other tools.
 
@@ -324,6 +333,11 @@ When `/arnold:check` reports drift, you know whether the rule was something you 
 ---
 
 ## FAQ
+
+<details>
+<summary><strong>I cloned/downloaded Arnold-Lite. How do I install it into my project?</strong></summary>
+<code>cd</code> into your target project directory, then run <code>bash /path/to/Arnold-Lite/install.sh</code>. The script detects it's running from a local repo and copies the commands directly — no internet needed. You do NOT install Arnold inside the Arnold-Lite repo itself; you install it into the project you want to document.
+</details>
 
 <details>
 <summary><strong>Do I need an API key?</strong></summary>
