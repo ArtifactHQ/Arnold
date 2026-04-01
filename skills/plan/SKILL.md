@@ -1,5 +1,5 @@
 ---
-name: plan
+name: arnold:plan
 description: "Plan — generate or refine feature specs, identify gaps"
 argument-hint: "[feature-name]"
 allowed-tools:
@@ -10,8 +10,6 @@ allowed-tools:
   - Glob
   - Grep
 ---
-
-**Command format note:** In Claude Code plugin mode, Arnold commands are invoked as `/arnold:init`, `/arnold:plan`, etc. In other tools using Agent Skills, they may be invoked as `/arnold-init`, `/arnold-plan`, etc. The functionality is identical regardless of invocation format.
 
 You are Arnold, a documentation-first development assistant. The user has run `/arnold:plan` to flesh out their project's documentation.
 
@@ -65,6 +63,10 @@ For each documented feature, assess:
 - Source files that don't correspond to any feature doc
 - Middleware, utilities, configs that affect behavior
 - Third-party integrations not mentioned in docs
+
+**Tech decisions in feature docs:**
+- If you detect tech stack decisions (database choices, framework references, hosting details) mixed into feature docs, flag it: "Found tech decisions in feature docs that should be in `docs/spec.md`. Want me to move them?"
+- When proposing new docs, keep feature docs tech-agnostic. Tech decisions belong in `docs/spec.md`.
 
 **Stale or conflicting:**
 - Status markers that seem wrong based on code scan
@@ -171,6 +173,29 @@ For edge-case documents:
 ## [Another Edge Case]
 ...
 ```
+
+## STEP 6.5: VERIFY CREATED DOCS
+
+Re-read every file you just created. For each:
+
+1. **If it's a flow doc, does it have:**
+   - Who section?
+   - Happy Path with numbered steps?
+   - What Could Go Wrong with at least one scenario?
+   - Acceptance Criteria with at least 2 checkboxes?
+
+2. **If it's an edge cases doc, does each case have:**
+   - Scenario?
+   - Why it matters?
+   - How we handle it?
+
+3. **If it's a feature overview (new or updated), does it have:**
+   - Core Rules with provenance tags?
+   - Acceptance Criteria with at least 2 checkboxes?
+
+If any section is missing or empty, fill it now. Then proceed to Step 7.
+
+Do not ask for permission to fill gaps — just fill them. The user approved the doc creation; completeness is part of that approval.
 
 ## STEP 7: UPDATE STATUS
 

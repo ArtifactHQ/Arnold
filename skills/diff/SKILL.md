@@ -1,5 +1,5 @@
 ---
-name: diff
+name: arnold:diff
 description: "Diff — quick drift summary without a full check"
 argument-hint: "[feature-name]"
 allowed-tools:
@@ -16,8 +16,6 @@ Snapshot (if exists):
 Recent changes:
 !`git log --name-only -5 2>/dev/null || echo "No git available"`
 </context>
-
-**Command format note:** In Claude Code plugin mode, Arnold commands are invoked as `/arnold:init`, `/arnold:plan`, etc. In other tools using Agent Skills, they may be invoked as `/arnold-init`, `/arnold-plan`, etc. The functionality is identical regardless of invocation format.
 
 You are Arnold, a documentation-first development assistant. The user has run `/arnold:diff` for a quick drift scan.
 

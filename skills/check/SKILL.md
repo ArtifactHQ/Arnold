@@ -1,5 +1,5 @@
 ---
-name: check
+name: arnold:check
 description: "Check — compare docs to code, find drift and gaps"
 argument-hint: "[feature-name]"
 allowed-tools:
@@ -10,8 +10,6 @@ allowed-tools:
   - Glob
   - Grep
 ---
-
-**Command format note:** In Claude Code plugin mode, Arnold commands are invoked as `/arnold:init`, `/arnold:plan`, etc. In other tools using Agent Skills, they may be invoked as `/arnold-init`, `/arnold-plan`, etc. The functionality is identical regardless of invocation format.
 
 You are Arnold, a documentation-first development assistant. The user has run `/arnold:check` to compare their documentation against their codebase.
 
@@ -35,7 +33,9 @@ If no argument is provided, check the entire project.
 
 ## STEP 1: BUILD THE DOC MAP
 
-Read every file in `docs/`. For each feature, extract:
+Read every file in `docs/`. Also read `docs/spec.md` if it exists — extract the tech stack table for separate verification (see Step 3.5).
+
+For each feature, extract:
 
 - **Feature name** and status marker
 - **Core rules** — specific, testable statements (e.g., "passwords min 8 chars", "sessions expire 24hr")
@@ -181,6 +181,27 @@ How to identify drift:
 - Features with thin docs (overview only, no flows)
 - Rules without specific values
 - Missing acceptance criteria
+
+## STEP 3.5: CHECK TECHNICAL SPEC (if docs/spec.md exists)
+
+If `docs/spec.md` exists, verify the code uses the stack specified:
+
+1. Read the Stack table from `docs/spec.md`
+2. For each row, verify the code matches:
+   - Language: check file extensions, package files
+   - Framework: check imports, dependencies
+   - Database: check connection strings, ORM config, migration files
+   - Auth: check auth middleware, token handling
+3. Report tech drift separately from feature drift:
+
+```
+TECH SPEC ALIGNMENT:
+  ✓ Language: Python 3.12 — confirmed (pyproject.toml)
+  ✗ Database: spec says PostgreSQL, code uses SQLite (settings.py:12)
+  ✓ Framework: FastAPI — confirmed (requirements.txt)
+```
+
+When checking feature docs against code, do NOT flag tech-stack-level mismatches in feature docs (e.g., "feature doc doesn't mention Postgres"). Those belong in the spec.md check above.
 
 ## STEP 4: PRESENT THE REPORT
 

@@ -1,5 +1,5 @@
 ---
-name: bug
+name: arnold:bug
 description: "Bug — record a structured bug report in docs/issues/"
 argument-hint: "[feature-name]"
 allowed-tools:
@@ -10,8 +10,6 @@ allowed-tools:
   - Glob
   - Grep
 ---
-
-**Command format note:** In Claude Code plugin mode, Arnold commands are invoked as `/arnold:bug`. In other tools using Agent Skills, they may be invoked as `/arnold-bug`. The functionality is identical regardless of invocation format.
 
 You are Arnold, a documentation-first development assistant. The user has run `/arnold:bug` to record a bug.
 

@@ -11,7 +11,7 @@ Arnold is a **documentation-first development toolkit** that runs as a native Cl
 
 ## What It Ships
 
-- **14 slash command files** in `commands/arnold/` (legacy) and `skills/` (plugin) — meta-prompts for generating, maintaining, and checking project docs
+- **17 slash command files** in `commands/arnold/` (legacy) and `skills/` (plugin) — meta-prompts for generating, maintaining, and checking project docs
 - **1 CLAUDE.md template** — rules file encoding the doc-centered philosophy
 - **1 install script** (`install.sh`) — one-line installer that copies commands into any project
 - **1 README** — the pitch, how-to, and install instructions
@@ -66,7 +66,10 @@ arnold/
 │       ├── spec.md                        # /arnold:spec
 │       ├── bug.md                         # /arnold:bug
 │       ├── archive.md                     # /arnold:archive
-│       └── milestone.md                   # /arnold:milestone
+│       ├── milestone.md                   # /arnold:milestone
+│       ├── feature.md                     # /arnold:feature
+│       ├── build.md                       # /arnold:build
+│       └── review.md                      # /arnold:review
 ├── skills/                                # Plugin skills (for Claude Code plugin path)
 │   ├── init/SKILL.md                      # /arnold:init (auto-namespaced by plugin)
 │   ├── plan/SKILL.md                      # /arnold:plan
@@ -82,12 +85,21 @@ arnold/
 │   ├── bug/SKILL.md                       # /arnold:bug
 │   ├── archive/SKILL.md                   # /arnold:archive
 │   ├── milestone/SKILL.md                 # /arnold:milestone
+│   ├── feature/SKILL.md                   # /arnold:feature
+│   ├── build/SKILL.md                     # /arnold:build
+│   ├── review/SKILL.md                    # /arnold:review
 │   └── arnold-rules/SKILL.md             # Background knowledge (user-invocable: false)
 ├── examples/
 │   └── fitness-studio-booking/            # Worked example with full doc set
 └── docs/
-    ├── ARNOLD-LITE-BUILD-SPEC.md          # Master build specification
-    └── PLUGIN-MIGRATION-PLAN.md           # Plugin & cross-agent strategy
+    ├── INSTALL-GUIDE.md                   # User-facing installation walkthrough
+    ├── decisions/
+    │   └── 001-v2-expansion-scope.md      # Decision records
+    └── reference/                         # Historical/archived documents
+        ├── ARNOLD-LITE-BUILD-SPEC.md      # Original v0.1 build spec
+        ├── ARNOLD-RALPH-INTEGRATION-PLAN.md
+        ├── PLUGIN-MIGRATION-PLAN.md
+        └── arnold-update-plan.md          # v0.4.0 update plan (completed)
 ```
 
 ## Slash Commands
@@ -108,6 +120,9 @@ arnold/
 | `/arnold:bug` | Record a structured bug report in docs/issues/ |
 | `/arnold:archive` | Move stale or reference docs to archive/reference folders |
 | `/arnold:milestone` | Define and track phased work with feature rollup |
+| `/arnold:feature` | Feature completeness matrix, drill into specific features |
+| `/arnold:build` | Build code from docs with acceptance criteria verification |
+| `/arnold:review` | Critique docs for usability, product, and technical issues |
 
 ## Doc Organization Philosophy
 
@@ -116,12 +131,13 @@ Docs are organized **by feature** (like a wiki), not by document type (like a fi
 ```
 docs/
 ├── overview.md           # Project north star
+├── spec.md               # Technical specification (stack, architecture, constraints)
 ├── status.md             # Current state
 ├── milestones.md         # Phase tracking (if using milestones)
 ├── [feature-name]/       # One folder per feature
-│   ├── [feature]-overview.md   # What it does, core rules
-│   ├── [feature]-[flow].md     # Step-by-step user flows
-│   └── [feature]-edge-cases.md # Error handling, unusual scenarios
+│   ├── [feature-name]-overview.md   # What it does, core rules, acceptance criteria
+│   ├── [feature-name]-[flow].md     # Step-by-step user flows
+│   └── [feature-name]-edge-cases.md # Error handling, unusual scenarios
 ├── issues/               # Bug reports (auto-numbered)
 │   └── NNN-title.md
 ├── decisions/            # Why we chose what we chose
@@ -136,8 +152,10 @@ docs/
 
 - Feature folder names: lowercase, hyphen-separated (`auth/`, `calendar-sync/`)
 - Named by what the feature IS, not what it does (`auth` not `login`)
+- Product requirements are tech-agnostic. Technical decisions live in `docs/spec.md`
+- Feature overviews include acceptance criteria as a baseline
 - Status markers: 🟢 Implemented, 🟡 In Progress, 🔵 Not Started, 🔴 Drifted, ❓ Unknown
-- Source provenance: (user-stated), (domain-derived), (Arnold-inferred), (decided)
+- Source provenance: (user-stated), (domain-derived), (Arnold-inferred), (decided), (code-derived)
 - Decision records: auto-numbered `001-title.md`, `002-title.md`
 - Personality: Jurassic Park themed, 🦕 used exactly twice per command output (start + end)
 

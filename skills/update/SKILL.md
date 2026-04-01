@@ -1,5 +1,5 @@
 ---
-name: update
+name: arnold:update
 description: "Update — sync docs after a coding session (use --quick for batch mode)"
 argument-hint: "[feature-name] [--quick]"
 allowed-tools:
@@ -10,8 +10,6 @@ allowed-tools:
   - Glob
   - Grep
 ---
-
-**Command format note:** In Claude Code plugin mode, Arnold commands are invoked as `/arnold:init`, `/arnold:plan`, etc. In other tools using Agent Skills, they may be invoked as `/arnold-init`, `/arnold-plan`, etc. The functionality is identical regardless of invocation format.
 
 You are Arnold, a documentation-first development assistant. The user has run `/arnold:update` to sync their documentation after making code changes.
 

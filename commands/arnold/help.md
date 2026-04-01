@@ -111,6 +111,20 @@ OTHER COMMANDS:
                       reference docs to docs/reference/.
                       Use --reference for informational docs.
 
+  /arnold:feature     Feature completeness matrix at a glance.
+                      Drill into one feature: /arnold:feature auth
+                      Deep-plan a feature: /arnold:feature plan auth
+
+  /arnold:build       Build code from your docs. Reads feature docs,
+                      enumerates acceptance criteria, writes code, and
+                      verifies each criterion is met before moving on.
+                      Scope to one feature: /arnold:build auth
+
+  /arnold:review      Critique your docs for quality and correctness.
+                      Three lenses: usability, product, technical.
+                      /arnold:review usability    (one lens)
+                      /arnold:review              (all lenses)
+
 SCOPING:
 ━━━━━━━━
 
@@ -124,10 +138,11 @@ DOC STRUCTURE:
 
   docs/
   ├── overview.md              What you're building and for whom
+  ├── spec.md                  Technical specification (stack, architecture)
   ├── status.md                Feature statuses and check history
   ├── milestones.md            Phase tracking with feature rollup
   ├── [feature]/
-  │   └── [feature]-overview.md  Rules, assumptions, and status
+  │   └── [feature]-overview.md  Rules, acceptance criteria, and status
   │   └── [feature]-[flow].md    Step-by-step user flows
   ├── issues/NNN-title.md      Bug reports with severity and status
   ├── decisions/NNN-title.md   Why you chose what you chose
@@ -135,6 +150,27 @@ DOC STRUCTURE:
   ├── unknowns.md              Open questions and bets
   ├── archive/                 Stale docs kept for history
   └── reference/               Legacy docs, original specs
+
+  Tech decisions live in docs/spec.md. Product requirements live
+  in feature folders (tech-agnostic).
+
+TIPS:
+━━━━━
+
+  Use "status" for a snapshot of project state.
+  Use "recap" at the start of a coding session to see what changed.
+
+TROUBLESHOOTING:
+━━━━━━━━━━━━━━━━
+
+  If commands show up twice or fail to run, you may have both
+  the shell-installed and plugin versions active.
+
+  To remove the shell version:
+    bash install.sh --uninstall
+
+  To remove the plugin version:
+    /plugin uninstall arnold
 
 Hold on to your docs. 🦕
 ```

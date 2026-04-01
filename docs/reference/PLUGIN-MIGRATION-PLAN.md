@@ -1,3 +1,7 @@
+> **Reference document.** Plugin migration was completed in v0.3.0.
+> Arnold now ships as both commands/ and skills/ with sync-skills.sh.
+> Kept for historical reference.
+
 # Arnold — Plugin & Cross-Agent Migration Plan
 
 > **Date:** March 14, 2026
