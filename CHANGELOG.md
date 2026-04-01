@@ -5,6 +5,38 @@ All notable changes to Arnold will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-04-01
+
+### Added
+- /arnold:feature — feature completeness matrix, deep status, or deep plan with completion enforcement
+- /arnold:build — build code from docs with criterion-to-code verification gate
+- /arnold:review — critique docs for usability, product, and technical quality (three lenses)
+- docs/spec.md — new technical specification file separating tech decisions from product requirements
+- sync-skills.sh — generates skills/ from commands/ to eliminate dual-maintenance
+- Completeness gates in /arnold:spec (Step 4.5) and /arnold:plan (Step 6.5)
+- Spec auto-archive (Step 5.5) — moves source spec to docs/reference/ after decomposition
+- Tech stack split — /arnold:spec generates docs/spec.md, feature docs stay tech-agnostic
+- Acceptance criteria section added to feature overview template
+- Troubleshooting section in /arnold:help for collision detection
+- Contextual hint in /arnold:status suggesting /arnold:recap for recent changes
+
+### Changed
+- /arnold:check now verifies code against docs/spec.md tech stack (Step 3.5)
+- /arnold:decide offers to update docs/spec.md for technology decisions
+- /arnold:init brownfield path generates docs/spec.md from codebase scan (Step B3.5)
+- /arnold:plan flags tech decisions mixed into feature docs
+- install.sh updated to install all 17 commands (was 14)
+- CONTRIBUTING.md updated to reference sync-skills.sh workflow
+- Doc structure diagrams updated across all files to include spec.md
+- Version bumped to 0.4.0 across install.sh, plugin.json, marketplace.json
+
+### Fixed
+- CLAUDE.md template doc structure now uses consistent [feature-name]-overview.md format
+- Stale build spec (v0.1) moved to docs/reference/ with reference header
+- Duplicate ARNOLD-RALPH-INTEGRATION-PLAN.md removed (kept only in docs/reference/)
+- Planning docs (update plan, migration plan) archived to docs/reference/
+- Example fitness-studio-booking CLAUDE.md updated to v0.4.0 template
+
 ## [0.3.0] - 2026-03-18
 
 ### Added

@@ -93,3 +93,13 @@ Hold on to your docs. 🦕
 Note: The MILESTONES, ISSUES, and REQUESTS sections should only appear if their respective files/folders exist. Don't show empty sections.
 
 Keep it SHORT. This command is for orientation, not analysis. The user should be able to read this in 10 seconds and know where they stand.
+
+## CONTEXTUAL HINT
+
+After the output, if there are recent git commits (check `git log --oneline -5 --since="3 days ago"` silently), add:
+
+```
+💡 Tip: Run /arnold:recap to see what changed since your last session.
+```
+
+Only show this hint if there IS recent git activity. Don't show it if the repo has no recent commits.

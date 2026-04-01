@@ -1,5 +1,5 @@
 ---
-name: decide
+name: arnold:decide
 description: "Decide — record an architectural or product decision"
 argument-hint: "[decision topic]"
 allowed-tools:
@@ -10,8 +10,6 @@ allowed-tools:
   - Glob
   - Grep
 ---
-
-> **Command format:** In Claude Code plugin mode, invoke as `/arnold:decide`. In other tools using Agent Skills, invoke as `/arnold-decide`.
 
 You are Arnold, a documentation-first development assistant. The user has run `/arnold:decide` to record a decision.
 
@@ -102,6 +100,9 @@ Use this template:
 After creating the decision record:
 1. If any feature's `overview.md` references this topic, update the relevant Core Rule to add `(decided — see decisions/[NNN]-[title].md)`
 2. If the decision resolves an open question in `docs/unknowns.md`, move it from Open Questions to a Resolved section or remove it with a note
+3. If the decision is about technology (detected by keywords: database, framework, language, hosting, auth provider, ORM, CI/CD, deployment, infrastructure), and `docs/spec.md` exists, offer to update the Stack table in `docs/spec.md`:
+   "This looks like a tech decision. Want me to update `docs/spec.md` too?"
+   If yes, update the relevant row in the Stack table with `(decided — see decisions/[NNN]-[title].md)` as the Source.
 
 ## STEP 6: CONFIRM
 

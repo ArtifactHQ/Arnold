@@ -1,3 +1,7 @@
+> **Reference document.** This was the original v0.1.0 build specification.
+> Arnold has since grown to 17 commands (v0.4.0). See the command files
+> themselves for current behavior. Kept for historical reference.
+
 # Arnold Lite — Complete Build Specification
 
 > **This is a monolithic, buildable spec.** Hand this file to Claude Code in a fresh repo. It contains everything needed to build Arnold Lite from scratch: every file, every prompt, every template, every edge case. Break it into subtasks and build.

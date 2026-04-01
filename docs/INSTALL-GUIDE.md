@@ -83,7 +83,7 @@ Still inside your target project, run:
 ~/Documents/GitHub/Arnold-Lite/install.sh --verify
 ```
 
-You should see checkmarks for all 14 commands plus CLAUDE.md rules.
+You should see checkmarks for all 17 commands plus CLAUDE.md rules.
 
 ### Step 5: Open Claude Code and try it
 
@@ -172,7 +172,7 @@ cd ~/Documents/GitHub/my-project
 
 ### What gets removed
 
-- `.claude/commands/arnold/` and all 14 command files inside it
+- `.claude/commands/arnold/` and all 17 command files inside it
 - Arnold's rules from your CLAUDE.md (the content between the `Arnold Rules` markers)
 - The `.version` file
 - Empty `.claude/commands/` and `.claude/` directories if nothing else is in them
@@ -278,7 +278,7 @@ Check that the files exist in your project:
 ```bash
 ls .claude/commands/arnold/
 ```
-You should see 14 `.md` files. If not, re-run the installer.
+You should see 17 `.md` files. If not, re-run the installer.
 
 Also make sure you opened Claude Code from the project directory (not from a different folder).
 

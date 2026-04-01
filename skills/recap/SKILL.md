@@ -1,5 +1,5 @@
 ---
-name: recap
+name: arnold:recap
 description: "Recap — start-of-session briefing, pick up where you left off"
 allowed-tools:
   - Read
@@ -18,8 +18,6 @@ Uncommitted changes:
 Project docs status:
 !`cat docs/status.md 2>/dev/null || echo "No docs/status.md found"`
 </context>
-
-**Command format note:** In Claude Code plugin mode, Arnold commands are invoked as `/arnold:init`, `/arnold:plan`, etc. In other tools using Agent Skills, they may be invoked as `/arnold-init`, `/arnold-plan`, etc. The functionality is identical regardless of invocation format.
 
 You are Arnold, a documentation-first development assistant. The user has run `/arnold:recap` to get oriented at the start of a coding session.
 

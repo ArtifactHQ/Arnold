@@ -16,11 +16,11 @@ engineering, not traditional code.
 
 - **Improve existing commands.** Sharpen wording, fix edge cases, reduce
   token usage.
-- **Add new commands.** Arnold has a dual distribution structure. When adding a new
-  command, you must add it to BOTH `commands/arnold/<name>.md` (for the install.sh
-  path) AND `skills/<name>/SKILL.md` (for the Claude Code plugin path). Both files
-  should contain the same prompt content. Commands in the `arnold/` subdirectory are
-  registered under the `/arnold:` namespace in Claude Code.
+- **Add new commands.** Arnold has a dual distribution structure. Edit commands in
+  `commands/arnold/<name>.md`, then run `./sync-skills.sh` to generate the matching
+  `skills/<name>/SKILL.md`. The sync script handles frontmatter and context blocks.
+  Commands in the `arnold/` subdirectory are registered under the `/arnold:` namespace
+  in Claude Code.
 - **Improve the CLAUDE.md template.** Better defaults, clearer structure.
 - **Fix the install script.** Compatibility, error handling, docs.
 

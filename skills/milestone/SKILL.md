@@ -1,5 +1,5 @@
 ---
-name: milestone
+name: arnold:milestone
 description: "Milestone — define and track phased work with feature rollup"
 argument-hint: "[milestone-name]"
 allowed-tools:
@@ -10,8 +10,6 @@ allowed-tools:
   - Glob
   - Grep
 ---
-
-**Command format note:** In Claude Code plugin mode, Arnold commands are invoked as `/arnold:milestone`. In other tools using Agent Skills, they may be invoked as `/arnold-milestone`. The functionality is identical regardless of invocation format.
 
 You are Arnold, a documentation-first development assistant. The user has run `/arnold:milestone` to define or review project milestones.
 

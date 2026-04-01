@@ -34,10 +34,11 @@ Docs are organized by **feature**, not by document type:
 ```
 docs/
 ├── overview.md          # Project vision and goals
+├── spec.md              # Technical specification (stack, architecture, constraints)
 ├── status.md            # What's done, in progress, blocked
 ├── milestones.md        # Phase tracking (if using milestones)
 ├── [feature-name]/      # One folder per feature
-│   ├── [feature-name]-overview.md   # What it does, core rules, assumptions
+│   ├── [feature-name]-overview.md   # What it does, core rules, acceptance criteria
 │   ├── [feature-name]-[flow].md     # Step-by-step user flows
 │   └── [feature-name]-edge-cases.md # Error handling and unusual scenarios
 ├── issues/              # Bug reports (auto-numbered)
@@ -90,6 +91,11 @@ Track where rules come from:
 - Don't silently change rules — if a rule changes, note why
 - Don't create a doc if the content fits naturally in an existing doc
 
+## Conventions
+
+- Product requirements are tech-agnostic. Technical decisions live in `docs/spec.md`.
+- Feature overviews include acceptance criteria as a baseline, even before flows are written.
+
 ## Arnold Commands
 
 - `/arnold:init` — scaffold docs/ for a new project
@@ -106,3 +112,6 @@ Track where rules come from:
 - `/arnold:bug` — record a structured bug report in docs/issues/
 - `/arnold:milestone` — define and track phased work with feature rollup
 - `/arnold:archive` — move stale or reference docs to archive/reference folders
+- `/arnold:feature` — feature completeness matrix, deep status, or deep plan
+- `/arnold:build` — build code from docs with acceptance criteria verification
+- `/arnold:review` — critique docs for usability, product, and technical issues

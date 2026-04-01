@@ -28,12 +28,13 @@ Docs are organized by **feature**, not by document type:
 ```
 docs/
 ├── overview.md          # Project vision and goals
+├── spec.md              # Technical specification (stack, architecture, constraints)
 ├── status.md            # What's done, in progress, blocked
 ├── milestones.md        # Phase tracking (if using milestones)
 ├── [feature-name]/      # One folder per feature
-│   ├── [feature]-overview.md   # What it does, core rules, assumptions
-│   ├── [feature]-[flow].md     # Step-by-step user flows
-│   └── [feature]-edge-cases.md # Error handling and unusual scenarios
+│   ├── [feature-name]-overview.md   # What it does, core rules, acceptance criteria
+│   ├── [feature-name]-[flow].md     # Step-by-step user flows
+│   └── [feature-name]-edge-cases.md # Error handling and unusual scenarios
 ├── issues/              # Bug reports (auto-numbered)
 │   └── NNN-title.md     # Severity, repro steps, affected feature
 ├── decisions/           # Why we chose what we chose
@@ -50,6 +51,8 @@ docs/
 - Lowercase, hyphen-separated: `auth/`, `booking/`, `calendar-sync/`
 - Named by what the feature IS, not what it does: `auth` not `login`
 - Every feature folder has a `[feature]-overview.md` at minimum (e.g., `auth/auth-overview.md`)
+- Product requirements are tech-agnostic. Technical decisions live in `docs/spec.md`.
+- Feature overviews include acceptance criteria as a baseline, even before flows are written.
 
 ### Status Markers
 - 🟢 Implemented — working, documented, aligned
@@ -100,3 +103,6 @@ Track where rules come from:
 - `/arnold:bug` — record a structured bug report in docs/issues/
 - `/arnold:milestone` — define and track phased work with feature rollup
 - `/arnold:archive` — move stale or reference docs to archive/reference folders
+- `/arnold:feature` — feature completeness matrix, deep status, or deep plan
+- `/arnold:build` — build code from docs with acceptance criteria verification
+- `/arnold:review` — critique docs for usability, product, and technical issues

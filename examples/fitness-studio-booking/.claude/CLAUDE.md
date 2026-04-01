@@ -1,3 +1,6 @@
+<!-- EXAMPLE: This file is part of Arnold's worked example. It shows what
+     a real project's CLAUDE.md looks like after running /arnold:init. -->
+
 # Arnold — Documentation-First Development
 
 This project uses Arnold for doc-centered development.
@@ -28,13 +31,16 @@ Docs are organized by **feature**, not by document type:
 ```
 docs/
 ├── overview.md          # Project vision and goals
+├── spec.md              # Technical specification (stack, architecture, constraints)
 ├── status.md            # What's done, in progress, blocked
 ├── [feature-name]/      # One folder per feature
-│   ├── overview.md      # What it does, core rules, assumptions
-│   ├── [flow].md        # Step-by-step user flows
-│   └── edge-cases.md    # Error handling and unusual scenarios
+│   ├── [feature-name]-overview.md   # What it does, core rules, acceptance criteria
+│   ├── [feature-name]-[flow].md     # Step-by-step user flows
+│   └── [feature-name]-edge-cases.md # Error handling and unusual scenarios
 ├── decisions/           # Why we chose what we chose
 │   └── NNN-title.md     # Auto-numbered decision records
+├── archive/             # Stale docs kept for historical record
+├── reference/           # Legacy docs, original specs
 └── unknowns.md          # Open questions and bets
 ```
 
@@ -78,6 +84,11 @@ Track where rules come from:
 - Don't silently change rules — if a rule changes, note why
 - Don't create a doc if the content fits naturally in an existing doc
 
+## Conventions
+
+- Product requirements are tech-agnostic. Technical decisions live in `docs/spec.md`.
+- Feature overviews include acceptance criteria as a baseline, even before flows are written.
+
 ## Arnold Commands
 
 - `/arnold:init` — scaffold docs/ for a new project
@@ -85,12 +96,18 @@ Track where rules come from:
 - `/arnold:check` — compare docs to code, find drift
 - `/arnold:update` — sync docs after a coding session
 - `/arnold:status` — quick project overview
+- `/arnold:decide` — record a decision in docs/decisions/
 - `/arnold:resolve` — fix drift items interactively
 - `/arnold:recap` — start-of-session briefing
 - `/arnold:diff` — quick drift scan
-- `/arnold:decide` — record a decision in docs/decisions/
 - `/arnold:spec` — decompose a spec document into feature-based docs
-- `/arnold:help` — show all commands and usage guide
+- `/arnold:help` — show all commands, when to use them, and doc structure
+- `/arnold:bug` — record a structured bug report in docs/issues/
+- `/arnold:milestone` — define and track phased work with feature rollup
+- `/arnold:archive` — move stale or reference docs to archive/reference folders
+- `/arnold:feature` — feature completeness matrix, deep status, or deep plan
+- `/arnold:build` — build code from docs with acceptance criteria verification
+- `/arnold:review` — critique docs for usability, product, and technical issues
 
 ## Project Context
 
