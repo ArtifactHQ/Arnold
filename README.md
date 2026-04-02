@@ -4,13 +4,13 @@
 <strong>Write requirements in plain English. Build with any coding agent. Check that what got built matches what you asked for.</strong>
 </p>
 <p>
-<a href="https://github.com/ArtifactHQ/Arnold-Lite"><img src="https://img.shields.io/github/stars/ArtifactHQ/Arnold-Lite?style=for-the-badge&logo=github&color=181717" alt="GitHub stars" /></a>
+<a href="https://github.com/ArtifactHQ/Arnold"><img src="https://img.shields.io/github/stars/ArtifactHQ/Arnold?style=for-the-badge&logo=github&color=181717" alt="GitHub stars" /></a>
 <a href="https://discord.gg/m6sTcWSbZm"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord" /></a>
 <a href="https://x.com/madebyartifact"><img src="https://img.shields.io/badge/X-@madebyartifact-000000?style=for-the-badge&logo=x&logoColor=white" alt="X (Twitter)" /></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License" /></a>
 </p>
 <br>
-<pre><code>/install ArtifactHQ/Arnold-Lite</code></pre>
+<pre><code>/install ArtifactHQ/Arnold</code></pre>
 <p><strong>No API key. No database. Runs inside Claude Code, Cursor, Windsurf, and 30+ AI coding agents.</strong></p>
 <br>
 <p>
@@ -126,25 +126,25 @@ Arnold gets smarter with each check. After your first `/arnold:check`, Arnold sa
 **Claude Code plugin** (recommended — one command, auto-updates):
 
 ```
-/install ArtifactHQ/Arnold-Lite
+/install ArtifactHQ/Arnold
 ```
 
 That's it. Arnold's commands are now available as `/arnold:init`, `/arnold:check`, etc.
 
 **Updating:** Re-run the same install command to get the latest version. Arnold detects your existing install and upgrades it in place. Your `docs/` folder is untouched — only the command files are updated.
 
-To uninstall: `/uninstall ArtifactHQ/Arnold-Lite`
+To uninstall: `/uninstall ArtifactHQ/Arnold`
 
 <details>
 <summary><strong>Other install methods</strong></summary>
 
 **Shell script — from a cloned repo:**
 
-If you downloaded or cloned Arnold-Lite, `cd` into your target project directory and run:
+If you downloaded or cloned Arnold, `cd` into your target project directory and run:
 
 ```bash
 cd /path/to/your-project
-bash /path/to/Arnold-Lite/install.sh
+bash /path/to/Arnold/install.sh
 ```
 
 The script detects it's running from a local repo and copies the commands directly — no network required.
@@ -152,7 +152,7 @@ The script detects it's running from a local repo and copies the commands direct
 **Shell script — via curl** (one-liner, no clone needed):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold-Lite/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold/main/install.sh | bash
 ```
 
 Run this from your project's root directory.
@@ -341,7 +341,7 @@ When `/arnold:check` reports drift, you know whether the rule was something you 
 
 **Plugin:**
 ```
-/uninstall ArtifactHQ/Arnold-Lite
+/uninstall ArtifactHQ/Arnold
 ```
 
 **Shell install:**
@@ -350,7 +350,7 @@ bash install.sh --uninstall
 ```
 Or via curl:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold-Lite/main/install.sh | bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold/main/install.sh | bash -s -- --uninstall
 ```
 
 If commands show up twice or fail to run, you may have both the plugin and shell versions active. Remove one of them.
@@ -374,8 +374,8 @@ If commands show up twice or fail to run, you may have both the plugin and shell
 ## FAQ
 
 <details>
-<summary><strong>I cloned/downloaded Arnold-Lite. How do I install it into my project?</strong></summary>
-<code>cd</code> into your target project directory, then run <code>bash /path/to/Arnold-Lite/install.sh</code>. The script detects it's running from a local repo and copies the commands directly — no internet needed. You do NOT install Arnold inside the Arnold-Lite repo itself; you install it into the project you want to document.
+<summary><strong>I cloned/downloaded Arnold. How do I install it into my project?</strong></summary>
+<code>cd</code> into your target project directory, then run <code>bash /path/to/Arnold/install.sh</code>. The script detects it's running from a local repo and copies the commands directly — no internet needed. You do NOT install Arnold inside the Arnold repo itself; you install it into the project you want to document.
 </details>
 
 <details>
