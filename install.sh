@@ -19,7 +19,7 @@ set -euo pipefail
 # ══════════════════════════════════════════════
 
 ARNOLD_VERSION="0.4.0"
-ARNOLD_REPO="ArtifactHQ/Arnold-Lite"
+ARNOLD_REPO="ArtifactHQ/arnold"
 ARNOLD_BRANCH="main"
 ARNOLD_RAW_BASE="https://raw.githubusercontent.com/${ARNOLD_REPO}/${ARNOLD_BRANCH}"
 

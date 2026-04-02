@@ -4,13 +4,13 @@
 <strong>Write requirements in plain English. Build with any coding agent. Check that what got built matches what you asked for.</strong>
 </p>
 <p>
-<a href="https://github.com/ArtifactHQ/Arnold"><img src="https://img.shields.io/github/stars/ArtifactHQ/Arnold?style=for-the-badge&logo=github&color=181717" alt="GitHub stars" /></a>
+<a href="https://github.com/ArtifactHQ/arnold"><img src="https://img.shields.io/github/stars/ArtifactHQ/Arnold?style=for-the-badge&logo=github&color=181717" alt="GitHub stars" /></a>
 <a href="https://discord.gg/m6sTcWSbZm"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord" /></a>
 <a href="https://x.com/madebyartifact"><img src="https://img.shields.io/badge/X-@madebyartifact-000000?style=for-the-badge&logo=x&logoColor=white" alt="X (Twitter)" /></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License" /></a>
 </p>
 <br>
-<pre><code>/install ArtifactHQ/Arnold</code></pre>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/arnold/main/install.sh | bash</code></pre>
 <p><strong>No API key. No database. Runs inside Claude Code, Cursor, Windsurf, and 30+ AI coding agents.</strong></p>
 <br>
 <p>
@@ -33,8 +33,6 @@ In AI-assisted development, it's worse. Claude forgets between sessions. Cursor 
 Arnold checks. It reads your docs and your code, then tells you where they've drifted apart. Not with automated pipelines or CI hooks, but with a conversation. You ask Arnold to check. Arnold tells you what's off. You decide what to fix.
 
 The complexity is in the prompts, not your workflow. What you see: describe your product, write docs, build code, check the gap.
-
-**Artifact**
 
 ---
 
@@ -100,7 +98,7 @@ Scanned: 4 feature docs, 23 source files
   ✓ payments: Stripe is the payment processor
   ✓ booking: Users cannot book the same class twice
 
-Run /arnold:resolve to fix drift items. 🦕
+Run /arnold:resolve to fix drift items.
 ```
 
 That gap between docs and code? Arnold finds it.
@@ -123,43 +121,31 @@ Arnold gets smarter with each check. After your first `/arnold:check`, Arnold sa
 
 ## Install
 
-**Claude Code plugin** (recommended — one command, auto-updates):
+Run this from your project's root directory:
 
-```
-/install ArtifactHQ/Arnold
+```bash
+curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/arnold/main/install.sh | bash
 ```
 
 That's it. Arnold's commands are now available as `/arnold:init`, `/arnold:check`, etc.
 
-**Updating:** Re-run the same install command to get the latest version. Arnold detects your existing install and upgrades it in place. Your `docs/` folder is untouched — only the command files are updated.
+**What does install.sh do?** It copies 17 command files into `.claude/commands/arnold/` inside your project, and appends Arnold's development rules to your project's `CLAUDE.md` (creating one if it doesn't exist). No binaries, no dependencies, no background processes. Commit the `.claude/commands/arnold/` folder to Git so team members who clone the repo get Arnold automatically.
 
-To uninstall: `/uninstall ArtifactHQ/Arnold`
+**Updating:** Re-run the same curl command. The script detects your current version and upgrades to the latest. Your `docs/` folder stays untouched — only the command files in `.claude/commands/arnold/` are replaced.
 
 <details>
 <summary><strong>Other install methods</strong></summary>
 
-**Shell script — from a cloned repo:**
+**From a cloned repo:**
 
 If you downloaded or cloned Arnold, `cd` into your target project directory and run:
 
 ```bash
 cd /path/to/your-project
-bash /path/to/Arnold/install.sh
+bash /path/to/arnold/install.sh
 ```
 
 The script detects it's running from a local repo and copies the commands directly — no network required.
-
-**Shell script — via curl** (one-liner, no clone needed):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold/main/install.sh | bash
-```
-
-Run this from your project's root directory.
-
-**Updating an existing shell install:** Just re-run the same install command. The script detects your current version and upgrades to the latest. Your `docs/` folder stays untouched — only the command files in `.claude/commands/arnold/` are replaced.
-
-**What does install.sh do?** It copies 17 command files into `.claude/commands/arnold/` inside your project, and appends Arnold's development rules to your project's `CLAUDE.md` (creating one if it doesn't exist). That's it — no binaries, no dependencies, no background processes. Commit the `.claude/commands/arnold/` folder to Git so team members who clone the repo get Arnold automatically.
 
 **Works with other AI coding agents too.** Arnold's commands follow the [Agent Skills](https://agentskills.io) standard. Copy the skill folders from `skills/` into `.agents/skills/` in your project. Arnold's development rules are in `CLAUDE.md`. For other tools, copy this content to your tool's equivalent:
 - **Cursor:** `.cursor/rules/arnold.md`
@@ -339,21 +325,14 @@ When `/arnold:check` reports drift, you know whether the rule was something you 
 
 ## Uninstalling
 
-**Plugin:**
-```
-/uninstall ArtifactHQ/Arnold
+```bash
+curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/arnold/main/install.sh | bash -s -- --uninstall
 ```
 
-**Shell install:**
+Or if you installed from a cloned repo:
 ```bash
 bash install.sh --uninstall
 ```
-Or via curl:
-```bash
-curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold/main/install.sh | bash -s -- --uninstall
-```
-
-If commands show up twice or fail to run, you may have both the plugin and shell versions active. Remove one of them.
 
 ---
 
@@ -375,42 +354,58 @@ If commands show up twice or fail to run, you may have both the plugin and shell
 
 <details>
 <summary><strong>I cloned/downloaded Arnold. How do I install it into my project?</strong></summary>
+
 <code>cd</code> into your target project directory, then run <code>bash /path/to/Arnold/install.sh</code>. The script detects it's running from a local repo and copies the commands directly — no internet needed. You do NOT install Arnold inside the Arnold repo itself; you install it into the project you want to document.
+
 </details>
 
 <details>
 <summary><strong>Do I need an API key?</strong></summary>
+
 No. Arnold runs inside your coding agent (Claude Code, Cursor, etc.). No backend, no separate API key.
+
 </details>
 
 <details>
 <summary><strong>Can I use Arnold on an existing project?</strong></summary>
+
 Yes. Run <code>/arnold:init</code> on an existing codebase. Arnold reads your code and scaffolds docs that match. Then <code>/arnold:check</code> to find gaps.
+
 </details>
 
 <details>
 <summary><strong>How does Arnold handle large codebases?</strong></summary>
+
 For large projects, <code>/arnold:check</code> focuses on specific features or changed files. You can scope checks: <code>/arnold:check auth</code> to check just one feature.
+
 </details>
 
 <details>
 <summary><strong>Is this just for web apps?</strong></summary>
+
 No. Any project with documentation: CLIs, libraries, APIs, data pipelines, mobile apps.
+
 </details>
 
 <details>
 <summary><strong>Can I customize the doc structure?</strong></summary>
+
 Yes. The feature-based structure is a strong default, not a requirement. Edit after <code>/arnold:init</code> runs.
+
 </details>
 
 <details>
 <summary><strong>What's the difference between /arnold:check and /arnold:diff?</strong></summary>
+
 <code>/arnold:check</code> does a full comparison of all docs against all code. <code>/arnold:diff</code> only checks files that changed since your last check — faster, but less thorough. Use <code>diff</code> for quick sanity checks, <code>check</code> for a full audit.
+
 </details>
 
 <details>
 <summary><strong>What's docs/spec.md?</strong></summary>
+
 A technical specification file that Arnold generates to separate tech decisions (database, framework, hosting) from product requirements (features, flows, rules). Feature docs stay tech-agnostic so you can swap your stack without rewriting requirements.
+
 </details>
 
 ---
@@ -428,11 +423,7 @@ Arnold is the free, open-source documentation layer from [Artifact](https://arti
 ---
 
 <div align="center">
-
-**Arnold doesn't write your code. It makes sure your code matches your vision.**
-
-**Hold on to your docs.** 🦕
-
-Built by [Artifact](https://artifact.new).
-
+<p><strong>Arnold doesn't write your code. It makes sure your code matches your vision.</strong></p>
+<p><strong>Hold on to your docs.</strong> 🦕</p>
+<p>Built by <a href="https://artifact.new">Artifact</a>.</p>
 </div>
