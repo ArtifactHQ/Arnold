@@ -456,6 +456,121 @@ module ArnoldPipeline
       assert_match(/File not found/, stderr_output)
     end
 
+    test "run --spec passes spec file to call_with_spec" do
+      spec_file = Tempfile.new([ "spec", ".md" ])
+      spec_file.write("# My Spec\n\n```json\n{\"recipe_type\": \"web_app\"}\n```\n")
+      spec_file.close
+
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      orchestrator_mock = mock("orchestrator")
+      orchestrator_mock.expects(:call_with_spec).with(
+        spec_file: spec_file.path,
+        nl_input: "Build from spec: #{File.basename(spec_file.path)}",
+        recipe_override: nil,
+        stop_after: nil
+      ).returns(PipelineRun.create!(nl_input: "Build from spec", status: :completed))
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(orchestrator_mock)
+
+      capture_output { Cli.start([ "run", "--spec", spec_file.path ]) }
+    ensure
+      spec_file&.unlink
+      ArnoldPipeline.reset_configuration!
+    end
+
+    test "run --spec with description uses it as nl_input" do
+      spec_file = Tempfile.new([ "spec", ".md" ])
+      spec_file.write("# Spec\n")
+      spec_file.close
+
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      orchestrator_mock = mock("orchestrator")
+      orchestrator_mock.expects(:call_with_spec).with(
+        spec_file: spec_file.path,
+        nl_input: "A healthcare web app",
+        recipe_override: nil,
+        stop_after: nil
+      ).returns(PipelineRun.create!(nl_input: "A healthcare web app", status: :completed))
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(orchestrator_mock)
+
+      capture_output { Cli.start([ "run", "--spec", spec_file.path, "A healthcare web app" ]) }
+    ensure
+      spec_file&.unlink
+      ArnoldPipeline.reset_configuration!
+    end
+
+    test "run --spec with --recipe passes recipe_override" do
+      spec_file = Tempfile.new([ "spec", ".md" ])
+      spec_file.write("# Spec\n")
+      spec_file.close
+
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      orchestrator_mock = mock("orchestrator")
+      orchestrator_mock.expects(:call_with_spec).with(
+        spec_file: spec_file.path,
+        nl_input: "Build from spec: #{File.basename(spec_file.path)}",
+        recipe_override: "api_service",
+        stop_after: nil
+      ).returns(PipelineRun.create!(nl_input: "Build from spec", status: :completed))
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(orchestrator_mock)
+
+      capture_output { Cli.start([ "run", "--spec", spec_file.path, "--recipe", "api_service" ]) }
+    ensure
+      spec_file&.unlink
+      ArnoldPipeline.reset_configuration!
+    end
+
+    test "run --spec with --stop-after spec pauses without task generation" do
+      spec_file = Tempfile.new([ "spec", ".md" ])
+      spec_file.write("# Spec\n\n```json\n{\"recipe_type\": \"web_app\"}\n```\n")
+      spec_file.close
+
+      ArnoldPipeline.configure do |c|
+        c.llm_api_key = "test"
+        c.github_token = "test"
+        c.github_repo = "owner/repo"
+      end
+
+      orchestrator_mock = mock("orchestrator")
+      orchestrator_mock.expects(:call_with_spec).with(
+        spec_file: spec_file.path,
+        nl_input: "Build from spec: #{File.basename(spec_file.path)}",
+        recipe_override: nil,
+        stop_after: :spec
+      ).returns(PipelineRun.create!(nl_input: "Build from spec", status: :paused))
+      ArnoldPipeline::Orchestrator.stubs(:new).returns(orchestrator_mock)
+
+      capture_output { Cli.start([ "run", "--spec", spec_file.path, "--stop-after", "spec" ]) }
+    ensure
+      spec_file&.unlink
+      ArnoldPipeline.reset_configuration!
+    end
+
+    test "run --spec with nonexistent file exits with error" do
+      assert_raises(SystemExit) do
+        capture_output_and_errors { Cli.start([ "run", "--spec", "/tmp/no_such_spec_arnold.md" ]) }
+      end
+    end
+
+    test "run --spec with nonexistent file shows error message" do
+      stderr_output = capture_stderr_through_exit { Cli.start([ "run", "--spec", "/tmp/no_such_spec_arnold.md" ]) }
+      assert_match(/Spec file not found/, stderr_output)
+    end
+
     test "tasks outputs task list" do
       run_record = PipelineRun.create!(nl_input: "Build a todo app", status: :completed)
       run_record.tasks.create!(title: "Setup project", description: "Initialize the project", tier: 0, position: 0, priority: 1, status: :pending, labels: [ "setup" ], depends_on: [])

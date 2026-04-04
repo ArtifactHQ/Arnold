@@ -1,0 +1,22 @@
+---
+# Maps detected framework/language values to stack families for prompt variant selection.
+# Families determine which instruction set each agent uses in its prompt.
+# Keys must match the resolved stack key from StackAwareFileSelector.resolve_stack_key:
+#   - The framework value if present (e.g., "rails", "react_native", "nextjs")
+#   - The language value as fallback if framework is nil (e.g., "rust")
+
+families:
+  server_monolith:
+    - rails
+    - django
+    - spring_boot
+    - aspnet
+
+  client_spa:
+    - nextjs
+
+  mobile:
+    - react_native
+
+  systems:
+    - rust

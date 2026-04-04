@@ -54,3 +54,4 @@ vendor/bundle
 
 # Git worktrees
 .worktrees/
+.gitnexus

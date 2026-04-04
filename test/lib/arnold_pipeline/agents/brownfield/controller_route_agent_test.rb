@@ -98,7 +98,7 @@ module ArnoldPipeline
           context = build_context(file_manifest: {})
 
           @llm.expects(:chat_json).once.with { |messages:, schema:, **|
-            messages.first[:content].include?("(no controller files found)")
+            messages.first[:content].include?("(no files found)")
           }.returns({ "endpoints" => [] })
 
           result = @agent.call(context:, file_cache: @file_cache)

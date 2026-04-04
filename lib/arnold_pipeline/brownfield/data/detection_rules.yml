@@ -65,6 +65,12 @@ stacks:
       - type: dir_exists
         path: pages
         weight: 2
+      - type: dir_exists
+        path: src/app
+        weight: 2
+      - type: dir_exists
+        path: src/pages
+        weight: 2
       - type: file_exists
         path: package.json
         contains: "next"
@@ -74,6 +80,15 @@ stacks:
         weight: 3
       - type: file_glob
         pattern: "app/**/layout.tsx"
+        weight: 2
+      - type: file_glob
+        pattern: "src/app/**/page.tsx"
+        weight: 3
+      - type: file_glob
+        pattern: "pages/**/*.jsx"
+        weight: 2
+      - type: file_glob
+        pattern: "pages/**/*.tsx"
         weight: 2
 
   java_spring_boot:
@@ -174,6 +189,42 @@ stacks:
       - type: file_exists
         path: .cargo/config.toml
         weight: 2
+
+  react_native:
+    language: javascript
+    framework: react_native
+    signals:
+      - type: file_exists
+        path: package.json
+        contains: "react-native"
+        weight: 5
+      - type: dir_exists
+        path: ios
+        weight: 4
+      - type: dir_exists
+        path: android
+        weight: 4
+      - type: file_exists
+        path: metro.config.js
+        weight: 4
+      - type: file_exists
+        path: app.json
+        weight: 2
+      - type: file_exists
+        path: index.js
+        weight: 2
+      - type: file_exists
+        path: package.json
+        weight: 2
+      - type: file_exists
+        path: tsconfig.json
+        weight: 1
+      - type: file_glob
+        pattern: "src/**/*.tsx"
+        weight: 2
+      - type: file_glob
+        pattern: "src/App.tsx"
+        weight: 3
 
   csharp_aspnet:
     language: csharp

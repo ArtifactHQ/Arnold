@@ -167,6 +167,44 @@ module ArnoldPipeline
           assert_equal "value", result["key"]
         end
 
+        test "chat_json strips markdown fences from response" do
+          schema = { name: "test_schema", schema: { type: "object", properties: { key: { type: "string" } } } }
+
+          stub_request(:post, "https://openrouter.ai/api/v1/chat/completions")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: {
+                choices: [ { message: { role: "assistant", content: "```json\n{\"key\": \"value\"}\n```" } } ]
+              }.to_json
+            )
+
+          result = @provider.chat_json(
+            messages: [ { role: :user, content: "Hello" } ],
+            schema: schema
+          )
+          assert_equal({ "key" => "value" }, result)
+        end
+
+        test "chat_json strips leading preamble text from response" do
+          schema = { name: "test_schema", schema: { type: "object", properties: { key: { type: "string" } } } }
+
+          stub_request(:post, "https://openrouter.ai/api/v1/chat/completions")
+            .to_return(
+              status: 200,
+              headers: { "Content-Type" => "application/json" },
+              body: {
+                choices: [ { message: { role: "assistant", content: "Based on the analysis:\n{\"key\": \"value\"}" } } ]
+              }.to_json
+            )
+
+          result = @provider.chat_json(
+            messages: [ { role: :user, content: "Hello" } ],
+            schema: schema
+          )
+          assert_equal({ "key" => "value" }, result)
+        end
+
         test "chat_json raises when content is missing" do
           schema = { name: "test_schema", schema: { type: "object", properties: {} } }
 

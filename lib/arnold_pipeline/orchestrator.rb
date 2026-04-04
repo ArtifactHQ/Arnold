@@ -68,6 +68,66 @@ module ArnoldPipeline
       run_pipeline!(pipeline_run, from: :generate_spec, stop_after:)
     end
 
+    def call_with_spec(spec_file:, nl_input:, recipe_override: nil, stop_after: nil)
+      ArnoldPipeline.configuration.validate!(stop_after:)
+
+      # Validate recipe override against known recipes
+      if recipe_override
+        valid_types = library_manager.all_recipes.map(&:type)
+        unless valid_types.include?(recipe_override)
+          raise ArgumentError, "Unknown recipe type '#{recipe_override}'. " \
+                               "Valid types: #{valid_types.join(', ')}"
+        end
+      end
+
+      spec_content = File.read(spec_file)
+      structured_data = extract_spec_json(spec_content)
+
+      if recipe_override
+        structured_data ||= {}
+        structured_data["recipe_type"] = recipe_override
+      end
+
+      consumable_content = strip_review_section(spec_content)
+
+      pipeline_run = PipelineRun.create!(
+        nl_input:,
+        status: :pending,
+        metadata: { "imported_from_spec_file" => spec_file }
+      )
+      @event_recorder = PipelineEventRecorder.new(pipeline_run:)
+
+      pipeline_run.update!(status: :generating_spec)
+      pipeline_run.create_specification!(
+        content: consumable_content,
+        structured_data: structured_data || {},
+        version: 1,
+        spec_type: "target"
+      )
+
+      @event_recorder.record(
+        event_type: :spec_imported, stage: "spec_generation",
+        summary: {
+          source: spec_file,
+          content_length: consumable_content.length,
+          has_structured_data: structured_data.present?,
+          recipe_type: structured_data&.dig("recipe_type"),
+          review_section_stripped: spec_content.length != consumable_content.length
+        }
+      )
+
+      # Handle stop_after: :spec — pause immediately since spec is already imported
+      if stop_after == :spec
+        @event_recorder.record(
+          event_type: :pipeline_paused, stage: "lifecycle",
+          summary: { status: "paused", reason: "stop_after_spec" }
+        )
+        return pause!(pipeline_run, :spec)
+      end
+
+      run_pipeline!(pipeline_run, from: :break_tasks, stop_after:)
+    end
+
     def resume(pipeline_run:, stop_after: nil)
       ArnoldPipeline.configuration.validate!(stop_after:)
       unless pipeline_run.paused? || pipeline_run.failed?
@@ -182,6 +242,38 @@ module ArnoldPipeline
       )
 
       { pipeline_run: new_run.reload, deltas: raw_deltas }
+    end
+
+    def analyze_workspace!(manifest:, description: nil, reference_materials: [])
+      require "arnold_pipeline/brownfield/workspace_manifest"
+
+      workspace_id = SecureRandom.uuid
+      config = ArnoldPipeline.configuration
+
+      profiles = manifest.roots.map do |root|
+        original_overrides = config.stack_detection_overrides
+        config.stack_detection_overrides = manifest.stack_overrides_for(root)
+
+        begin
+          profile = analyze_codebase!(
+            repo_path: root.path,
+            description: description,
+            reference_materials: reference_materials
+          )
+
+          profile.pipeline_run.update!(metadata: (profile.pipeline_run.metadata || {}).merge(
+            "workspace_project" => manifest.project_name,
+            "workspace_id" => workspace_id,
+            "workspace_root" => root.name
+          ))
+
+          profile
+        ensure
+          config.stack_detection_overrides = original_overrides
+        end
+      end
+
+      profiles
     end
 
     def analyze_codebase!(repo_path:, description: nil, reference_materials: [])
@@ -324,6 +416,13 @@ module ArnoldPipeline
           version: 1,
           spec_type: "as_built"
         )
+
+        # Store review data for programmatic access
+        if spec_result[:review_data].present?
+          pipeline_run.update!(metadata: (pipeline_run.metadata || {}).merge(
+            "review_data" => spec_result[:review_data]
+          ))
+        end
 
         # Persist codebase profile
         total_tokens = agent_results.sum(&:tokens_used) + (spec_result[:tokens_used] || 0)
@@ -842,9 +941,38 @@ module ArnoldPipeline
 
       all_recipes = library_manager.all_recipes
       recipe = all_recipes.find { |r| r.type == recipe_type }
+
+      # Fallback: infer recipe from NL input when structured_data has no recipe_type
+      if recipe.nil? && pipeline_run.nl_input.present?
+        inferred = library_manager.find_recipes(pipeline_run.nl_input)
+        recipe = inferred[:primary]
+        supporting_types = inferred[:supporting].map(&:type) if supporting_types.empty?
+      end
+
       supporting = supporting_types.filter_map { |t| all_recipes.find { |r| r.type == t } }
 
       [ recipe, supporting ]
+    end
+
+    def extract_spec_json(content)
+      # Use the last JSON fenced block — earlier blocks may be examples/snippets.
+      # Accept both LF and CRLF line endings.
+      matches = content.scan(/```json\s*\r?\n(.*?)\r?\n\s*```/m)
+      return nil if matches.empty?
+
+      JSON.parse(matches.last.first)
+    rescue JSON::ParserError
+      nil
+    end
+
+    def strip_review_section(content)
+      # Primary: remove from Section 11 heading through the end marker
+      stripped = content.sub(/\n## 11\. Review\b.*?<!-- REVIEW_SECTION_END -->\s*/m, "\n")
+      return stripped.rstrip + "\n" if stripped != content
+
+      # Fallback: remove from Section 11 heading through EOF (no markers)
+      stripped = content.sub(/\n## 11\. Review\b.*/m, "\n")
+      stripped.rstrip + "\n"
     end
   end
 end

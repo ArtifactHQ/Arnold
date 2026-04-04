@@ -15,7 +15,7 @@ module ArnoldPipeline
                 type: "array",
                 items: {
                   type: "object", additionalProperties: false,
-                  required: %w[name file purpose rules state_transitions side_effects error_handling dependencies status],
+                  required: %w[name file purpose rules state_transitions side_effects error_handling dependencies status feature_domain],
                   properties: {
                     name: { type: "string" },
                     file: { type: "string" },
@@ -25,7 +25,8 @@ module ArnoldPipeline
                     side_effects: { type: "array", items: { type: "string" } },
                     error_handling: { type: "string" },
                     dependencies: { type: "array", items: { type: "string" } },
-                    status: { type: "string", enum: %w[implemented partial stubbed] }
+                    status: { type: "string", enum: %w[implemented partial stubbed] },
+                    feature_domain: { type: "string" }
                   }
                 }
               }

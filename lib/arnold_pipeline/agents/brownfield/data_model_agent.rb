@@ -15,11 +15,12 @@ module ArnoldPipeline
                 type: "array",
                 items: {
                   type: "object", additionalProperties: false,
-                  required: %w[name table file attributes associations validations callbacks scopes business_methods status],
+                  required: %w[name table file attributes associations validations callbacks scopes business_methods status feature_domain],
                   properties: {
                     name: { type: "string" },
                     table: { type: "string" },
                     file: { type: "string" },
+                    feature_domain: { type: "string" },
                     attributes: {
                       type: "array",
                       items: {

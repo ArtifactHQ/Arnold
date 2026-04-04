@@ -125,6 +125,128 @@ concerns:
       - responsive
       - ui
 
+  navigation:
+    name: Navigation & Routing
+    description: Screen navigation, deep linking, tab/stack/drawer routing in mobile and SPA apps.
+    indicators:
+      - screen
+      - stack
+      - navigator
+      - tab
+      - deeplink
+      - drawer
+      - navigate
+      - route
+      - navigation
+      - linking
+
+  state_management:
+    name: State Management
+    description: Client-side state stores, reducers, actions, selectors, and state persistence.
+    indicators:
+      - redux
+      - saga
+      - thunk
+      - slice
+      - reducer
+      - dispatch
+      - store
+      - zustand
+      - context
+      - provider
+      - selector
+      - state
+
+  native_platform:
+    name: Native Platform
+    description: Platform-specific code, native modules, permissions, and device capabilities.
+    indicators:
+      - ios
+      - android
+      - native_module
+      - bridge
+      - permission
+      - camera
+      - biometric
+      - keychain
+      - platform
+      - turbo_module
+
+  push_notifications:
+    name: Push Notifications
+    description: Push notification registration, handling, and display.
+    indicators:
+      - firebase
+      - fcm
+      - apns
+      - notification
+      - messaging
+      - push_token
+      - badge
+      - remote_notification
+
+  localization:
+    name: Localization & Internationalization
+    description: Multi-language support, translation files, locale management, and i18n framework configuration.
+    indicators:
+      - locale
+      - i18n
+      - l10n
+      - translation
+      - intl
+      - localize
+      - language
+      - strings
+      - messages
+      - react-i18next
+      - formatjs
+      - Localizable
+
+  analytics:
+    name: Analytics & Tracking
+    description: User behavior tracking, event logging, product analytics, and engagement metrics.
+    indicators:
+      - analytics
+      - tracking
+      - mixpanel
+      - amplitude
+      - segment
+      - firebase_analytics
+      - posthog
+      - event
+      - track
+      - logEvent
+      - gtag
+      - plausible
+
+  feature_flags:
+    name: Feature Flags & Remote Config
+    description: Feature toggles, remote configuration, A/B testing, and gradual rollouts.
+    indicators:
+      - feature_flag
+      - feature_toggle
+      - launchdarkly
+      - flagsmith
+      - unleash
+      - remote_config
+      - experiment
+      - ab_test
+      - variant
+      - rollout
+
+  deep_linking:
+    name: Deep Linking & URL Schemes
+    description: Universal links, app links, deep link routing, and URL scheme handling.
+    indicators:
+      - deeplink
+      - deep_link
+      - universal_link
+      - app_link
+      - url_scheme
+      - linking
+      - branch
+      - dynamic_link
+
   deployment:
     name: Deployment & Infrastructure
     description: CI/CD pipelines, containerization, hosting, and infrastructure configuration.

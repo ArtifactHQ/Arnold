@@ -64,15 +64,6 @@ module ArnoldPipeline
 
           response.dig("choices", 0, "message", "content") || ""
         end
-
-        def parse_json_content(response)
-          content = response.dig("choices", 0, "message", "content")
-          raise ArnoldPipeline::Error, "No content in structured output response" unless content
-
-          JSON.parse(content)
-        rescue JSON::ParserError => e
-          raise ArnoldPipeline::Error, "Failed to parse structured output JSON: #{e.message}"
-        end
       end
     end
   end

@@ -21,6 +21,15 @@ module ArnoldPipeline
           8. External Connections (integrations, data flows, failure handling)
           9. Security & Privacy (roles, permissions, data protection, compliance)
           10. Future Considerations (deferred items — do NOT create tasks for these)
+          11. Review (IGNORE — analysis metadata for human review. Do NOT create tasks
+              for open questions, conflicts, or risks listed here. Skip entirely.)
+
+          The specification may contain epistemic callout annotations:
+          > [!CONFIRMED], > [!INFERRED], > [!GAP], > [!CONFLICT].
+          Treat all CONFIRMED and INFERRED requirements as implementable. IGNORE
+          requirements tagged only as [!GAP] unless they have an accompanying
+          GIVEN/WHEN/THEN scenario — gaps without scenarios indicate missing
+          requirements that need product owner resolution.
 
           #{technology_context(recipe, supporting_recipes)}
 

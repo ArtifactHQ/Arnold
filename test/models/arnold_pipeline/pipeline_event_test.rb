@@ -55,7 +55,7 @@ module ArnoldPipeline
         stack_detection codebase_profiling feature_extraction as_built_spec_generated health_baseline
         test_name_collection concern_diff_analysis
         file_manifest_built route_table_parsed git_activity_analyzed parallel_agents_completed
-        pipeline_resumed
+        pipeline_resumed spec_imported
       ]
       assert_equal expected, PipelineEvent.event_types.keys
     end

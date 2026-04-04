@@ -45,12 +45,14 @@ module ArnoldPipeline
             "- #{id}: #{name} -- #{desc}"
           }.join("\n")
 
+          stack_hints = stack_instructions(context)
+
           <<~PROMPT
             You are analyzing an existing #{stack[:language]}/#{stack[:framework]} codebase to understand its infrastructure, conventions, and cross-cutting concerns.
 
             ## Task: Infrastructure & Convention Analysis
 
-            Analyze the configuration files, CI/CD setup, layout templates, asset pipeline, and JavaScript controllers to produce a comprehensive infrastructure profile.
+            Analyze the configuration files, CI/CD setup, and build tooling to produce a comprehensive infrastructure profile.
 
             ### Part 1: Conventions
             Examine the codebase artifacts and file contents to identify:
@@ -63,16 +65,8 @@ module ArnoldPipeline
             7. **configuration_approach**: Environment variables, Rails credentials, config files, dotenv, etc.
 
             ### Part 2: Infrastructure
-            Identify the infrastructure components and their configuration status:
-            - CI/CD pipeline (GitHub Actions, GitLab CI, etc.)
-            - Deployment configuration (Procfile, Dockerfile, Kamal, Heroku)
-            - Asset pipeline (Propshaft, Sprockets, esbuild, Vite)
-            - JavaScript framework (Stimulus, Turbo, React, etc.)
-            - Background jobs (Solid Queue, Sidekiq, etc.)
-            - Caching (Solid Cache, Redis, Memcached)
-            - Email delivery (Action Mailer config)
-            - Database configuration (database.yml, multi-db setup)
-            - Monitoring/logging (exception tracking, APM)
+            Identify the infrastructure components and their configuration status.
+            #{stack_hints[:infrastructure_areas]}
 
             For each infrastructure area, report:
             - **area**: Name of the infrastructure component
@@ -110,7 +104,67 @@ module ArnoldPipeline
           PROMPT
         end
 
+        def self.stack_instructions(context)
+          require "arnold_pipeline/brownfield/stack_aware_file_selector"
+          family = ArnoldPipeline::Brownfield::StackAwareFileSelector.stack_family(context)
+
+          case family
+          when "mobile"
+            {
+              infrastructure_areas: <<~AREAS
+                Look for these mobile infrastructure areas:
+                - Build tooling (Metro bundler, Babel, TypeScript config)
+                - Native build configuration (Xcode/iOS plist, Gradle/Android manifest)
+                - CI/CD pipeline (GitHub Actions, Fastlane, EAS Build)
+                - Environment management (.env files, config modules)
+                - Push notification setup (Firebase, APNs)
+                - Navigation framework (React Navigation, Expo Router)
+                - State management infrastructure (Redux store setup, middleware)
+                - Native module integrations (camera, video, permissions)
+                - Code signing and app distribution
+                - Monitoring/crash reporting (Sentry, Crashlytics)
+              AREAS
+            }
+          when "client_spa"
+            {
+              infrastructure_areas: <<~AREAS
+                Look for these SPA infrastructure areas:
+                - Build tooling (Next.js config, webpack, Vite, TypeScript)
+                - CI/CD pipeline (GitHub Actions, Vercel)
+                - Environment management (.env files)
+                - API layer configuration (base URLs, auth headers)
+                - State management infrastructure (store setup, providers)
+                - Styling framework (Tailwind, CSS Modules, styled-components)
+                - Middleware (Next.js middleware, auth guards)
+                - Monitoring/error tracking (Sentry, LogRocket)
+                - SSR/SSG configuration
+              AREAS
+            }
+          else
+            {
+              infrastructure_areas: <<~AREAS
+                Look for these infrastructure areas:
+                - CI/CD pipeline (GitHub Actions, GitLab CI, etc.)
+                - Deployment configuration (Procfile, Dockerfile, Kamal, Heroku)
+                - Asset pipeline (Propshaft, Sprockets, esbuild, Vite)
+                - JavaScript framework (Stimulus, Turbo, React, etc.)
+                - Background jobs (Solid Queue, Sidekiq, etc.)
+                - Caching (Solid Cache, Redis, Memcached)
+                - Email delivery (Action Mailer config)
+                - Database configuration (database.yml, multi-db setup)
+                - Monitoring/logging (exception tracking, APM)
+              AREAS
+            }
+          end
+        end
+
         def self.select_files(context)
+          require "arnold_pipeline/brownfield/stack_aware_file_selector"
+          ArnoldPipeline::Brownfield::StackAwareFileSelector.select_files(context, "infrastructure") ||
+            legacy_select_files(context)
+        end
+
+        def self.legacy_select_files(context)
           manifest = context.file_manifest || {}
           manifest.keys.select { |path| matches_patterns?(path) }
         end

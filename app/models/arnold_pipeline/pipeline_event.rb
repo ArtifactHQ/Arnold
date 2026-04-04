@@ -40,7 +40,8 @@ module ArnoldPipeline
       route_table_parsed: 32,
       git_activity_analyzed: 33,
       parallel_agents_completed: 34,
-      pipeline_resumed: 35
+      pipeline_resumed: 35,
+      spec_imported: 36
     }
 
     belongs_to :pipeline_run

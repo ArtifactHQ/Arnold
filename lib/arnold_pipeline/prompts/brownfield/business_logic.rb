@@ -48,35 +48,36 @@ module ArnoldPipeline
             ""
           end
 
+          stack_hints = stack_instructions(context)
+
           <<~PROMPT
             You are analyzing an existing #{stack[:language]}/#{stack[:framework]} codebase to understand its business logic layer.
 
             ## Task: Business Logic Analysis
 
-            Examine the service objects, background jobs, mailers, and library code to produce a comprehensive inventory of business logic components.
+            #{stack_hints[:task_description]}
 
             For each service/component discovered, extract:
-            1. **name**: The class or module name (e.g., "OrderProcessor", "NotificationMailer")
+            1. **name**: The class, module, or function name
             2. **file**: The file path where it is defined
-            3. **purpose**: What this component does in 1-2 sentences
+            3. **purpose**: What this component does from the USER'S perspective in 1-2 sentences
+               (e.g., "Allows caregivers to assign tasks to clients" not "Dispatches ASSIGN_TASK action to Redux store")
             4. **rules**: Array of business rules enforced by this code (validations, constraints, conditional logic, permission checks)
-            5. **state_transitions**: Array of state changes this component triggers (e.g., "order: pending -> confirmed", "user: inactive -> active")
-            6. **side_effects**: Array of external interactions (email delivery, webhook calls, cache invalidation, file uploads, API calls, broadcasts)
-            7. **error_handling**: How errors are handled (rescue blocks, error classes, retry logic, fallbacks)
+            5. **state_transitions**: Array of state changes this component triggers
+            6. **side_effects**: Array of external interactions (#{stack_hints[:side_effect_examples]})
+            7. **error_handling**: How errors are handled (#{stack_hints[:error_handling_examples]})
             8. **dependencies**: Array of other services, models, or external systems this depends on
             9. **status**: "implemented" (fully functional), "partial" (incomplete implementation), or "stubbed" (placeholder/TODO)
+            10. **feature_domain**: The product feature this service/component supports, named
+               from the user's perspective (e.g., "Care Plan Management", "Video Consultations",
+               "User Onboarding", "Messaging"). Use consistent names — services that support
+               the same product feature MUST share the same feature_domain value. Infer from
+               the service's purpose, the data it operates on, and what user capability it enables.
+               If the service is cross-cutting infrastructure (e.g., error reporter, API client),
+               use "Platform Infrastructure".
 
             ## What to Look For
-            - Service objects (app/services/) — command/query pattern, interactors, form objects
-            - Background jobs (app/jobs/) — async processing, scheduled tasks, queue configuration
-            - Mailers (app/mailers/) — email templates, delivery triggers, preview support
-            - Library code (lib/) — shared utilities, adapters, integrations, domain logic
-            - Command patterns (call, execute, perform methods)
-            - Transaction blocks and rollback handling
-            - External API integrations
-            - Event publishing/subscribing
-            - Rate limiting and throttling
-            - Retry and idempotency patterns
+            #{stack_hints[:look_for]}
 
             ## Stack Fingerprint
             - Language: #{stack[:language]}
@@ -97,7 +98,77 @@ module ArnoldPipeline
           PROMPT
         end
 
+        def self.stack_instructions(context)
+          require "arnold_pipeline/brownfield/stack_aware_file_selector"
+          family = ArnoldPipeline::Brownfield::StackAwareFileSelector.stack_family(context)
+
+          case family
+          when "mobile"
+            {
+              task_description: "Examine the Redux sagas/thunks, custom hooks, utility modules, and service layers to produce a comprehensive inventory of business logic components. In a mobile client, business logic lives in state management side effects, custom hooks, and service modules.",
+              side_effect_examples: "API calls, push notification triggers, analytics events, navigation actions, AsyncStorage writes",
+              error_handling_examples: "try/catch blocks, saga error boundaries, error state dispatches, toast/snackbar notifications",
+              look_for: <<~LOOK
+                - Redux sagas (src/redux/sagas/) — async workflows, API call sequences, retry logic
+                - Redux thunks — async dispatch chains
+                - Custom hooks (src/hooks/) — reusable business logic encapsulated as hooks
+                - Utility modules (src/utils/, src/helpers/) — shared business logic, formatters, validators
+                - Service modules (src/services/) — API wrappers, platform integrations
+                - Form validation logic (Yup schemas, Formik validators)
+                - Navigation-driven workflows (multi-step forms, onboarding flows)
+                - Push notification handlers (foreground/background behavior)
+                - Offline/sync logic (queue actions while offline, retry on reconnect)
+                - Analytics/tracking modules (src/analytics/, src/tracking/) — event names reveal which
+                  product features are instrumented and what user actions matter to the business
+                - Feature flag evaluation logic — conditional code paths gated by flags reveal
+                  planned/toggled product capabilities
+                - If feature-organized directories exist (src/features/*/, src/modules/*/), each
+                  directory likely contains the business logic for one product feature
+              LOOK
+            }
+          when "client_spa"
+            {
+              task_description: "Examine the server actions, API routes, service modules, and utility code to produce a comprehensive inventory of business logic components.",
+              side_effect_examples: "API calls, database writes, email delivery, webhook calls, cache invalidation, file uploads",
+              error_handling_examples: "try/catch blocks, error boundaries, error responses, redirects",
+              look_for: <<~LOOK
+                - Server Actions (app/**/actions.ts) — form processing, data mutations
+                - API route handlers (app/api/**/route.ts) — REST endpoint logic
+                - Service modules (lib/services/) — shared business logic
+                - Utility code (lib/utils/) — helpers, formatters, validators
+                - tRPC routers — typed API procedures
+                - Middleware — request/response processing
+                - Zod schemas — runtime validation
+              LOOK
+            }
+          else
+            {
+              task_description: "Examine the service objects, background jobs, mailers, and library code to produce a comprehensive inventory of business logic components.",
+              side_effect_examples: "email delivery, webhook calls, cache invalidation, file uploads, API calls, broadcasts",
+              error_handling_examples: "rescue blocks, error classes, retry logic, fallbacks",
+              look_for: <<~LOOK
+                - Service objects (app/services/) — command/query pattern, interactors, form objects
+                - Background jobs (app/jobs/) — async processing, scheduled tasks, queue configuration
+                - Mailers (app/mailers/) — email templates, delivery triggers, preview support
+                - Library code (lib/) — shared utilities, adapters, integrations, domain logic
+                - Command patterns (call, execute, perform methods)
+                - Transaction blocks and rollback handling
+                - External API integrations
+                - Event publishing/subscribing
+                - Rate limiting and throttling
+                - Retry and idempotency patterns
+              LOOK
+            }
+          end
+        end
+
         def self.select_files(context)
+          require "arnold_pipeline/brownfield/stack_aware_file_selector"
+          ArnoldPipeline::Brownfield::StackAwareFileSelector.select_files(context, "business_logic") ||
+            legacy_select_files(context)
+        end
+
+        def self.legacy_select_files(context)
           manifest = context.file_manifest || {}
           manifest.keys.select { |path| matches_patterns?(path) && !excluded?(path) }
         end

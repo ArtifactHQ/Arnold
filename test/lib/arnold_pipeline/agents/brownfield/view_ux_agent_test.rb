@@ -110,8 +110,9 @@ module ArnoldPipeline
 
           @llm.expects(:chat_json).once.with { |messages:, **|
             content = messages.first[:content]
-            content.include?("(no view templates found)") &&
-              content.include?("(no helper files found)")
+            !content.include?("app/models/user.rb") &&
+              !content.include?("config/routes.rb") &&
+              content.include?("(no view/component files found)")
           }.returns({ "pages" => [] })
 
           @agent.call(context:, file_cache: @file_cache)
@@ -122,10 +123,7 @@ module ArnoldPipeline
 
           @llm.expects(:chat_json).once.with { |messages:, **|
             content = messages.first[:content]
-            content.include?("(no view templates found)") &&
-              content.include?("(no helper files found)") &&
-              content.include?("(no JavaScript controllers found)") &&
-              content.include?("(no component files found)")
+            content.include?("(no view/component files found)")
           }.returns({ "pages" => [] })
 
           result = @agent.call(context:, file_cache: @file_cache)

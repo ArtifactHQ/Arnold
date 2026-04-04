@@ -127,6 +127,42 @@ module ArnoldPipeline
         end
       end
 
+      test "detects React Native project" do
+        Dir.mktmpdir do |dir|
+          FileUtils.mkdir_p(File.join(dir, "ios"))
+          FileUtils.mkdir_p(File.join(dir, "android"))
+          FileUtils.mkdir_p(File.join(dir, "src"))
+          File.write(File.join(dir, "package.json"), '{"dependencies": {"react-native": "0.73.2", "react": "18.2.0"}}')
+          File.write(File.join(dir, "metro.config.js"), "module.exports = {}")
+          File.write(File.join(dir, "app.json"), '{"name": "MyApp"}')
+          File.write(File.join(dir, "index.js"), "import { AppRegistry } from 'react-native'")
+          File.write(File.join(dir, "tsconfig.json"), "{}")
+          File.write(File.join(dir, "src/App.tsx"), "export default function App() {}")
+
+          result = StackDetector.call(repo_path: dir)
+
+          assert_equal "javascript", result[:language]
+          assert_equal "react_native", result[:framework]
+          assert result[:confidence] >= 50, "Confidence should be >= 50, got #{result[:confidence]}"
+        end
+      end
+
+      test "react_native detection does not confuse with nextjs" do
+        Dir.mktmpdir do |dir|
+          # Next.js project should not match react_native
+          FileUtils.mkdir_p(File.join(dir, "app"))
+          File.write(File.join(dir, "package.json"), '{"dependencies": {"next": "14.0.0"}}')
+          File.write(File.join(dir, "next.config.js"), "module.exports = {}")
+          File.write(File.join(dir, "tsconfig.json"), "{}")
+          File.write(File.join(dir, "app/page.tsx"), "export default function Home() {}")
+          File.write(File.join(dir, "app/layout.tsx"), "export default function RootLayout() {}")
+
+          result = StackDetector.call(repo_path: dir)
+
+          refute_equal "react_native", result[:framework]
+        end
+      end
+
       test "detects Django project" do
         Dir.mktmpdir do |dir|
           FileUtils.mkdir_p(File.join(dir, "myapp"))

@@ -926,9 +926,28 @@ All commands accept the following global options:
 - Options: --config (YAML path), --provider (anthropic|openai|openrouter), --model (name), --reference-materials (array of file paths), --json (boolean), --verbose (boolean), --output/-o (file path).
 - Exit code 0 on success, 1 on error (including directory not found).
 
+#### Command: analyze --workspace [SPEC-CLI-ANALYZE-002]
+- GIVEN a YAML workspace manifest file path supplied via the `--workspace` flag.
+- WHEN `arnold analyze --workspace MANIFEST.yml` is executed (PATH argument is optional and omitted).
+- THEN the system loads the manifest via `Brownfield::WorkspaceManifest.load`, validates that each declared root directory exists on disk, and exits with code 1 if any root is missing.
+- AND the orchestrator calls `analyze_workspace!`, which runs an independent brownfield analysis per declared root and produces one CodebaseProfile per root.
+- AND each resulting PipelineRun is tagged in its metadata JSON column with `workspace_project` (the manifest's `project` value), `workspace_id` (a shared UUID for the entire workspace invocation), and `workspace_root` (the root's resolved path).
+- WHEN text output mode is active (no --json flag).
+- THEN a per-root summary is printed for each root showing: root name, detected stack, confidence score, health baseline pass/fail, concern count, and PipelineRun ID.
+- WHEN the `--json` flag is provided.
+- THEN the output is a JSON array of profile objects, one per root, each containing the standard profile fields plus a `root_name` field identifying which root it belongs to.
+- WHEN the `--output/-o` flag is provided.
+- THEN the as-built specification for each root is written to a separate file named `{base}.{root_name}.md`, where `{base}` is the path supplied to `--output`.
+- GIVEN both PATH and `--workspace` are omitted.
+- WHEN `arnold analyze` is executed.
+- THEN the command exits with code 1 and an error message indicating that a PATH or --workspace argument is required.
+- AND the existing single-root `arnold analyze PATH` behavior is completely unchanged when PATH is supplied without `--workspace`.
+- Options (in addition to SPEC-CLI-ANALYZE-001 options): --workspace (YAML file path).
+
 ### Requirement: Brownfield Codebase Analysis [SPEC-BROWNFIELD-001]
 The system SHALL provide a brownfield analysis pipeline that produces a CodebaseProfile, HealthBaseline, and As-Built Specification from an existing codebase.
 The analysis pipeline SHALL execute as a sequence of deterministic and LLM-driven steps, recorded via pipeline events under the "brownfield" stage.
+The analysis pipeline MAY be invoked in workspace mode via a workspace manifest, where it executes independently per declared root and produces N CodebaseProfiles tagged with a shared workspace identifier.
 
 #### Scenario: Stack Detection [SPEC-BROWNFIELD-002]
 - GIVEN a path to an existing codebase directory.
@@ -1010,6 +1029,19 @@ The analysis pipeline SHALL execute as a sequence of deterministic and LLM-drive
 - THEN a CodebaseProfile record is created with: project_name, stack_fingerprint, recipe_alignment, conventions, health_baseline, change_surface, scan_data (including agent_results, file_manifest, route_table, git_activity, test_names), as_built_spec content, confidence, token_budget_used, and analyzed_at.
 - AND the CodebaseProfile belongs to the PipelineRun.
 - AND the PipelineRun transitions to `completed` status.
+
+#### Scenario: Workspace Manifest [SPEC-BROWNFIELD-020]
+- GIVEN a YAML workspace manifest file with a required `project` (string) key and a required `roots` (non-empty array) key.
+- AND each root entry has a required `path` key and optional `name` and `hint` keys.
+- WHEN `Brownfield::WorkspaceManifest.load` parses the file.
+- THEN each root's `path` is resolved relative to the manifest file's parent directory.
+- AND each root's `name` defaults to the directory basename when the `name` key is omitted.
+- AND each root's `hint`, when present, is mapped to `stack_detection_overrides: {framework: hint}` for that root's StackDetector invocation, which skips heuristic framework detection for that root.
+- WHEN the manifest is structurally invalid.
+- THEN validation raises an error for: non-Hash input, missing `project` key, missing or non-array `roots` key, empty `roots` array, any root entry missing a `path` key, or duplicate resolved root names within the manifest.
+- WHEN `analyze_workspace!` is called on the orchestrator.
+- THEN it iterates the validated roots in order, applies per-root `stack_detection_overrides` before calling the existing `analyze_codebase!` method for that root, and restores the original overrides configuration via an ensure block regardless of per-root success or failure.
+- AND each root's analysis is executed independently using the unmodified single-root `analyze_codebase!` code path.
 
 ### Requirement: Drift Detection [SPEC-DRIFT-001]
 The system SHALL provide a DriftDetector agent that analyzes completed pipeline work against the specification to identify divergence.

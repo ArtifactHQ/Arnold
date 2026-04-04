@@ -183,6 +183,103 @@ stacks:
     boot_command: "cargo run"
     test_command: "cargo test"
 
+  javascript_react_native:
+    schema: []
+    routes:
+      - path: src/routes/**
+        format: typescript
+      - path: src/navigation/**
+        format: typescript
+      - path: src/features/**/navigation*
+        format: typescript
+    components:
+      - path: src/components/**/*.tsx
+        format: tsx
+      - path: src/pages/**/*.tsx
+        format: tsx
+      - path: src/screens/**/*.tsx
+        format: tsx
+      - path: src/context/**/*.tsx
+        format: tsx
+      - path: src/features/**/screens/**/*.tsx
+        format: tsx
+      - path: src/features/**/components/**/*.tsx
+        format: tsx
+    dependency_manifest:
+      - path: package.json
+        format: json
+      - path: package-lock.json
+        format: json
+      - path: yarn.lock
+        format: yarn
+    entry_point:
+      - path: index.js
+        format: javascript
+      - path: App.tsx
+        format: tsx
+      - path: src/App.tsx
+        format: tsx
+    orm_config: []
+    ci_config:
+      - path: .github/workflows/*.yml
+        format: yaml
+      - path: fastlane/Fastfile
+        format: ruby
+    localization:
+      - path: src/locales/**
+        format: json
+      - path: src/i18n/**
+        format: json
+      - path: src/translations/**
+        format: json
+      - path: src/lang/**
+        format: json
+      - path: ios/*.lproj/Localizable.strings
+        format: strings
+      - path: android/app/src/main/res/values/strings.xml
+        format: xml
+    analytics:
+      - path: src/analytics/**
+        format: typescript
+      - path: src/tracking/**
+        format: typescript
+    feature_flags:
+      - path: src/config/features*
+        format: typescript
+      - path: src/config/featureFlags*
+        format: typescript
+    api_contracts:
+      - path: openapi.*
+        format: yaml
+      - path: swagger.*
+        format: yaml
+      - path: src/graphql/**
+        format: graphql
+      - path: "**/*.graphql"
+        format: graphql
+    docs:
+      - path: README.md
+        format: markdown
+      - path: docs/**
+        format: markdown
+      - path: CHANGELOG.md
+        format: markdown
+    backend_source:
+      - path: backend/app/controllers/**
+        format: ruby
+      - path: backend/app/models/**
+        format: ruby
+      - path: backend/config/routes.rb
+        format: ruby
+      - path: backend/db/schema.rb
+        format: ruby
+      - path: server/src/**
+        format: typescript
+      - path: api/src/**
+        format: typescript
+    boot_command: "npx react-native start"
+    test_command: "npx jest"
+
   csharp_aspnet:
     schema:
       - path: Migrations/*.cs

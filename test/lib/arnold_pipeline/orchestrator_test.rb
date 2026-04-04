@@ -472,11 +472,12 @@ module ArnoldPipeline
         "Should not record SHA when no repo_path configured"
     end
 
-    test "break_tasks works without recipe in structured_data" do
+    test "break_tasks infers recipe from NL input when structured_data has no recipe_type" do
       stub_spec_generation!
 
       @task_breaker.expects(:call).with { |kwargs|
-        kwargs[:recipe].nil? && kwargs[:supporting_recipes] == []
+        # With the fallback, a recipe is inferred from NL input even without recipe_type
+        kwargs[:spec_content].is_a?(String)
       }.returns(sample_tasks)
 
       @orchestrator.call(nl_input: "Build a todo app", stop_after: :tasks)
@@ -840,6 +841,283 @@ module ArnoldPipeline
         orchestrator.fork!(pipeline_run: run, change_request: "Nothing")
       end
       assert_match(/No deltas generated/, error.message)
+    end
+
+    # --- call_with_spec tests ---
+
+    test "call_with_spec skips spec generation and starts at break_tasks" do
+      spec_file = Tempfile.new([ "spec", ".md" ])
+      spec_file.write(<<~SPEC)
+        # My App — As-Built Specification
+
+        ## 2. Features
+
+        ### Requirement: User Login [REQ-AUTH-001]
+        Users SHALL be able to log in with email and password.
+
+        ```json
+        {"application_type": "GENERIC", "features": ["auth"], "tech_stack": {}, "data_models": [{"name": "User", "attributes": ["email", "password"]}], "recipe_type": "web_app", "supporting_recipe_types": []}
+        ```
+      SPEC
+      spec_file.flush
+
+      @spec_generator.expects(:call).never
+      @task_breaker.expects(:call).with { |kwargs|
+        kwargs[:spec_content].include?("User Login") &&
+          kwargs[:recipe]&.type == "web_app"
+      }.returns(sample_tasks)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      result = @orchestrator.call_with_spec(
+        spec_file: spec_file.path,
+        nl_input: "Build from spec"
+      )
+
+      assert_equal "completed", result.status
+      assert_equal "target", result.specification.spec_type
+      assert_equal "web_app", result.specification.structured_data["recipe_type"]
+      assert_equal spec_file.path, result.metadata["imported_from_spec_file"]
+    ensure
+      spec_file&.close
+      spec_file&.unlink
+    end
+
+    test "call_with_spec applies recipe_override to structured_data" do
+      spec_file = Tempfile.new([ "spec", ".md" ])
+      spec_file.write("# Spec\n\n```json\n{\"recipe_type\": null}\n```\n")
+      spec_file.flush
+
+      @task_breaker.expects(:call).with { |kwargs|
+        kwargs[:recipe]&.type == "api_service"
+      }.returns(sample_tasks)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      result = @orchestrator.call_with_spec(
+        spec_file: spec_file.path,
+        nl_input: "Build an API",
+        recipe_override: "api_service"
+      )
+
+      assert_equal "api_service", result.specification.structured_data["recipe_type"]
+    ensure
+      spec_file&.close
+      spec_file&.unlink
+    end
+
+    test "call_with_spec strips review section before storing spec" do
+      spec_file = Tempfile.new([ "spec", ".md" ])
+      spec_file.write(<<~SPEC)
+        # Spec
+
+        ## 2. Features
+
+        ### Requirement: Login [REQ-AUTH-001]
+        Users SHALL log in.
+
+        ```json
+        {"application_type": "GENERIC", "features": ["auth"], "tech_stack": {}, "data_models": [], "recipe_type": null, "supporting_recipe_types": []}
+        ```
+
+        ## 11. Review
+        <!-- REVIEW_SECTION_START -->
+
+        ### Open Questions
+        - **[OQ-001]** Which auth provider?
+
+        <!-- REVIEW_SECTION_END -->
+      SPEC
+      spec_file.flush
+
+      @task_breaker.stubs(:call).returns(sample_tasks)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      result = @orchestrator.call_with_spec(
+        spec_file: spec_file.path,
+        nl_input: "Build from spec"
+      )
+
+      refute result.specification.content.include?("Review"),
+        "Review section should be stripped from stored spec"
+      refute result.specification.content.include?("OQ-001"),
+        "Open questions should be stripped"
+      assert result.specification.content.include?("Login"),
+        "Feature content should be preserved"
+    ensure
+      spec_file&.close
+      spec_file&.unlink
+    end
+
+    test "call_with_spec records spec_imported event" do
+      spec_file = Tempfile.new([ "spec", ".md" ])
+      spec_file.write("# Spec\n\n```json\n{\"recipe_type\": \"web_app\"}\n```\n")
+      spec_file.flush
+
+      @task_breaker.stubs(:call).returns(sample_tasks)
+      @executor.stubs(:call).returns([])
+      @executor.stubs(:await_results).returns(nil)
+      @executor.stubs(:merge_results).returns([])
+      @analyzer.expects(:call).once.returns(analysis_result("done", 95))
+
+      result = @orchestrator.call_with_spec(
+        spec_file: spec_file.path,
+        nl_input: "Build from spec"
+      )
+
+      event = result.pipeline_events.find_by(event_type: :spec_imported)
+      assert_not_nil event, "Expected spec_imported event"
+      assert_equal spec_file.path, event.summary["source"]
+      assert_equal "web_app", event.summary["recipe_type"]
+    ensure
+      spec_file&.close
+      spec_file&.unlink
+    end
+
+    test "call_with_spec with stop_after tasks pauses after task breakdown" do
+      spec_file = Tempfile.new([ "spec", ".md" ])
+      spec_file.write("# Spec\n\n```json\n{}\n```\n")
+      spec_file.flush
+
+      @task_breaker.stubs(:call).returns(sample_tasks)
+
+      result = @orchestrator.call_with_spec(
+        spec_file: spec_file.path,
+        nl_input: "Build from spec",
+        stop_after: :tasks
+      )
+
+      assert_equal "paused", result.status
+      assert result.tasks.count > 0
+    ensure
+      spec_file&.close
+      spec_file&.unlink
+    end
+
+    test "call_with_spec with stop_after spec pauses immediately" do
+      spec_file = Tempfile.new([ "spec", ".md" ])
+      spec_file.write("# Spec\n\n```json\n{\"recipe_type\": \"web_app\"}\n```\n")
+      spec_file.flush
+
+      @spec_generator.expects(:call).never
+      @task_breaker.expects(:call).never
+
+      result = @orchestrator.call_with_spec(
+        spec_file: spec_file.path,
+        nl_input: "Build from spec",
+        stop_after: :spec
+      )
+
+      assert_equal "paused", result.status
+      assert result.specification.present?, "Spec should be persisted"
+      assert_equal 0, result.tasks.count, "No tasks should be generated"
+    ensure
+      spec_file&.close
+      spec_file&.unlink
+    end
+
+    test "call_with_spec raises on invalid recipe override" do
+      spec_file = Tempfile.new([ "spec", ".md" ])
+      spec_file.write("# Spec\n")
+      spec_file.flush
+
+      error = assert_raises(ArgumentError) do
+        @orchestrator.call_with_spec(
+          spec_file: spec_file.path,
+          nl_input: "Build",
+          recipe_override: "moblie_app"
+        )
+      end
+      assert_match(/Unknown recipe type 'moblie_app'/, error.message)
+      assert_match(/Valid types:/, error.message)
+    ensure
+      spec_file&.close
+      spec_file&.unlink
+    end
+
+    test "extract_spec_json uses last JSON block not first" do
+      content = <<~SPEC
+        # Spec
+
+        Example API response:
+        ```json
+        {"status": "ok", "data": [1, 2, 3]}
+        ```
+
+        ## Metadata
+        ```json
+        {"recipe_type": "web_app", "application_type": "GENERIC"}
+        ```
+      SPEC
+
+      result = @orchestrator.send(:extract_spec_json, content)
+      assert_equal "web_app", result["recipe_type"]
+      assert_nil result["status"], "Should not pick up the example JSON block"
+    end
+
+    test "extract_spec_json handles CRLF line endings" do
+      content = "# Spec\r\n\r\n```json\r\n{\"recipe_type\": \"api_service\"}\r\n```\r\n"
+
+      result = @orchestrator.send(:extract_spec_json, content)
+      assert_equal "api_service", result["recipe_type"]
+    end
+
+    # --- strip_review_section tests ---
+
+    test "strip_review_section removes section with markers" do
+      content = "# Spec\n\nContent here.\n\n## 11. Review\n<!-- REVIEW_SECTION_START -->\nReview stuff\n<!-- REVIEW_SECTION_END -->\n"
+      result = @orchestrator.send(:strip_review_section, content)
+
+      refute result.include?("Review"), "Review section should be removed"
+      assert result.include?("Content here"), "Other content should be preserved"
+    end
+
+    test "strip_review_section removes section without markers (fallback)" do
+      content = "# Spec\n\nContent here.\n\n## 11. Review\n\n### Open Questions\n- Question 1\n"
+      result = @orchestrator.send(:strip_review_section, content)
+
+      refute result.include?("Review"), "Review section should be removed"
+      assert result.include?("Content here"), "Other content should be preserved"
+    end
+
+    test "strip_review_section is a no-op when no review section" do
+      content = "# Spec\n\nContent here.\n"
+      result = @orchestrator.send(:strip_review_section, content)
+
+      assert_equal "# Spec\n\nContent here.\n", result
+    end
+
+    # --- resolve_recipes fallback tests ---
+
+    test "resolve_recipes falls back to NL input when recipe_type is null" do
+      run = PipelineRun.create!(nl_input: "Build a web application with user auth")
+      run.create_specification!(
+        content: "# Spec",
+        structured_data: { "recipe_type" => nil },
+        version: 1
+      )
+
+      recipe, _supporting = @orchestrator.send(:resolve_recipes, run)
+      assert_not_nil recipe, "Should infer recipe from NL input"
+    end
+
+    test "resolve_recipes uses recipe_type when present" do
+      run = PipelineRun.create!(nl_input: "whatever")
+      run.create_specification!(
+        content: "# Spec",
+        structured_data: { "recipe_type" => "web_app" },
+        version: 1
+      )
+
+      recipe, _supporting = @orchestrator.send(:resolve_recipes, run)
+      assert_equal "web_app", recipe&.type
     end
 
     # --- finalize! tests ---

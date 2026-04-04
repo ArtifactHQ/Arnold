@@ -15,7 +15,7 @@ module ArnoldPipeline
                 type: "array",
                 items: {
                   type: "object", additionalProperties: false,
-                  required: %w[name path description data_displayed actions role_adaptations layout javascript_controllers status],
+                  required: %w[name path description data_displayed actions role_adaptations layout javascript_controllers status feature_domain],
                   properties: {
                     name: { type: "string" },
                     path: { type: "string" },
@@ -25,7 +25,8 @@ module ArnoldPipeline
                     role_adaptations: { type: "array", items: { type: "string" } },
                     layout: { type: "string" },
                     javascript_controllers: { type: "array", items: { type: "string" } },
-                    status: { type: "string", enum: %w[implemented partial stubbed] }
+                    status: { type: "string", enum: %w[implemented partial stubbed] },
+                    feature_domain: { type: "string" }
                   }
                 }
               }
@@ -52,6 +53,12 @@ module ArnoldPipeline
         private
 
         def select_files(context)
+          require "arnold_pipeline/brownfield/stack_aware_file_selector"
+          ArnoldPipeline::Brownfield::StackAwareFileSelector.select_files(context, "view_ux") ||
+            legacy_select_files(context)
+        end
+
+        def legacy_select_files(context)
           manifest = context.file_manifest || {}
           manifest.keys.select { |path| FILE_PATTERNS.any? { |pattern| path.match?(pattern) } }
         end

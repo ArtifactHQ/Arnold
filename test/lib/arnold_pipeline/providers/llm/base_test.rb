@@ -82,6 +82,60 @@ module ArnoldPipeline
             Base.new.chat(messages: [])
           end
         end
+
+        # -- parse_json_content tests (fence stripping) --
+
+        test "parse_json_content parses clean JSON" do
+          provider = Base.new
+          response = { "choices" => [ { "message" => { "content" => '{"key": "value"}' } } ] }
+          assert_equal({ "key" => "value" }, provider.send(:parse_json_content, response))
+        end
+
+        test "parse_json_content strips markdown json fences" do
+          provider = Base.new
+          content = "```json\n{\"key\": \"value\"}\n```"
+          response = { "choices" => [ { "message" => { "content" => content } } ] }
+          assert_equal({ "key" => "value" }, provider.send(:parse_json_content, response))
+        end
+
+        test "parse_json_content strips untagged markdown fences" do
+          provider = Base.new
+          content = "```\n{\"key\": \"value\"}\n```"
+          response = { "choices" => [ { "message" => { "content" => content } } ] }
+          assert_equal({ "key" => "value" }, provider.send(:parse_json_content, response))
+        end
+
+        test "parse_json_content strips leading preamble text" do
+          provider = Base.new
+          content = "Based on my analysis, here is the result:\n{\"key\": \"value\"}"
+          response = { "choices" => [ { "message" => { "content" => content } } ] }
+          assert_equal({ "key" => "value" }, provider.send(:parse_json_content, response))
+        end
+
+        test "parse_json_content handles array in fences" do
+          provider = Base.new
+          content = "```json\n[{\"a\": 1}, {\"b\": 2}]\n```"
+          response = { "choices" => [ { "message" => { "content" => content } } ] }
+          assert_equal([ { "a" => 1 }, { "b" => 2 } ], provider.send(:parse_json_content, response))
+        end
+
+        test "parse_json_content raises on nil content" do
+          provider = Base.new
+          response = { "choices" => [ { "message" => { "content" => nil } } ] }
+          error = assert_raises(ArnoldPipeline::Error) do
+            provider.send(:parse_json_content, response)
+          end
+          assert_match(/No content in structured output/, error.message)
+        end
+
+        test "parse_json_content raises on completely unparseable content" do
+          provider = Base.new
+          response = { "choices" => [ { "message" => { "content" => "No JSON here at all" } } ] }
+          error = assert_raises(ArnoldPipeline::Error) do
+            provider.send(:parse_json_content, response)
+          end
+          assert_match(/Failed to parse structured output JSON/, error.message)
+        end
       end
     end
   end

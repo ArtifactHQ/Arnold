@@ -15,7 +15,7 @@ module ArnoldPipeline
                 type: "array",
                 items: {
                   type: "object", additionalProperties: false,
-                  required: %w[verb path controller action description access_control side_effects error_handling input_params output_format status],
+                  required: %w[verb path controller action description access_control side_effects error_handling input_params output_format status feature_domain],
                   properties: {
                     verb: { type: "string" },
                     path: { type: "string" },
@@ -27,7 +27,8 @@ module ArnoldPipeline
                     error_handling: { type: "string" },
                     input_params: { type: "array", items: { type: "string" } },
                     output_format: { type: "string" },
-                    status: { type: "string", enum: %w[implemented partial stubbed] }
+                    status: { type: "string", enum: %w[implemented partial stubbed] },
+                    feature_domain: { type: "string" }
                   }
                 }
               }
@@ -47,6 +48,12 @@ module ArnoldPipeline
         private
 
         def select_files(context)
+          require "arnold_pipeline/brownfield/stack_aware_file_selector"
+          ArnoldPipeline::Brownfield::StackAwareFileSelector.select_files(context, "controller_route") ||
+            legacy_select_files(context)
+        end
+
+        def legacy_select_files(context)
           manifest = context.file_manifest || {}
           manifest.keys.select { |path| path.match?(%r{\Aapp/controllers/.*\.rb\z}) }
         end

@@ -1,0 +1,410 @@
+---
+# Per-stack, per-agent file selection patterns for brownfield analysis.
+# When a stack has an entry here, StackAwareFileSelector uses these patterns
+# instead of the agent's hardcoded defaults. Stacks not listed here fall back
+# to each agent's legacy FILE_PATTERNS constant.
+
+stacks:
+  rails:
+    infrastructure:
+      patterns:
+        - "config/**"
+        - "Procfile"
+        - "Dockerfile*"
+        - ".github/**"
+        - ".gitlab-ci.yml"
+        - "app/views/layouts/**"
+        - "app/javascript/controllers/**"
+        - "app/assets/**"
+    data_model:
+      patterns:
+        - "app/models/**/*.rb"
+        - "db/schema.rb"
+        - "db/migrate/**"
+        - "app/models/concerns/**"
+        # API contracts
+        - "openapi.*"
+        - "swagger.*"
+        - "app/graphql/**"
+    business_logic:
+      patterns:
+        - "app/services/**/*.rb"
+        - "app/jobs/**/*.rb"
+        - "app/mailers/**/*.rb"
+        - "lib/**/*.rb"
+      excluded:
+        - "lib/tasks/**"
+        - "lib/generators/**"
+    controller_route:
+      patterns:
+        - "app/controllers/**/*.rb"
+    view_ux:
+      patterns:
+        - "app/views/**"
+        - "app/helpers/**/*.rb"
+        - "app/javascript/controllers/**"
+        - "app/components/**"
+        # Localization
+        - "config/locales/**"
+
+  react_native:
+    infrastructure:
+      patterns:
+        - "metro.config.js"
+        - "metro.config.ts"
+        - "babel.config.js"
+        - "tsconfig.json"
+        - "app.json"
+        - "eas.json"
+        - "ios/**/*.plist"
+        - "ios/**/*.pbxproj"
+        - "android/app/build.gradle"
+        - "android/app/src/main/AndroidManifest.xml"
+        - ".github/**"
+        - "fastlane/**"
+        - "Podfile"
+        - ".env*"
+        - "*.config.js"
+        - "*.config.ts"
+        # Requirement signals: feature flags, analytics config
+        - "src/config/features*"
+        - "src/config/featureFlags*"
+        - "src/analytics/config*"
+        - "src/tracking/config*"
+    data_model:
+      patterns:
+        - "src/redux/**"
+        - "src/store/**"
+        - "src/api/**"
+        - "src/config/**"
+        - "src/context/**"
+        - "src/types/**"
+        - "src/models/**"
+        # Feature-organized projects (** recurses into subdirectories)
+        - "src/features/**/types/**"
+        - "src/features/**/types.*"
+        - "src/features/**/models/**"
+        - "src/features/**/models.*"
+        - "src/features/**/api/**"
+        - "src/features/**/api.*"
+        - "src/features/**/slice*"
+        - "src/features/**/store/**"
+        - "src/features/**/store.*"
+        - "src/modules/**/types/**"
+        - "src/modules/**/types.*"
+        - "src/modules/**/models/**"
+        - "src/modules/**/models.*"
+        - "src/modules/**/api/**"
+        - "src/modules/**/api.*"
+        - "src/modules/**/slice*"
+        # GraphQL schemas and operations
+        - "src/graphql/**"
+        - "**/*.graphql"
+        # API contracts
+        - "openapi.*"
+        - "swagger.*"
+        # Backend source (full-stack projects)
+        - "backend/src/models/**"
+        - "backend/app/models/**"
+        - "backend/db/schema*"
+        - "backend/prisma/**"
+        - "server/src/models/**"
+        - "server/prisma/**"
+        - "api/src/models/**"
+        - "api/prisma/**"
+    business_logic:
+      patterns:
+        - "src/redux/sagas/**"
+        - "src/redux/thunks/**"
+        - "src/helpers/**"
+        - "src/hooks/**"
+        - "src/utils/**"
+        - "src/modules/**"
+        - "src/services/**"
+        # Feature-organized projects
+        - "src/features/**/hooks/**"
+        - "src/features/**/services/**"
+        - "src/features/**/utils/**"
+        - "src/features/**/sagas/**"
+        - "src/features/**/thunks/**"
+        - "src/features/**/logic*"
+        - "src/modules/**/hooks/**"
+        - "src/modules/**/services/**"
+        # Requirement signals: analytics events reveal product features
+        - "src/analytics/**"
+        - "src/tracking/**"
+        # Backend source (full-stack projects)
+        - "backend/app/services/**"
+        - "backend/lib/**"
+        - "server/src/services/**"
+        - "api/src/services/**"
+      excluded:
+        - "src/**/*.test.*"
+        - "src/**/__tests__/**"
+        - "backend/**/*.test.*"
+        - "server/**/*.test.*"
+    controller_route:
+      patterns:
+        - "src/routes/**"
+        - "src/navigation/**"
+        - "src/redux/services/**"
+        - "src/api/**"
+        - "src/config/api*"
+        # Feature-organized projects (** recurses into subdirectories)
+        - "src/features/**/navigation/**"
+        - "src/features/**/navigation.*"
+        - "src/features/**/routes/**"
+        - "src/features/**/routes.*"
+        - "src/features/**/screens/**"
+        - "src/features/**/api/**"
+        - "src/features/**/api.*"
+        - "src/modules/**/navigation/**"
+        - "src/modules/**/navigation.*"
+        - "src/modules/**/routes/**"
+        - "src/modules/**/routes.*"
+        # Deep linking configuration
+        - "src/linking*"
+        - "src/deeplink*"
+        - "src/config/linking*"
+        # Backend source (full-stack projects)
+        - "backend/app/controllers/**"
+        - "backend/config/routes*"
+        - "server/src/routes/**"
+        - "server/src/controllers/**"
+        - "api/src/routes/**"
+        - "api/src/controllers/**"
+    view_ux:
+      patterns:
+        - "src/pages/**"
+        - "src/screens/**"
+        - "src/components/**"
+        - "src/App.tsx"
+        - "src/theme/**"
+        # Feature-organized projects
+        - "src/features/**/screens/**"
+        - "src/features/**/pages/**"
+        - "src/features/**/components/**"
+        - "src/modules/**/screens/**"
+        - "src/modules/**/pages/**"
+        - "src/modules/**/components/**"
+        # Requirement signals: localization reveals all user-facing copy
+        - "src/locales/**"
+        - "src/i18n/**"
+        - "src/translations/**"
+        - "src/lang/**"
+        - "ios/*.lproj/Localizable.strings"
+        - "android/app/src/main/res/values/strings.xml"
+        - "android/app/src/main/res/values-*/strings.xml"
+
+  nextjs:
+    infrastructure:
+      patterns:
+        - "next.config.*"
+        - "tsconfig.json"
+        - "tailwind.config.*"
+        - "postcss.config.*"
+        - ".env*"
+        - "Dockerfile*"
+        - ".github/**"
+        - "vercel.json"
+        - "middleware.ts"
+        # Requirement signals
+        - "src/config/features*"
+        - "lib/feature-flags*"
+    data_model:
+      patterns:
+        - "prisma/**"
+        - "drizzle/**"
+        - "lib/db*"
+        - "lib/models/**"
+        - "lib/services/**"
+        - "app/api/**/route.ts"
+        # GraphQL schemas
+        - "**/*.graphql"
+        - "src/graphql/**"
+        - "lib/graphql/**"
+        # API contracts
+        - "openapi.*"
+        - "swagger.*"
+    business_logic:
+      patterns:
+        - "lib/services/**"
+        - "lib/actions/**"
+        - "app/**/actions.ts"
+        - "lib/api/**"
+        - "lib/utils/**"
+        # Requirement signals: analytics
+        - "lib/analytics/**"
+        - "src/analytics/**"
+        - "lib/tracking/**"
+      excluded:
+        - "lib/**/*.test.*"
+    controller_route:
+      patterns:
+        - "app/api/**/route.ts"
+        - "app/**/page.tsx"
+        - "app/**/page.jsx"
+        - "pages/**/*.tsx"
+        - "pages/**/*.jsx"
+        - "pages/api/**"
+        - "src/app/api/**/route.ts"
+        - "src/app/**/page.tsx"
+        - "src/app/**/page.jsx"
+        - "src/pages/**/*.tsx"
+        - "src/pages/**/*.jsx"
+        - "middleware.ts"
+    view_ux:
+      patterns:
+        - "app/**/page.tsx"
+        - "app/**/page.jsx"
+        - "app/**/layout.tsx"
+        - "app/**/layout.jsx"
+        - "app/**/loading.tsx"
+        - "app/**/error.tsx"
+        - "pages/**/*.tsx"
+        - "pages/**/*.jsx"
+        - "src/app/**/page.tsx"
+        - "src/app/**/page.jsx"
+        - "src/app/**/layout.tsx"
+        - "src/app/**/layout.jsx"
+        - "src/app/**/loading.tsx"
+        - "src/app/**/error.tsx"
+        - "src/pages/**/*.tsx"
+        - "components/**"
+        - "app/components/**"
+        - "src/components/**"
+        - "lib/hooks/**"
+        # Requirement signals: localization
+        - "src/locales/**"
+        - "public/locales/**"
+        - "messages/**"
+        - "src/i18n/**"
+
+  django:
+    infrastructure:
+      patterns:
+        - "**/settings.py"
+        - "**/wsgi.py"
+        - "**/asgi.py"
+        - "manage.py"
+        - "Dockerfile*"
+        - ".github/**"
+        - "Procfile"
+        - "requirements.txt"
+        - "pyproject.toml"
+    data_model:
+      patterns:
+        - "**/models.py"
+        - "**/managers.py"
+        - "**/migrations/**"
+        - "**/signals.py"
+    business_logic:
+      patterns:
+        - "**/services.py"
+        - "**/services/**"
+        - "**/tasks.py"
+        - "**/utils.py"
+        - "**/helpers.py"
+    controller_route:
+      patterns:
+        - "**/views.py"
+        - "**/urls.py"
+        - "**/serializers.py"
+        - "**/viewsets.py"
+    view_ux:
+      patterns:
+        - "**/templates/**"
+        - "**/templatetags/**"
+        - "**/static/**/*.js"
+        - "**/forms.py"
+
+  spring_boot:
+    infrastructure:
+      patterns:
+        - "src/main/resources/application.*"
+        - "pom.xml"
+        - "build.gradle*"
+        - "Dockerfile*"
+        - ".github/**"
+        - "src/main/java/**/config/**"
+    data_model:
+      patterns:
+        - "src/main/java/**/entity/**"
+        - "src/main/java/**/model/**"
+        - "src/main/java/**/repository/**"
+        - "src/main/resources/db/**"
+    business_logic:
+      patterns:
+        - "src/main/java/**/service/**"
+        - "src/main/java/**/job/**"
+        - "src/main/java/**/scheduler/**"
+    controller_route:
+      patterns:
+        - "src/main/java/**/controller/**"
+        - "src/main/java/**/dto/**"
+    view_ux:
+      patterns:
+        - "src/main/resources/templates/**"
+        - "src/main/resources/static/**"
+
+  rust:
+    infrastructure:
+      patterns:
+        - "Cargo.toml"
+        - "Cargo.lock"
+        - ".cargo/**"
+        - "Dockerfile*"
+        - ".github/**"
+        - "build.rs"
+    data_model:
+      patterns:
+        - "src/models/**"
+        - "src/db/**"
+        - "src/schema*"
+        - "migrations/**"
+    business_logic:
+      patterns:
+        - "src/services/**"
+        - "src/handlers/**"
+        - "src/jobs/**"
+        - "src/workers/**"
+    controller_route:
+      patterns:
+        - "src/routes/**"
+        - "src/handlers/**"
+        - "src/api/**"
+    view_ux:
+      patterns:
+        - "src/frontend/**"
+        - "templates/**"
+        - "static/**"
+
+  aspnet:
+    infrastructure:
+      patterns:
+        - "*.csproj"
+        - "*.sln"
+        - "appsettings*.json"
+        - "Program.cs"
+        - "Startup.cs"
+        - "Dockerfile*"
+        - ".github/**"
+    data_model:
+      patterns:
+        - "Data/**"
+        - "Models/**"
+        - "Migrations/**"
+    business_logic:
+      patterns:
+        - "Services/**"
+        - "Jobs/**"
+    controller_route:
+      patterns:
+        - "Controllers/**"
+        - "Endpoints/**"
+    view_ux:
+      patterns:
+        - "Pages/**"
+        - "Views/**"
+        - "Components/**"
+        - "wwwroot/**"

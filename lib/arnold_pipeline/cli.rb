@@ -33,16 +33,28 @@ module ArnoldPipeline
     option :claude_code_permission_mode, type: :string, desc: "Claude Code permission mode (default: bypassPermissions)"
     option :stop_after, type: :string, desc: "Stop after stage: spec, tasks, executed"
     option :preview, type: :boolean, default: false, aliases: [ "--dry-run" ], desc: "Generate spec and tasks without publishing to execution provider. Note: makes LLM API calls and creates local database records."
+    option :spec, type: :string, desc: "Path to a pre-existing spec file (skips spec generation)"
+    option :recipe, type: :string, desc: "Recipe type override (e.g., web_app, api_service)"
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
     def run_pipeline(description = nil)
       if description == "--help" || description == "-h"
         invoke :help, [ "run" ]
         return
       end
-      description = resolve_description(description, options[:file])
-      if description.nil? || description.strip.empty?
-        say_error "Provide a description argument or use --file/-f", :red
-        raise SystemExit.new(1)
+
+      spec_file = options[:spec]
+      if spec_file
+        unless File.exist?(spec_file)
+          say_error "Spec file not found: #{spec_file}", :red
+          raise SystemExit.new(1)
+        end
+        description ||= "Build from spec: #{File.basename(spec_file)}"
+      else
+        description = resolve_description(description, options[:file])
+        if description.nil? || description.strip.empty?
+          say_error "Provide a description argument or use --file/-f or --spec", :red
+          raise SystemExit.new(1)
+        end
       end
       with_error_handling do
         setup_standalone!
@@ -64,7 +76,11 @@ module ArnoldPipeline
 
           logger = build_logger(options[:verbose])
           orchestrator = Orchestrator.new(logger:)
-          result = orchestrator.call(nl_input: description, stop_after: :tasks)
+          result = if spec_file
+            orchestrator.call_with_spec(spec_file:, nl_input: description, recipe_override: options[:recipe], stop_after: :tasks)
+          else
+            orchestrator.call(nl_input: description, stop_after: :tasks)
+          end
 
           say ""
           say "--- Arnold Preview ---", :green
@@ -100,7 +116,11 @@ module ArnoldPipeline
         orchestrator = Orchestrator.new(logger:)
 
         quiet_say "Starting pipeline for: #{description}", :green
-        result = orchestrator.call(nl_input: description, stop_after:)
+        result = if spec_file
+          orchestrator.call_with_spec(spec_file:, nl_input: description, recipe_override: options[:recipe], stop_after:)
+        else
+          orchestrator.call(nl_input: description, stop_after:)
+        end
 
         quiet_say "\nPipeline #{result.status}!", status_color(result.status)
         quiet_say "  Run ID: #{result.id}"
@@ -428,7 +448,7 @@ module ArnoldPipeline
       server.start
     end
 
-    desc "analyze PATH", "Analyze an existing codebase"
+    desc "analyze [PATH]", "Analyze an existing codebase (single path or --workspace manifest)"
     option :config, type: :string, desc: "Path to YAML config file"
     option :provider, type: :string, desc: "LLM provider (anthropic, openai, or openrouter)"
     option :model, type: :string, desc: "LLM model name"
@@ -436,7 +456,8 @@ module ArnoldPipeline
     option :json, type: :boolean, default: false, desc: "Output as JSON"
     option :verbose, type: :boolean, default: false, desc: "Enable verbose logging"
     option :output, type: :string, aliases: "-o", desc: "Write as-built spec to file"
-    def analyze(path, description = nil)
+    option :workspace, type: :string, desc: "Path to workspace manifest YAML for multi-directory analysis"
+    def analyze(path = nil, description = nil)
       if path == "--help" || path == "-h"
         invoke :help, [ "analyze" ]
         return
@@ -446,75 +467,41 @@ module ArnoldPipeline
         load_config!(options)
         require "arnold_pipeline/orchestrator"
 
-        repo_path = File.expand_path(path)
-        unless Dir.exist?(repo_path)
-          say_error "Directory not found: #{repo_path}", :red
-          raise SystemExit.new(1)
-        end
-
-        logger = build_logger(options[:verbose])
-        ArnoldPipeline.configuration.verbose_event_logging = true if options[:verbose]
-        orchestrator = Orchestrator.new(logger:)
-
-        quiet_say "Analyzing codebase at: #{repo_path}", :green
-        profile = orchestrator.analyze_codebase!(
-          repo_path:,
-          description:,
-          reference_materials: options[:reference_materials] || ArnoldPipeline.configuration.reference_materials
-        )
-
-        if options[:json]
-          data = {
-            project_name: profile.project_name,
-            stack: profile.stack_fingerprint,
-            confidence: profile.confidence,
-            recipe_alignment: profile.recipe_alignment,
-            conventions: profile.conventions,
-            health_baseline: profile.health_baseline,
-            feature_inventories: profile.feature_inventories,
-            documentation_fidelity: profile.documentation_fidelity,
-            change_surface: profile.change_surface,
-            token_budget_used: profile.token_budget_used,
-            analyzed_at: profile.analyzed_at&.iso8601
-          }
-          say JSON.pretty_generate(data)
+        if options[:workspace]
+          analyze_workspace(description)
+        elsif path
+          analyze_single(path, description)
         else
-          quiet_say "\nAnalysis Complete!", :green
-          quiet_say "  Project: #{profile.project_name}"
-          quiet_say "  Stack: #{profile.stack_language}/#{profile.stack_framework}"
-          quiet_say "  Confidence: #{profile.confidence}%"
-
-          if profile.health_baseline
-            health = profile.health_baseline
-            quiet_say "  Health: #{health['summary'] || health[:summary]}"
-          end
-
-          if profile.recipe_alignment&.dig("concerns")
-            concerns = profile.recipe_alignment["concerns"]
-            present = concerns.count { |_, v| v["status"] == "present" }
-            partial = concerns.count { |_, v| v["status"] == "partial" }
-            absent = concerns.count { |_, v| v["status"] == "absent" }
-            quiet_say "  Concerns: #{present} present, #{partial} partial, #{absent} absent"
-          end
-
-          if profile.feature_inventories
-            total = profile.feature_inventories.sum { |i| i["features"]&.size || 0 }
-            quiet_say "  Features: #{total} discovered"
-          end
-
-          quiet_say "  Run ID: #{profile.pipeline_run_id}"
-        end
-
-        if options[:output]
-          spec = profile.pipeline_run.specification
-          if spec
-            File.write(options[:output], spec.content)
-            $stderr.puts "As-built spec written to #{options[:output]}"
-          end
+          say_error "Provide PATH or --workspace", :red
+          raise SystemExit.new(1)
         end
       end
     end
 
+
+    desc "context [PATH]", "Output deterministic codebase context as JSON (no LLM calls)"
+    option :workspace, type: :string, desc: "Path to workspace manifest YAML for multi-directory analysis"
+    option :hint, type: :string, desc: "Stack hint override (e.g. rails, react, react_native)"
+    option :pretty, type: :boolean, default: true, desc: "Pretty-print JSON output"
+    def context(path = nil)
+      if path == "--help" || path == "-h"
+        invoke :help, [ "context" ]
+        return
+      end
+      with_error_handling do
+        require "arnold_pipeline/brownfield/stack_detector"
+        require "arnold_pipeline/brownfield/artifact_discoverer"
+
+        if options[:workspace]
+          context_workspace
+        elsif path
+          context_single(path)
+        else
+          say_error "Provide PATH or --workspace", :red
+          raise SystemExit.new(1)
+        end
+      end
+    end
 
     desc "version", "Show the version"
     def version
@@ -577,6 +564,249 @@ module ArnoldPipeline
     end
 
     private
+
+    def analyze_single(path, description)
+      repo_path = File.expand_path(path)
+      unless Dir.exist?(repo_path)
+        say_error "Directory not found: #{repo_path}", :red
+        raise SystemExit.new(1)
+      end
+
+      logger = build_logger(options[:verbose])
+      ArnoldPipeline.configuration.verbose_event_logging = true if options[:verbose]
+      orchestrator = Orchestrator.new(logger:)
+
+      quiet_say "Analyzing codebase at: #{repo_path}", :green
+      profile = orchestrator.analyze_codebase!(
+        repo_path:,
+        description:,
+        reference_materials: options[:reference_materials] || ArnoldPipeline.configuration.reference_materials
+      )
+
+      display_profile(profile)
+      write_spec_output(profile)
+    end
+
+    def analyze_workspace(description)
+      require "arnold_pipeline/brownfield/workspace_manifest"
+
+      manifest = Brownfield::WorkspaceManifest.load(options[:workspace])
+
+      manifest.roots.each do |root|
+        unless Dir.exist?(root.path)
+          say_error "Root directory not found: #{root.path} (root: #{root.name})", :red
+          raise SystemExit.new(1)
+        end
+      end
+
+      logger = build_logger(options[:verbose])
+      ArnoldPipeline.configuration.verbose_event_logging = true if options[:verbose]
+      orchestrator = Orchestrator.new(logger:)
+
+      quiet_say "Analyzing workspace: #{manifest.project_name} (#{manifest.roots.size} roots)", :green
+
+      profiles = orchestrator.analyze_workspace!(
+        manifest:,
+        description:,
+        reference_materials: options[:reference_materials] || ArnoldPipeline.configuration.reference_materials
+      )
+
+      if options[:json]
+        data = profiles.map.with_index do |profile, i|
+          {
+            root_name: manifest.roots[i].name,
+            project_name: profile.project_name,
+            stack: profile.stack_fingerprint,
+            confidence: profile.confidence,
+            recipe_alignment: profile.recipe_alignment,
+            conventions: profile.conventions,
+            health_baseline: profile.health_baseline,
+            feature_inventories: profile.feature_inventories,
+            documentation_fidelity: profile.documentation_fidelity,
+            change_surface: profile.change_surface,
+            token_budget_used: profile.token_budget_used,
+            analyzed_at: profile.analyzed_at&.iso8601
+          }
+        end
+        say JSON.pretty_generate(data)
+      else
+        quiet_say "\nWorkspace Analysis Complete: #{manifest.project_name} (#{profiles.size} roots)", :green
+        profiles.each_with_index do |profile, i|
+          root = manifest.roots[i]
+          quiet_say "\n  [#{root.name}]"
+          quiet_say "    Stack: #{profile.stack_language}/#{profile.stack_framework}"
+          quiet_say "    Confidence: #{profile.confidence}%"
+
+          if profile.health_baseline
+            health = profile.health_baseline
+            quiet_say "    Health: #{health['summary'] || health[:summary]}"
+          end
+
+          if profile.recipe_alignment&.dig("concerns")
+            concerns = profile.recipe_alignment["concerns"]
+            present = concerns.count { |_, v| v["status"] == "present" }
+            partial = concerns.count { |_, v| v["status"] == "partial" }
+            absent = concerns.count { |_, v| v["status"] == "absent" }
+            quiet_say "    Concerns: #{present} present, #{partial} partial, #{absent} absent"
+          end
+
+          quiet_say "    Run ID: #{profile.pipeline_run_id}"
+        end
+      end
+
+      if options[:output]
+        base = options[:output].sub(/\.md$/i, "")
+        profiles.each_with_index do |profile, i|
+          root = manifest.roots[i]
+          spec = profile.pipeline_run.specification
+          next unless spec
+
+          output_path = "#{base}.#{root.name}.md"
+          File.write(output_path, spec.content)
+          $stderr.puts "As-built spec written to #{output_path}"
+        end
+      end
+    end
+
+    def context_single(path)
+      repo_path = File.expand_path(path)
+      unless Dir.exist?(repo_path)
+        say_error "Directory not found: #{repo_path}", :red
+        raise SystemExit.new(1)
+      end
+
+      result = build_context_for_root(repo_path, name: File.basename(repo_path), hint: options[:hint])
+      output_json(result)
+    end
+
+    def context_workspace
+      require "arnold_pipeline/brownfield/workspace_manifest"
+
+      manifest = Brownfield::WorkspaceManifest.load(options[:workspace])
+
+      manifest.roots.each do |root|
+        unless Dir.exist?(root.path)
+          say_error "Root directory not found: #{root.path} (root: #{root.name})", :red
+          raise SystemExit.new(1)
+        end
+      end
+
+      result = {
+        project: manifest.project_name,
+        roots: manifest.roots.map do |root|
+          hint = root.hint || options[:hint]
+          build_context_for_root(root.path, name: root.name, hint: hint)
+        end
+      }
+
+      output_json(result)
+    end
+
+    def build_context_for_root(repo_path, name:, hint: nil)
+      # Always auto-detect first to get language; overlay hint if provided
+      stack = Brownfield::StackDetector.call(repo_path:)
+      if hint
+        stack = stack.merge(framework: hint, signals_matched: stack[:signals_matched] + [ "hint_override:#{hint}" ])
+      end
+      artifacts = Brownfield::ArtifactDiscoverer.call(repo_path:, stack_fingerprint: stack)
+      file_summary = build_file_summary(repo_path)
+
+      {
+        name: name,
+        path: repo_path,
+        stack: stack,
+        artifacts: artifacts.map { |a| a.transform_keys(&:to_s) },
+        file_summary: file_summary
+      }
+    end
+
+    def build_file_summary(repo_path)
+      skip_dirs = %w[.git node_modules vendor tmp log .bundle coverage dist build __pycache__ .next].to_set
+      counts = Hash.new(0)
+      total = 0
+
+      walk = ->(dir) do
+        Dir.each_child(dir) do |entry|
+          full = File.join(dir, entry)
+          if File.directory?(full)
+            walk.call(full) unless skip_dirs.include?(entry)
+          elsif File.file?(full)
+            ext = File.extname(entry).downcase
+            ext = "(no ext)" if ext.empty?
+            counts[ext] += 1
+            total += 1
+          end
+        rescue Errno::EACCES, Errno::ENOENT
+          next
+        end
+      end
+
+      walk.call(repo_path)
+
+      {
+        total_files: total,
+        by_extension: counts.sort_by { |_, v| -v }.to_h
+      }
+    end
+
+    def output_json(data)
+      json = options[:pretty] ? JSON.pretty_generate(data) : JSON.generate(data)
+      say json
+    end
+
+    def display_profile(profile)
+      if options[:json]
+        data = {
+          project_name: profile.project_name,
+          stack: profile.stack_fingerprint,
+          confidence: profile.confidence,
+          recipe_alignment: profile.recipe_alignment,
+          conventions: profile.conventions,
+          health_baseline: profile.health_baseline,
+          feature_inventories: profile.feature_inventories,
+          documentation_fidelity: profile.documentation_fidelity,
+          change_surface: profile.change_surface,
+          token_budget_used: profile.token_budget_used,
+          analyzed_at: profile.analyzed_at&.iso8601
+        }
+        say JSON.pretty_generate(data)
+      else
+        quiet_say "\nAnalysis Complete!", :green
+        quiet_say "  Project: #{profile.project_name}"
+        quiet_say "  Stack: #{profile.stack_language}/#{profile.stack_framework}"
+        quiet_say "  Confidence: #{profile.confidence}%"
+
+        if profile.health_baseline
+          health = profile.health_baseline
+          quiet_say "  Health: #{health['summary'] || health[:summary]}"
+        end
+
+        if profile.recipe_alignment&.dig("concerns")
+          concerns = profile.recipe_alignment["concerns"]
+          present = concerns.count { |_, v| v["status"] == "present" }
+          partial = concerns.count { |_, v| v["status"] == "partial" }
+          absent = concerns.count { |_, v| v["status"] == "absent" }
+          quiet_say "  Concerns: #{present} present, #{partial} partial, #{absent} absent"
+        end
+
+        if profile.feature_inventories
+          total = profile.feature_inventories.sum { |i| i["features"]&.size || 0 }
+          quiet_say "  Features: #{total} discovered"
+        end
+
+        quiet_say "  Run ID: #{profile.pipeline_run_id}"
+      end
+    end
+
+    def write_spec_output(profile)
+      return unless options[:output]
+
+      spec = profile.pipeline_run.specification
+      if spec
+        File.write(options[:output], spec.content)
+        $stderr.puts "As-built spec written to #{options[:output]}"
+      end
+    end
 
     def setup_standalone!
       return if defined?(Rails) && Rails.application

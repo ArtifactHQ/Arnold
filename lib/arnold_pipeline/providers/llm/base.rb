@@ -20,6 +20,35 @@ module ArnoldPipeline
 
         private
 
+        def parse_json_content(response)
+          content = response.dig("choices", 0, "message", "content")
+          raise ArnoldPipeline::Error, "No content in structured output response" unless content
+
+          JSON.parse(content)
+        rescue JSON::ParserError
+          # Models behind OpenRouter may not honor json_schema response_format
+          # and wrap output in markdown fences or add preamble text.
+          begin
+            JSON.parse(strip_json_fences(content))
+          rescue JSON::ParserError => e
+            raise ArnoldPipeline::Error, "Failed to parse structured output JSON: #{e.message}"
+          end
+        end
+
+        def strip_json_fences(text)
+          # Extract from ```json ... ``` or ``` ... ``` fences
+          if text =~ /```(?:json)?\s*\n(.*?)\n\s*```/m
+            return $1.strip
+          end
+
+          # Strip leading non-JSON text (find first { or [)
+          if (idx = text.index(/[\[{]/))
+            return text[idx..]
+          end
+
+          text
+        end
+
         def log_api_error(provider_name, error)
           body = error.response_body
           detail = body.is_a?(Hash) ? body.dig("error", "message") : body.to_s

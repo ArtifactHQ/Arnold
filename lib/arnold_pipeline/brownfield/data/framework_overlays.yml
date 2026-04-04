@@ -640,6 +640,335 @@ stacks:
       conventions:
         build: "cargo build --release"
 
+  javascript_react_native:
+    auth:
+      typical_implementations:
+        - AsyncStorage token persistence with JWT
+        - OAuth2 / SSO via expo-auth-session or react-native-app-auth
+        - Firebase Authentication
+        - Custom AuthContext with token refresh
+      expected_locations:
+        - src/context/AuthContext.tsx
+        - src/redux/reducers/auth/
+        - src/redux/sagas/auth/
+        - src/api/auth.ts
+        - src/hooks/useAuth.ts
+      behavioral_files:
+        - "src/context/Auth*.tsx"
+        - "src/redux/reducers/auth/*.ts"
+        - "src/redux/sagas/auth/*.ts"
+        - "src/api/auth*.ts"
+      conventions:
+        token_storage: "AsyncStorage or react-native-keychain for secure storage"
+        auth_flow: "AuthContext provider wrapping navigation; conditional navigator rendering"
+        token_refresh: "Axios interceptor or saga-based token refresh"
+
+    data_layer:
+      typical_implementations:
+        - Redux Toolkit with slices
+        - Redux with redux-saga or redux-thunk
+        - React Context for lightweight state
+        - AsyncStorage for offline persistence
+        - Zustand or Jotai
+      expected_locations:
+        - src/redux/
+        - src/redux/reducers/
+        - src/redux/store.ts
+        - src/context/
+        - src/api/
+      behavioral_files:
+        - "src/redux/reducers/**/*.ts"
+        - "src/redux/store*.ts"
+        - "src/context/*.tsx"
+        - "src/api/*.ts"
+      conventions:
+        state_shape: "Redux store with domain slices (auth, user, client, etc.)"
+        persistence: "AsyncStorage or redux-persist for offline data"
+        types: "TypeScript interfaces for API responses and state shape"
+
+    api_layer:
+      typical_implementations:
+        - Axios with base config and interceptors
+        - Fetch API with wrapper functions
+        - React Query / TanStack Query
+        - Redux saga-based API calls
+      expected_locations:
+        - src/api/
+        - src/config/api.ts
+        - src/redux/services/
+        - src/redux/sagas/
+      behavioral_files:
+        - "src/api/*.ts"
+        - "src/config/api*.ts"
+        - "src/redux/services/*.ts"
+        - "src/redux/sagas/**/*.ts"
+      conventions:
+        base_url: "Environment-based API URL from .env or config"
+        interceptors: "Auth token injection, error handling, retry logic"
+        error_handling: "Centralized error handling in interceptors or saga error boundaries"
+
+    background_jobs:
+      typical_implementations:
+        - React Native Headless JS tasks
+        - react-native-background-fetch
+        - Push notification background handlers
+      expected_locations:
+        - src/services/background/
+        - src/push/
+      behavioral_files:
+        - "src/services/background/*.ts"
+        - "src/push/*.ts"
+      conventions:
+        pattern: "Limited background execution on mobile; primarily push-triggered"
+
+    realtime:
+      typical_implementations:
+        - Firebase Cloud Messaging (FCM / APNs)
+        - WebSocket connections
+        - Socket.io client
+        - Server-Sent Events
+      expected_locations:
+        - src/push/
+        - src/notifications/
+        - src/services/websocket/
+      behavioral_files:
+        - "src/push/*.ts"
+        - "src/notifications/*.ts"
+      conventions:
+        push: "Firebase Messaging for cross-platform push notifications"
+        websocket: "Event-driven real-time updates"
+
+    testing:
+      typical_implementations:
+        - Jest with React Native preset
+        - React Native Testing Library
+        - Detox for E2E testing
+        - Maestro for UI testing
+      expected_locations:
+        - __tests__/
+        - src/**/*.test.ts
+        - src/**/*.test.tsx
+        - e2e/
+      behavioral_files:
+        - "__tests__/**/*.test.*"
+        - "src/**/*.test.*"
+        - "e2e/**/*"
+      conventions:
+        runner: "npx jest"
+        mocking: "jest.mock for native modules"
+        e2e: "Detox or Maestro for device-level testing"
+
+    frontend:
+      typical_implementations:
+        - React Navigation (stack, tab, drawer navigators)
+        - React Native Paper or NativeBase for UI components
+        - React Native Gesture Handler
+        - Formik or React Hook Form for forms
+        - Styled Components or StyleSheet
+      expected_locations:
+        - src/pages/
+        - src/screens/
+        - src/components/
+        - src/components/ui/
+        - src/components/layout/
+        - src/theme/
+      behavioral_files:
+        - "src/pages/**/*.tsx"
+        - "src/screens/**/*.tsx"
+        - "src/components/**/*.tsx"
+        - "src/theme/*.ts"
+      conventions:
+        navigation: "React Navigation with typed screen params"
+        components: "Functional components with hooks"
+        styling: "StyleSheet.create or styled-components"
+        accessibility: "accessibilityLabel, accessibilityRole props"
+
+    deployment:
+      typical_implementations:
+        - Fastlane for iOS/Android builds
+        - EAS Build (Expo)
+        - CodePush for OTA updates
+        - App Store Connect / Google Play Console
+      expected_locations:
+        - fastlane/
+        - ios/
+        - android/
+        - .github/workflows/
+        - eas.json
+        - app.json
+      behavioral_files:
+        - "fastlane/*"
+        - ".github/workflows/*.yml"
+        - app.json
+        - eas.json
+      conventions:
+        ios: "Xcode project with CocoaPods"
+        android: "Gradle build with React Native plugin"
+        ci: "Fastlane lanes for build + deploy"
+
+    navigation:
+      typical_implementations:
+        - React Navigation v6+ (native-stack, bottom-tabs, drawer)
+        - Expo Router
+        - React Native Navigation (Wix)
+      expected_locations:
+        - src/routes/
+        - src/navigation/
+        - src/App.tsx
+      behavioral_files:
+        - "src/routes/*.tsx"
+        - "src/navigation/*.tsx"
+        - src/App.tsx
+      conventions:
+        structure: "NavigationContainer > Stack.Navigator > Screen components"
+        deep_linking: "linking config in NavigationContainer"
+        auth_flow: "Conditional navigator rendering based on auth state"
+
+    state_management:
+      typical_implementations:
+        - Redux Toolkit with createSlice
+        - Redux with redux-saga
+        - Zustand
+        - React Context + useReducer
+      expected_locations:
+        - src/redux/
+        - src/redux/reducers/
+        - src/redux/sagas/
+        - src/redux/store.ts
+        - src/context/
+      behavioral_files:
+        - "src/redux/**/*.ts"
+        - "src/context/*.tsx"
+      conventions:
+        pattern: "Slice-based reducers with saga side effects"
+        selectors: "Memoized selectors for derived state"
+        persistence: "redux-persist or manual AsyncStorage sync"
+
+    native_platform:
+      typical_implementations:
+        - react-native-camera / react-native-vision-camera
+        - react-native-permissions
+        - react-native-keychain
+        - react-native-fs
+        - react-native-image-picker
+      expected_locations:
+        - src/modules/
+        - src/components/camera/
+        - src/utils/permissions.ts
+        - ios/
+        - android/
+      behavioral_files:
+        - "src/modules/*.ts"
+        - "src/components/camera/*.tsx"
+        - "src/utils/permissions*.ts"
+      conventions:
+        pattern: "Wrapper components/hooks around native modules"
+        permissions: "Runtime permission requests before accessing device capabilities"
+        platform_specific: "Platform.OS checks or .ios.tsx/.android.tsx file suffixes"
+
+    push_notifications:
+      typical_implementations:
+        - "@react-native-firebase/messaging for FCM"
+        - react-native-push-notification
+        - expo-notifications
+        - OneSignal
+      expected_locations:
+        - src/push/
+        - src/notifications/
+        - src/services/push/
+      behavioral_files:
+        - "src/push/*.ts"
+        - "src/notifications/*.ts"
+      conventions:
+        registration: "Request permission, get FCM token, send to backend"
+        handling: "Foreground handler, background handler, notification tap handler"
+        channels: "Android notification channels for categorization"
+
+    localization:
+      typical_implementations:
+        - react-i18next with i18next
+        - react-intl / FormatJS
+        - expo-localization
+        - Custom i18n module
+      expected_locations:
+        - src/locales/
+        - src/i18n/
+        - src/translations/
+        - src/lang/
+        - ios/*.lproj/Localizable.strings
+        - android/app/src/main/res/values/strings.xml
+      behavioral_files:
+        - "src/locales/*.json"
+        - "src/i18n/*.ts"
+        - "src/translations/*.json"
+      conventions:
+        key_structure: "Nested JSON keys by feature (e.g., login.title, carePlan.addItem)"
+        usage: "t('key') or useTranslation() hook in components"
+        detection: "Device locale detection via Platform or expo-localization"
+
+    analytics:
+      typical_implementations:
+        - "@react-native-firebase/analytics"
+        - Mixpanel React Native SDK
+        - Amplitude React Native
+        - Segment Analytics React Native
+        - PostHog
+      expected_locations:
+        - src/analytics/
+        - src/tracking/
+        - src/services/analytics.ts
+        - src/utils/tracking.ts
+      behavioral_files:
+        - "src/analytics/*.ts"
+        - "src/tracking/*.ts"
+        - "src/services/analytics*.ts"
+      conventions:
+        event_naming: "snake_case event names (e.g., screen_viewed, button_tapped, feature_used)"
+        screen_tracking: "Navigation state change listener for automatic screen tracking"
+        user_properties: "Set user role, plan, cohort as user properties"
+
+    feature_flags:
+      typical_implementations:
+        - LaunchDarkly React Native SDK
+        - Flagsmith
+        - Firebase Remote Config
+        - Custom config endpoint
+        - Expo Updates for OTA feature rollout
+      expected_locations:
+        - src/config/features.ts
+        - src/config/featureFlags.ts
+        - src/services/remoteConfig.ts
+        - src/hooks/useFeatureFlag.ts
+      behavioral_files:
+        - "src/config/feature*.ts"
+        - "src/services/remoteConfig*.ts"
+        - "src/hooks/useFeature*.ts"
+      conventions:
+        pattern: "Boolean flags gating UI features or code paths"
+        fallback: "Default values for offline/degraded mode"
+        evaluation: "useFeatureFlag('flag_name') hook in components"
+
+    deep_linking:
+      typical_implementations:
+        - React Navigation linking configuration
+        - Branch.io
+        - Firebase Dynamic Links
+        - Expo deep links
+      expected_locations:
+        - src/linking.ts
+        - src/config/linking.ts
+        - src/deeplink/
+        - src/navigation/linking.ts
+      behavioral_files:
+        - "src/linking*.ts"
+        - "src/config/linking*.ts"
+        - "src/deeplink/*.ts"
+        - "src/navigation/linking*.ts"
+      conventions:
+        config: "linking prop on NavigationContainer with prefix and screen mapping"
+        ios: "Associated Domains entitlement for Universal Links"
+        android: "Intent filters in AndroidManifest.xml for App Links"
+
   csharp_aspnet:
     auth:
       typical_implementations:
