@@ -336,6 +336,23 @@ if [ -n "${CLAUDE_MD_SOURCE}" ]; then
     fi
 
     if [ -n "${TARGET_CLAUDE_MD}" ]; then
+        # Guard: if source and target resolve to the same file (e.g. running
+        # ./install.sh from inside the Arnold repo), redirect to .claude/CLAUDE.md
+        SOURCE_REAL="$(cd "$(dirname "${CLAUDE_MD_SOURCE}")" && pwd)/$(basename "${CLAUDE_MD_SOURCE}")"
+        TARGET_REAL="$(cd "$(dirname "${TARGET_CLAUDE_MD}")" && pwd)/$(basename "${TARGET_CLAUDE_MD}")"
+        if [ "$SOURCE_REAL" = "$TARGET_REAL" ]; then
+            print_warning "Source CLAUDE.md is the same as target — redirecting to .claude/CLAUDE.md"
+            mkdir -p .claude
+            TARGET_CLAUDE_MD=".claude/CLAUDE.md"
+        fi
+
+        # Guard: refuse to modify files over 1 MB (likely corrupted)
+        TARGET_SIZE=$(wc -c < "$TARGET_CLAUDE_MD" 2>/dev/null || echo 0)
+        if [ "$TARGET_SIZE" -gt 1048576 ]; then
+            print_error "$TARGET_CLAUDE_MD is $(( TARGET_SIZE / 1048576 ))MB — refusing to modify (file may be corrupted)"
+            exit 1
+        fi
+
         # Check if Arnold rules are already present (use our specific marker, not just "Arnold")
         if grep -q "$ARNOLD_START_MARKER" "$TARGET_CLAUDE_MD" 2>/dev/null; then
             # Replace existing Arnold rules (update in place)
