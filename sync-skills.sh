@@ -30,16 +30,15 @@ needs_context() {
 }
 
 synced=0
-skipped=0
 
 for cmd_file in "${COMMANDS_DIR}"/*.md; do
+    [ -f "$cmd_file" ] || continue
     filename=$(basename "$cmd_file")
     cmd_name="${filename%.md}"
     skill_dir="${SKILLS_DIR}/${cmd_name}"
     skill_file="${skill_dir}/SKILL.md"
 
-    # Skip if no corresponding skill directory exists and it's not a new command
-    # (new commands need their skill directory created)
+    # Ensure the skill directory exists (created on demand for new commands)
     mkdir -p "$skill_dir"
 
     # Read the existing frontmatter from the command file
