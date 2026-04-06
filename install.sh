@@ -8,24 +8,27 @@ set -euo pipefail
 # into the current project directory.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold-Lite/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/arnold/main/install.sh | bash
 #
 # Uninstall:
-#   curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/Arnold-Lite/main/install.sh | bash -s -- --uninstall
+#   curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/arnold/main/install.sh | bash -s -- --uninstall
 #
 # Or run from a cloned repo:
 #   ./install.sh
 #   ./install.sh --uninstall
 # ══════════════════════════════════════════════
 
-ARNOLD_VERSION="0.4.0"
-ARNOLD_REPO="ArtifactHQ/arnold"
-ARNOLD_BRANCH="main"
-ARNOLD_RAW_BASE="https://raw.githubusercontent.com/${ARNOLD_REPO}/${ARNOLD_BRANCH}"
+readonly ARNOLD_VERSION="0.4.0"
+readonly ARNOLD_REPO="ArtifactHQ/arnold"
+readonly ARNOLD_BRANCH="main"
+readonly ARNOLD_RAW_BASE="https://raw.githubusercontent.com/${ARNOLD_REPO}/${ARNOLD_BRANCH}"
+
+# Master command list (single source of truth — used by install, verify, and uninstall)
+readonly ARNOLD_COMMAND_NAMES=("init" "plan" "check" "update" "status" "help" "decide" "resolve" "recap" "diff" "spec" "bug" "archive" "milestone" "feature" "build" "review")
 
 # Markers used to delimit Arnold content in CLAUDE.md
-ARNOLD_START_MARKER="# ── Arnold Rules ──────────────────────────────"
-ARNOLD_END_MARKER="# ── End Arnold Rules ──────────────────────────"
+readonly ARNOLD_START_MARKER="# ── Arnold Rules ──────────────────────────────"
+readonly ARNOLD_END_MARKER="# ── End Arnold Rules ──────────────────────────"
 
 # Colors
 GREEN='\033[0;32m'
@@ -58,13 +61,73 @@ print_info() {
     echo -e "${CYAN}→${NC} $1"
 }
 
-# Cleanup on error
+# Temp directory (unique, unpredictable — avoids symlink attacks on shared systems)
+ARNOLD_TMPDIR=""
+
+# Cleanup temp files on exit (success or failure)
 cleanup() {
-    if [ -d "/tmp/arnold-install" ]; then
-        rm -rf /tmp/arnold-install
+    if [ -n "$ARNOLD_TMPDIR" ] && [ -d "$ARNOLD_TMPDIR" ] && [ ! -L "$ARNOLD_TMPDIR" ]; then
+        rm -rf "$ARNOLD_TMPDIR"
     fi
 }
 trap cleanup EXIT
+
+# ── Functions ─────────────────────────────────
+
+run_verify() {
+    echo "Verifying Arnold installation..."
+    local verify_ok=true
+    for cmd in "${ARNOLD_COMMAND_NAMES[@]}"; do
+        if [ -f ".claude/commands/arnold/${cmd}.md" ]; then
+            if grep -q "arnold:" ".claude/commands/arnold/${cmd}.md" 2>/dev/null; then
+                echo "  ✓ /arnold:${cmd}"
+            else
+                echo "  ✗ /arnold:${cmd} — file exists but appears corrupted"
+                verify_ok=false
+            fi
+        else
+            echo "  ✗ /arnold:${cmd} — not found"
+            verify_ok=false
+        fi
+    done
+    # Check CLAUDE.md
+    if grep -q "Arnold Rules" "./CLAUDE.md" 2>/dev/null || grep -q "Arnold Rules" ".claude/CLAUDE.md" 2>/dev/null; then
+        echo "  ✓ CLAUDE.md rules"
+    else
+        echo "  ✗ CLAUDE.md rules — not found"
+        verify_ok=false
+    fi
+    echo ""
+    if [ "$verify_ok" = true ]; then
+        echo "Arnold v${ARNOLD_VERSION} is installed correctly."
+    else
+        echo "Arnold installation is incomplete. Re-run the install command."
+    fi
+}
+
+# Write Arnold rules into a CLAUDE.md file with start/end markers
+write_arnold_rules() {
+    local target="$1"
+    local mode="$2" # "append" or "create"
+    if [ "$mode" = "create" ]; then
+        echo "$ARNOLD_START_MARKER" > "$target"
+    else
+        echo "" >> "$target"
+        echo "$ARNOLD_START_MARKER" >> "$target"
+    fi
+    echo "" >> "$target"
+    cat "${CLAUDE_MD_SOURCE}" >> "$target"
+    echo "" >> "$target"
+    echo "$ARNOLD_END_MARKER" >> "$target"
+}
+
+# Remove Arnold rules from a CLAUDE.md file using exact string matching
+remove_arnold_rules() {
+    local target="$1"
+    awk -v start="$ARNOLD_START_MARKER" -v end="$ARNOLD_END_MARKER" \
+        '$0 == start {skip=1} $0 == end {skip=0; next} !skip' "$target" > "${target}.tmp" \
+        && mv "${target}.tmp" "$target"
+}
 
 # ── Parse Arguments ───────────────────────────
 
@@ -79,34 +142,7 @@ for arg in "$@"; do
             exit 0
             ;;
         --verify)
-            echo "Verifying Arnold installation..."
-            VERIFY_OK=true
-            for cmd in init plan check update status help decide resolve recap diff spec bug archive milestone; do
-                if [ -f ".claude/commands/arnold/${cmd}.md" ]; then
-                    if grep -q "arnold:" ".claude/commands/arnold/${cmd}.md" 2>/dev/null; then
-                        echo "  ✓ /arnold:${cmd}"
-                    else
-                        echo "  ✗ /arnold:${cmd} — file exists but appears corrupted"
-                        VERIFY_OK=false
-                    fi
-                else
-                    echo "  ✗ /arnold:${cmd} — not found"
-                    VERIFY_OK=false
-                fi
-            done
-            # Check CLAUDE.md
-            if grep -q "Arnold Rules" "./CLAUDE.md" 2>/dev/null || grep -q "Arnold Rules" ".claude/CLAUDE.md" 2>/dev/null; then
-                echo "  ✓ CLAUDE.md rules"
-            else
-                echo "  ✗ CLAUDE.md rules — not found"
-                VERIFY_OK=false
-            fi
-            echo ""
-            if [ "$VERIFY_OK" = true ]; then
-                echo "Arnold v${ARNOLD_VERSION} is installed correctly."
-            else
-                echo "Arnold installation is incomplete. Re-run the install command."
-            fi
+            run_verify
             exit 0
             ;;
     esac
@@ -121,35 +157,29 @@ if [ "$UNINSTALL" = true ]; then
 
     # Remove command files
     if [ -d ".claude/commands/arnold" ]; then
-        # Check for user-added files beyond Arnold's defaults
-        ARNOLD_COMMANDS=("init.md" "plan.md" "check.md" "update.md" "status.md" "help.md" "decide.md" "resolve.md" "recap.md" "diff.md" "spec.md" "bug.md" "archive.md" "milestone.md" "feature.md" "build.md" "review.md")
+        # Remove only Arnold's known files (preserve user-added files)
+        for cmd in "${ARNOLD_COMMAND_NAMES[@]}"; do
+            rm -f ".claude/commands/arnold/${cmd}.md"
+        done
+        rm -f .claude/commands/arnold/.version
+
+        # Check for remaining user-added files
         EXTRA_FILES=()
-        for f in .claude/commands/arnold/*.md; do
-            [ -f "$f" ] || continue
-            fname="$(basename "$f")"
-            is_arnold=false
-            for ac in "${ARNOLD_COMMANDS[@]}"; do
-                if [ "$fname" = "$ac" ]; then
-                    is_arnold=true
-                    break
-                fi
-            done
-            if [ "$is_arnold" = false ]; then
-                EXTRA_FILES+=("$fname")
-            fi
+        for f in .claude/commands/arnold/*; do
+            [ -e "$f" ] || continue
+            EXTRA_FILES+=("$(basename "$f")")
         done
 
-        if [ ${#EXTRA_FILES[@]} -gt 0 ]; then
-            print_warning "Found extra files in .claude/commands/arnold/ that Arnold didn't create:"
+        if [ "${#EXTRA_FILES[@]}" -gt 0 ]; then
+            print_warning "User-added files remain in .claude/commands/arnold/:"
             for ef in "${EXTRA_FILES[@]}"; do
                 echo "    - $ef"
             done
-            print_warning "These will also be removed. Press Ctrl+C to abort, or wait 5 seconds..."
-            sleep 5
+            print_info "These were not created by Arnold and have been preserved."
+        else
+            rmdir .claude/commands/arnold 2>/dev/null || true
         fi
-
-        rm -rf .claude/commands/arnold
-        print_success "Removed .claude/commands/arnold/"
+        print_success "Removed Arnold commands"
 
         if [ -f "${HOME}/.claude/settings.json" ] && grep -q "arnold" "${HOME}/.claude/settings.json" 2>/dev/null; then
             print_warning "Arnold may also be installed as a Claude Code plugin."
@@ -162,10 +192,8 @@ if [ "$UNINSTALL" = true ]; then
     # Remove Arnold rules from CLAUDE.md (check both locations)
     for claude_md in "./CLAUDE.md" ".claude/CLAUDE.md"; do
         if [ -f "$claude_md" ] && grep -q "$ARNOLD_START_MARKER" "$claude_md" 2>/dev/null; then
-            # Remove everything between start and end markers (inclusive)
             if grep -q "$ARNOLD_END_MARKER" "$claude_md" 2>/dev/null; then
-                sed -i.bak "/$ARNOLD_START_MARKER/,/$ARNOLD_END_MARKER/d" "$claude_md"
-                rm -f "${claude_md}.bak"
+                remove_arnold_rules "$claude_md"
                 print_success "Removed Arnold rules from $claude_md"
             else
                 print_warning "Found Arnold start marker in $claude_md but no end marker — please remove Arnold rules manually"
@@ -262,21 +290,20 @@ else
 fi
 
 # Download command files
-COMMANDS=("init" "plan" "check" "update" "status" "help" "decide" "resolve" "recap" "diff" "spec" "bug" "archive" "milestone" "feature" "build" "review")
-
 print_info "Downloading Arnold commands..."
 
-# Ensure temp directory exists for all paths
-mkdir -p /tmp/arnold-install
+# Create unique temp directory (avoids symlink attacks on shared systems)
+ARNOLD_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/arnold-install.XXXXXXXXXX")"
 
-# Check if we're running from a cloned repo (verify it's actually Arnold's source)
+# Check if we're running from a cloned repo (verify it's actually Arnold's source).
+# When piped via stdin (curl | bash), BASH_SOURCE[0] is unset — never use local path.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 IS_LOCAL_INSTALL=false
-if [ -d "${SCRIPT_DIR}/commands/arnold" ] && [ -f "${SCRIPT_DIR}/commands/arnold/init.md" ] && grep -q "arnold:init" "${SCRIPT_DIR}/commands/arnold/init.md" 2>/dev/null; then
+if [ "${BASH_SOURCE[0]:-}" != "" ] && [ -d "${SCRIPT_DIR}/commands/arnold" ] && [ -f "${SCRIPT_DIR}/commands/arnold/init.md" ] && grep -q "arnold:init" "${SCRIPT_DIR}/commands/arnold/init.md" 2>/dev/null; then
     # Local install from cloned repo
     IS_LOCAL_INSTALL=true
     LOCAL_FAILURES=0
-    for cmd in "${COMMANDS[@]}"; do
+    for cmd in "${ARNOLD_COMMAND_NAMES[@]}"; do
         if [ -f "${SCRIPT_DIR}/commands/arnold/${cmd}.md" ] && grep -q "^---" "${SCRIPT_DIR}/commands/arnold/${cmd}.md" 2>/dev/null; then
             cp "${SCRIPT_DIR}/commands/arnold/${cmd}.md" ".claude/commands/arnold/${cmd}.md"
             print_success "  /arnold:${cmd}"
@@ -294,9 +321,9 @@ if [ -d "${SCRIPT_DIR}/commands/arnold" ] && [ -f "${SCRIPT_DIR}/commands/arnold
 else
     # Remote install from GitHub
     DOWNLOAD_FAILURES=0
-    for cmd in "${COMMANDS[@]}"; do
-        if curl -fsSL "${ARNOLD_RAW_BASE}/commands/arnold/${cmd}.md" -o "/tmp/arnold-install/${cmd}.md" 2>/dev/null && [ -s "/tmp/arnold-install/${cmd}.md" ] && grep -q "^---" "/tmp/arnold-install/${cmd}.md" 2>/dev/null; then
-            cp "/tmp/arnold-install/${cmd}.md" ".claude/commands/arnold/${cmd}.md"
+    for cmd in "${ARNOLD_COMMAND_NAMES[@]}"; do
+        if curl --proto '=https' --tlsv1.2 -fsSL "${ARNOLD_RAW_BASE}/commands/arnold/${cmd}.md" -o "${ARNOLD_TMPDIR}/${cmd}.md" 2>/dev/null && [ -s "${ARNOLD_TMPDIR}/${cmd}.md" ] && grep -q "^---" "${ARNOLD_TMPDIR}/${cmd}.md" 2>/dev/null; then
+            cp "${ARNOLD_TMPDIR}/${cmd}.md" ".claude/commands/arnold/${cmd}.md"
             print_success "  /arnold:${cmd}"
         else
             print_error "  /arnold:${cmd} — failed to download"
@@ -307,7 +334,9 @@ else
     if [ "${DOWNLOAD_FAILURES}" -gt 0 ]; then
         echo ""
         print_error "Some commands failed to download. Please check your network connection and try again."
-        print_info "To clean up: rm -rf .claude/commands/arnold"
+        # Clean up partial install so re-run starts fresh
+        rm -rf .claude/commands/arnold
+        print_info "Cleaned up partial install. Check your network and try again."
         exit 1
     fi
 fi
@@ -320,9 +349,8 @@ CLAUDE_MD_SOURCE=""
 if [ "$IS_LOCAL_INSTALL" = true ] && [ -f "${SCRIPT_DIR}/CLAUDE.md" ]; then
     CLAUDE_MD_SOURCE="${SCRIPT_DIR}/CLAUDE.md"
 else
-    mkdir -p /tmp/arnold-install
-    if curl -fsSL "${ARNOLD_RAW_BASE}/CLAUDE.md" -o "/tmp/arnold-install/CLAUDE.md" 2>/dev/null && [ -s "/tmp/arnold-install/CLAUDE.md" ]; then
-        CLAUDE_MD_SOURCE="/tmp/arnold-install/CLAUDE.md"
+    if curl --proto '=https' --tlsv1.2 -fsSL "${ARNOLD_RAW_BASE}/CLAUDE.md" -o "${ARNOLD_TMPDIR}/CLAUDE.md" 2>/dev/null && [ -s "${ARNOLD_TMPDIR}/CLAUDE.md" ]; then
+        CLAUDE_MD_SOURCE="${ARNOLD_TMPDIR}/CLAUDE.md"
     fi
 fi
 
@@ -336,43 +364,43 @@ if [ -n "${CLAUDE_MD_SOURCE}" ]; then
     fi
 
     if [ -n "${TARGET_CLAUDE_MD}" ]; then
+        # Guard: if source and target resolve to the same file (e.g. running
+        # ./install.sh from inside the Arnold repo), redirect to .claude/CLAUDE.md
+        SOURCE_REAL="$(cd "$(dirname "${CLAUDE_MD_SOURCE}")" && pwd)/$(basename "${CLAUDE_MD_SOURCE}")"
+        TARGET_REAL="$(cd "$(dirname "${TARGET_CLAUDE_MD}")" && pwd)/$(basename "${TARGET_CLAUDE_MD}")"
+        if [ "$SOURCE_REAL" = "$TARGET_REAL" ]; then
+            print_warning "Source CLAUDE.md is the same as target — redirecting to .claude/CLAUDE.md"
+            mkdir -p .claude
+            TARGET_CLAUDE_MD=".claude/CLAUDE.md"
+        fi
+
+        # Guard: refuse to modify files over 1 MB (likely corrupted)
+        TARGET_SIZE=$(wc -c < "$TARGET_CLAUDE_MD" 2>/dev/null || echo 0)
+        if [ "$TARGET_SIZE" -gt 1048576 ]; then
+            print_error "$TARGET_CLAUDE_MD is $(( TARGET_SIZE / 1048576 ))MB — refusing to modify (file may be corrupted)"
+            exit 1
+        fi
+
         # Check if Arnold rules are already present (use our specific marker, not just "Arnold")
         if grep -q "$ARNOLD_START_MARKER" "$TARGET_CLAUDE_MD" 2>/dev/null; then
             # Replace existing Arnold rules (update in place)
             if grep -q "$ARNOLD_END_MARKER" "$TARGET_CLAUDE_MD" 2>/dev/null; then
-                sed -i.bak "/$ARNOLD_START_MARKER/,/$ARNOLD_END_MARKER/d" "$TARGET_CLAUDE_MD"
-                rm -f "${TARGET_CLAUDE_MD}.bak"
+                remove_arnold_rules "$TARGET_CLAUDE_MD"
             else
                 print_warning "Arnold start marker found in $TARGET_CLAUDE_MD but end marker is missing."
                 print_warning "Please remove the old Arnold rules manually, then re-run install."
                 exit 1
             fi
-            # Re-append updated rules
-            echo "" >> "$TARGET_CLAUDE_MD"
-            echo "$ARNOLD_START_MARKER" >> "$TARGET_CLAUDE_MD"
-            echo "" >> "$TARGET_CLAUDE_MD"
-            cat "${CLAUDE_MD_SOURCE}" >> "$TARGET_CLAUDE_MD"
-            echo "" >> "$TARGET_CLAUDE_MD"
-            echo "$ARNOLD_END_MARKER" >> "$TARGET_CLAUDE_MD"
+            write_arnold_rules "$TARGET_CLAUDE_MD" "append"
             print_success "Updated Arnold rules in $TARGET_CLAUDE_MD"
         else
-            # Append new Arnold rules with markers
-            echo "" >> "$TARGET_CLAUDE_MD"
-            echo "$ARNOLD_START_MARKER" >> "$TARGET_CLAUDE_MD"
-            echo "" >> "$TARGET_CLAUDE_MD"
-            cat "${CLAUDE_MD_SOURCE}" >> "$TARGET_CLAUDE_MD"
-            echo "" >> "$TARGET_CLAUDE_MD"
-            echo "$ARNOLD_END_MARKER" >> "$TARGET_CLAUDE_MD"
+            write_arnold_rules "$TARGET_CLAUDE_MD" "append"
             print_success "Appended Arnold rules to $TARGET_CLAUDE_MD"
         fi
     else
         # No existing CLAUDE.md — create new one with markers
         mkdir -p .claude
-        echo "$ARNOLD_START_MARKER" > .claude/CLAUDE.md
-        echo "" >> .claude/CLAUDE.md
-        cat "${CLAUDE_MD_SOURCE}" >> .claude/CLAUDE.md
-        echo "" >> .claude/CLAUDE.md
-        echo "$ARNOLD_END_MARKER" >> .claude/CLAUDE.md
+        write_arnold_rules ".claude/CLAUDE.md" "create"
         print_success "Created .claude/CLAUDE.md"
     fi
 else
