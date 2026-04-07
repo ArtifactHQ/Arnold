@@ -65,11 +65,11 @@ For each feature, in order:
 
 - Read overview (core rules, acceptance criteria)
 - Read all flow docs (happy path, error cases, acceptance criteria)
-- Read edge cases doc if it exists
+- Read edge cases doc if it exists — note the **Priority** tag on each edge case (P0/P1/P2)
 
 ### 2b. Enumerate acceptance criteria
 
-Build a checklist of every acceptance criterion from the feature's docs:
+Build a checklist of every acceptance criterion from the feature's docs. Separate edge cases by priority:
 
 ```
 ACCEPTANCE CRITERIA for [feature]:
@@ -78,7 +78,22 @@ ACCEPTANCE CRITERIA for [feature]:
   3. [ ] [criterion from flow doc 1]
   4. [ ] [criterion from flow doc 1]
   5. [ ] [criterion from flow doc 2]
+
+EDGE CASES (by priority):
+  P0 (build now):
+    6. [ ] [edge case — launch-blocking]
+    7. [ ] [edge case — data loss scenario]
+  P1 (defer — flag in report):
+    8. [ ] [edge case — degraded UX]
+  P2 (skip):
+    9. [ ] [edge case — rare scenario]
 ```
+
+**Edge case build rules:**
+- **P0:** Build these. They are part of the completion gate — the feature is not done without them.
+- **P1:** Do NOT build these now. List them in the post-build report as "deferred — needed soon."
+- **P2:** Do NOT build these. List them in the post-build report as "backlog."
+- **No priority tag:** Treat as P0 (build it). Existing edge case docs describe behavior the feature needs — if someone documented it, assume it matters until told otherwise. Note in the report: "Edge case had no priority tag — built by default. Run `/arnold:plan [feature]` to assign P1/P2 to edge cases that can be deferred."
 
 ### 2c. Write code
 
@@ -117,6 +132,7 @@ Only proceed to the next feature when ALL criteria are verified with code citati
 
 When all criteria pass for this feature:
 - Update `docs/status.md` to 🟢 for this feature
+- Update the feature's own overview doc (`docs/[feature]/[feature]-overview.md`) — set its `## Status` marker to 🟢 Implemented. If the overview has no `## Status` section, add one at the top (after the H1 heading).
 - Move to next feature
 
 ## STEP 3: POST-BUILD
@@ -124,7 +140,8 @@ When all criteria pass for this feature:
 After all features are built:
 
 1. Run the `/arnold:check` logic on the features that were built
-2. Present a build report:
+2. Identify user-facing flows that were verified by code inspection only (no integration or e2e tests)
+3. Present a build report:
 
 ```
 BUILD COMPLETE
@@ -139,6 +156,29 @@ Files created/modified:
   [list of files with brief description]
 
 Drift: [none detected / N items — run /arnold:resolve]
+
+DEFERRED EDGE CASES:
+  P1 (needed soon):
+    • [feature]: [edge case description]
+    • [feature]: [edge case description]
+  P2 (backlog):
+    • [feature]: [edge case description]
+  [Omit this section if no edge cases were deferred]
+
+⚠ TEST COVERAGE GAPS
+━━━━━━━━━━━━━━━━━━━━
+
+All criteria above were verified by code inspection (file:line mapping).
+The following user-facing flows have no integration or e2e test coverage:
+
+  • [flow name] ([feature]): [entry point] → [exit point]
+    e.g., login → session created → dashboard renders
+  • [flow name] ([feature]): [entry point] → [exit point]
+
+Code inspection confirms the logic exists, but does not verify that the
+full path works end-to-end in a running app (route resolution, middleware
+chain, redirects, page rendering). Consider adding integration tests for
+these flows.
 
 Next: review the code, then /arnold:check for a full verification.
 

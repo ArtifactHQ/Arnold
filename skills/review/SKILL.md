@@ -68,8 +68,14 @@ Ask these questions:
 - **Are there missing states?** What if the user abandons mid-flow? What if data is partially saved? What about session timeouts?
 - **Do any features conflict?** Feature A says X, Feature B assumes not-X
 - **Are acceptance criteria actually testable?** "User has a good experience" is NOT testable. "User can complete checkout in under 3 clicks" IS testable.
+- **Are acceptance criteria concrete enough to verify?** Watch for criteria that describe behavior without specifying the observable outcome. "Redirect to dashboard" is undertestable — it doesn't say what the user sees on arrival. Flag these as **undertestable criteria** and suggest a concrete rewrite. Examples:
+  - BAD: "User is redirected to the dashboard" → GOOD: "After login, user lands on the dashboard and sees their project list" (web apps should also specify the route)
+  - BAD: "Error message is shown" → GOOD: "A toast notification appears with the message 'Invalid credentials' and the form remains on screen with the email field preserved"
+  - BAD: "Data is saved" → GOOD: "Record is persisted to the database and the user sees a 'Saved' confirmation within 2 seconds"
+- **Do navigation criteria specify the destination?** Any criterion involving "redirect to," "navigate to," or "land on" must specify what the user sees at the destination (screen/view and visible content). For web apps, it should also include the route pattern. For mobile/desktop apps, the screen or view name. If none of this is specified, flag it — this is a common source of bugs that pass code review but fail at runtime.
 - **Are there implicit features not documented?** Every app with accounts needs password reset. Every app with payments needs refunds. Are they documented?
 - **Are edge cases realistic?** Do the documented edge cases cover the most common failure modes?
+- **Are edge cases prioritized?** If edge cases exist without P0/P1/P2 priority tags, flag this: "Edge cases lack priority — `/arnold:build` won't know which ones are launch-blocking. Run `/arnold:plan [feature]` to assign priorities."
 - **Is the scope achievable?** Too many features for the team size or timeline?
 
 ### TECHNICAL LENS (only runs if docs/spec.md exists)

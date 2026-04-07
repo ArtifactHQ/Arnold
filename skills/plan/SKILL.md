@@ -145,9 +145,17 @@ For flow documents, use this structure:
 - **Recovery:** ...
 
 ## Acceptance Criteria
+- [ ] [Testable criterion — must specify the observable outcome, not just the behavior]
 - [ ] [Testable criterion]
 - [ ] [Testable criterion]
-- [ ] [Testable criterion]
+
+**Writing good criteria:** Each criterion must be verifiable by inspecting code OR by running the app. Avoid vague outcomes — specify what the user sees at the destination, not just that they "go somewhere":
+- BAD: "User is redirected to the dashboard" (what do they see there?)
+- GOOD: "After login, user lands on the dashboard and sees their project list" (web: specify route like `/workspace/[id]`; mobile: specify screen name)
+- BAD: "Error is displayed" (where? what message?)
+- GOOD: "A toast notification shows 'Invalid credentials' and the form preserves the email field"
+
+Any criterion involving navigation ("redirect to," "navigate to," "land on") MUST specify the destination screen/view and what renders there. For web apps, include the route pattern. For mobile or desktop apps, include the screen or view name.
 
 ## Related
 - See: [related doc]
@@ -160,6 +168,7 @@ For edge-case documents:
 # [Feature] — Edge Cases
 
 ## [Edge Case Name]
+**Priority:** P0 — launch-blocking / P1 — needed soon after launch / P2 — backlog
 **Scenario:** [What unusual thing happens]
 **Why it matters:** [Impact if unhandled]
 **How we handle it:**
@@ -174,6 +183,11 @@ For edge-case documents:
 ...
 ```
 
+**Priority guidelines for edge cases:**
+- **P0 (launch-blocking):** Data loss, security holes, broken core flows, or states the user can't recover from. If this edge case happens and isn't handled, the feature is effectively broken.
+- **P1 (needed soon):** Degraded experience or confusing behavior. The feature works but users will hit this within the first week. Ship without it, but fix fast.
+- **P2 (backlog):** Rare scenarios, cosmetic issues, or optimistic-path failures. Safe to defer until usage data shows it matters.
+
 ## STEP 6.5: VERIFY CREATED DOCS
 
 Re-read every file you just created. For each:
@@ -185,6 +199,7 @@ Re-read every file you just created. For each:
    - Acceptance Criteria with at least 2 checkboxes?
 
 2. **If it's an edge cases doc, does each case have:**
+   - Priority (P0/P1/P2)?
    - Scenario?
    - Why it matters?
    - How we handle it?
