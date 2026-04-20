@@ -6,8 +6,8 @@
     "name": "Artifact",
     "url": "https://artifact.new"
   },
-  "homepage": "https://github.com/ArtifactHQ/Arnold-Lite",
-  "repository": "https://github.com/ArtifactHQ/Arnold-Lite",
+  "homepage": "https://github.com/ArtifactHQ/arnold",
+  "repository": "https://github.com/ArtifactHQ/arnold",
   "license": "MIT",
   "keywords": [
     "documentation",

@@ -1,5 +1,4 @@
 {
-  "$schema": "https://cdn.jsdelivr.net/npm/@anthropic-ai/claude-code-plugin-types/schemas/marketplace.json",
   "name": "arnold-marketplace",
   "owner": {
     "name": "Artifact",
@@ -7,19 +6,18 @@
   },
   "metadata": {
     "description": "Arnold — documentation-first development toolkit",
-    "version": "0.4.0",
-    "pluginRoot": ".."
+    "version": "0.4.0"
   },
   "plugins": [
     {
       "name": "arnold",
-      "source": ".",
+      "source": "./",
       "description": "Write requirements in plain English. Build with any coding agent. Check that what got built matches what you asked for.",
       "author": {
         "name": "Artifact"
       },
-      "homepage": "https://github.com/ArtifactHQ/Arnold-Lite",
-      "repository": "https://github.com/ArtifactHQ/Arnold-Lite",
+      "homepage": "https://github.com/ArtifactHQ/arnold",
+      "repository": "https://github.com/ArtifactHQ/arnold",
       "license": "MIT",
       "keywords": ["documentation", "docs-first", "drift-detection"],
       "category": "productivity"
