@@ -14,7 +14,7 @@
 /plugin marketplace add ArtifactHQ/arnold
 /plugin install arnold@arnold-marketplace
 
-### Cursor, Codex, Antigravity, others: see Install section below</code></pre>
+### Cursor, Codex, Antigravity, others: see <a href="#install">Install section</a> below</code></pre>
 <p><strong>No API key. No database. Installs natively into Claude Code, Cursor, Codex, and Antigravity.</strong></p>
 <br>
 <p>
