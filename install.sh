@@ -45,6 +45,25 @@ print_banner() {
     echo ""
 }
 
+# Deprecation banner (FR-041): prints at runtime, does not block.
+# Native installs are preferred as of v0.5.0; this script is removed in v1.0.
+print_deprecation_banner() {
+    echo -e "${YELLOW}⚠  This shell installer is deprecated as of Arnold v0.5.0.${NC}"
+    echo -e "${YELLOW}   Native installs are available for Claude Code, Cursor, Codex, and Antigravity.${NC}"
+    echo -e "${YELLOW}   See: https://github.com/${ARNOLD_REPO}#install${NC}"
+    echo -e "${YELLOW}   This script will be removed in v1.0.${NC}"
+    echo ""
+    echo -e "${CYAN}   For Claude Code — prefer:${NC}"
+    echo "     /plugin marketplace add ${ARNOLD_REPO}"
+    echo "     /plugin install arnold@arnold-marketplace"
+    echo ""
+    echo "   Continuing with shell install in 3 seconds... (Ctrl-C to cancel)"
+    echo ""
+    # Short, skippable delay so interactive users can abort; non-interactive runs
+    # (CI, curl | bash) pass through.
+    sleep 3 2>/dev/null || true
+}
+
 print_success() {
     echo -e "${GREEN}✓${NC} $1"
 }
@@ -152,6 +171,7 @@ done
 
 if [ "$UNINSTALL" = true ]; then
     print_banner
+    # Uninstall path skips the deprecation banner — user is leaving this path anyway.
     echo -e "${YELLOW}Uninstalling Arnold...${NC}"
     echo ""
 
@@ -228,6 +248,7 @@ fi
 # ── Main Install ──────────────────────────────
 
 print_banner
+print_deprecation_banner
 
 # Check if we're in a project directory
 if [ ! -d ".git" ] && [ ! -f "package.json" ] && [ ! -f "requirements.txt" ] && [ ! -f "Cargo.toml" ] && [ ! -f "go.mod" ] && [ ! -f "Makefile" ]; then

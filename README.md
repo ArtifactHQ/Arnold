@@ -10,8 +10,13 @@
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License" /></a>
 </p>
 <br>
-<pre><code>curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/arnold/main/install.sh | bash</code></pre>
-<p><strong>No API key. No database. Runs inside Claude Code, Cursor, Windsurf, and 30+ AI coding agents.</strong></p>
+<pre><code># In Claude Code:
+/plugin marketplace add ArtifactHQ/arnold
+/plugin install arnold@arnold-marketplace
+
+# In Cursor: install "Arnold" from cursor.com/marketplace
+# Codex / Antigravity: see Install section below</code></pre>
+<p><strong>No API key. No database. Installs natively into Claude Code, Cursor, Codex, and Antigravity.</strong></p>
 <br>
 <p>
 <a href="#why-we-built-this">Why We Built This</a> · <a href="#how-it-works">How It Works</a> · <a href="#what-drift-detection-looks-like">Drift Detection</a> · <a href="#your-first-5-minutes">First 5 Minutes</a> · <a href="#commands">Commands</a> · <a href="#doc-structure-organized-by-feature">Doc Structure</a>
@@ -20,7 +25,7 @@
 
 ---
 
-> **Arnold is a set of commands for AI coding agents.** It works inside Claude Code, Cursor, Windsurf, Gemini CLI, and other tools that support slash commands or Agent Skills. Arnold is not a standalone CLI. You need an AI coding agent to use it.
+> **Arnold is a set of commands for AI coding agents.** It ships as a native plugin for Claude Code and Cursor, and as project-scoped skills for Codex and Antigravity. Arnold is not a standalone CLI — you need an AI coding agent to use it.
 
 ## Why We Built This
 
@@ -121,37 +126,60 @@ Arnold gets smarter with each check. After your first `/arnold:check`, Arnold sa
 
 ## Install
 
-Run this from your project's root directory:
+Arnold installs natively into four AI coding tools. Pick the one you use.
+
+### Claude Code
+
+Inside Claude Code:
+
+```
+/plugin marketplace add ArtifactHQ/arnold
+/plugin install arnold@arnold-marketplace
+```
+
+Arnold's 17 slash commands are now available: `/arnold:init`, `/arnold:check`, `/arnold:plan`, etc. Arnold's development rules load as a skill. Update via `/plugin update`.
+
+### Cursor
+
+1. Open Cursor → **Settings → Plugins → Marketplace** (or visit [cursor.com/marketplace](https://cursor.com/marketplace))
+2. Search for `arnold` → **Install**
+
+Commands use hyphens in Cursor: `/arnold-init`, `/arnold-check`, etc. (Cursor doesn't allow colons in command names — same content, different invocation.)
+
+### Codex
+
+Codex doesn't have a plugin marketplace yet. Arnold installs as project-scoped skills:
+
+```bash
+git clone https://github.com/ArtifactHQ/arnold ~/arnold
+cd ~/arnold && make build
+./scripts/install-skills.sh --tool=codex --target=/path/to/your-project
+```
+
+Installs 17 skills to `.agents/skills/` and merges Arnold's rules into `AGENTS.md`. Uninstall with `--uninstall`.
+
+### Antigravity
+
+Same shape as Codex, different path (singular `.agent/` — Antigravity's convention):
+
+```bash
+./scripts/install-skills.sh --tool=antigravity --target=/path/to/your-project
+```
+
+### Other tools / legacy
+
+<details>
+<summary><strong>Legacy shell install (deprecated v0.5.0, removed in v1.0)</strong></summary>
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/arnold/main/install.sh | bash
 ```
 
-That's it. Arnold's commands are now available as `/arnold:init`, `/arnold:check`, etc.
+Installs to `.claude/commands/arnold/` + `CLAUDE.md`. Works for Claude Code and for tools not yet in the native-install list above. Prints a deprecation banner at runtime.
 
-**What does install.sh do?** It copies 17 command files into `.claude/commands/arnold/` inside your project, and appends Arnold's development rules to your project's `CLAUDE.md` (creating one if it doesn't exist). No binaries, no dependencies, no background processes. Commit the `.claude/commands/arnold/` folder to Git so team members who clone the repo get Arnold automatically.
+For **Windsurf** or **Gemini CLI** (no native install yet): copy the `skills/` folder from this repo into your tool's expected location (e.g. `.windsurf/workflows/` for Windsurf, `.gemini/commands/` for Gemini CLI).
 
-**Updating:** Re-run the same curl command. The script detects your current version and upgrades to the latest. Your `docs/` folder stays untouched — only the command files in `.claude/commands/arnold/` are replaced.
-
-<details>
-<summary><strong>Other install methods</strong></summary>
-
-**From a cloned repo:**
-
-If you downloaded or cloned Arnold, `cd` into your target project directory and run:
-
-```bash
-cd /path/to/your-project
-bash /path/to/arnold/install.sh
-```
-
-The script detects it's running from a local repo and copies the commands directly — no network required.
-
-**Works with other AI coding agents too.** Arnold's commands follow the [Agent Skills](https://agentskills.io) standard. Copy the skill folders from `skills/` into `.agents/skills/` in your project. Arnold's development rules are in `CLAUDE.md`. For other tools, copy this content to your tool's equivalent:
-- **Cursor:** `.cursor/rules/arnold.md`
-- **Windsurf:** `.windsurf/rules/arnold.md`
-- **Gemini CLI:** `GEMINI.md`
-- **Codex:** `AGENTS.md`
+For the legacy shell installer: `./install.sh --help` from a clone, or `--verify` / `--uninstall` as needed.
 
 </details>
 
@@ -325,14 +353,15 @@ When `/arnold:check` reports drift, you know whether the rule was something you 
 
 ## Uninstalling
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/arnold/main/install.sh | bash -s -- --uninstall
-```
+**Claude Code plugin:** `/plugin uninstall arnold@arnold-marketplace`
 
-Or if you installed from a cloned repo:
-```bash
-bash install.sh --uninstall
-```
+**Cursor plugin:** Settings → Plugins → Arnold → Uninstall
+
+**Codex / Antigravity:** `./scripts/install-skills.sh --tool=<codex|antigravity> --target=<project> --uninstall`
+
+**Legacy shell install:** `/path/to/arnold/install.sh --uninstall` (or via curl if you installed that way). Removes `.claude/commands/arnold/` and Arnold's rules block from `CLAUDE.md`.
+
+Your `docs/` folder is never touched on uninstall.
 
 ---
 
