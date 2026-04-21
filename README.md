@@ -14,8 +14,7 @@
 /plugin marketplace add ArtifactHQ/arnold
 /plugin install arnold@arnold-marketplace
 
-# In Cursor: install "Arnold" from cursor.com/marketplace
-# Codex / Antigravity: see Install section below</code></pre>
+# Cursor, Codex, Antigravity, others: see Install section below</code></pre>
 <p><strong>No API key. No database. Installs natively into Claude Code, Cursor, Codex, and Antigravity.</strong></p>
 <br>
 <p>
@@ -25,7 +24,7 @@
 
 ---
 
-> **Arnold is a set of commands for AI coding agents.** It ships as a native plugin for Claude Code and Cursor, and as project-scoped skills for Codex and Antigravity. Arnold is not a standalone CLI — you need an AI coding agent to use it.
+> **Arnold is a set of commands for AI coding agents.** It ships as a native Claude Code plugin, and as skills for Cursor, Codex, Antigravity, Windsurf, and Gemini CLI (installed via your agent or a one-shot script). Arnold is not a standalone CLI — you need an AI coding agent to use it.
 
 ## Why We Built This
 
@@ -145,23 +144,15 @@ Inside Claude Code:
 
 Arnold's 17 slash commands are now available: `/arnold:init`, `/arnold:check`, `/arnold:plan`, etc. Arnold's development rules load as a skill. Update via `/plugin update`.
 
-### Cursor
+### Cursor, Codex, Antigravity, and other agents
 
-1. Open Cursor → **Settings → Plugins → Marketplace** (or visit [cursor.com/marketplace](https://cursor.com/marketplace))
-2. Search for `arnold` → **Install**
-
-Commands use hyphens in Cursor: `/arnold-init`, `/arnold-check`, etc. (Cursor doesn't allow colons in command names — same content, different invocation.)
-
-### Codex, Antigravity, and other agents
-
-For any agent without a public plugin marketplace — currently including Codex, Antigravity, Windsurf, and Gemini CLI — just ask your agent:
+For every other agent — Cursor, Codex, Antigravity, Windsurf, Gemini CLI — just ask your agent:
 
 > Install Arnold from `ArtifactHQ/arnold`
 
 Your agent reads [`INSTALL.md`](INSTALL.md) at the repo root, detects which tool it's running in, and performs the install. No cloning, no shell commands, no build step.
 
-> [!NOTE]
-> Codex's official Plugin Directory is [coming soon](https://developers.openai.com/codex/plugins/build). Until it ships, the agentic install above is the supported distribution path for Codex. Once the Plugin Directory is live and Arnold is published to it, Codex graduates to a one-line marketplace install alongside Claude Code and Cursor.
+In Cursor specifically, commands use hyphens (`/arnold-init`, `/arnold-check`, etc.) because Cursor doesn't allow colons in command names — same content, different invocation.
 
 **Specify a version.** Defaults to the latest release. Pin explicitly if you need to:
 
@@ -245,9 +236,7 @@ For `--help`, `--verify`, or `--uninstall` flags, clone the repo and run `./inst
 
 **Claude Code plugin:** `/plugin update`
 
-**Cursor plugin:** Updates automatically via the marketplace.
-
-**Agentic install (Codex, Antigravity, others):**
+**Agentic install (Cursor, Codex, Antigravity, others):**
 
 > Update Arnold to the latest version
 
@@ -263,9 +252,7 @@ Your agent re-runs the install procedure against the new version. For user-globa
 
 **Claude Code plugin:** `/plugin uninstall arnold@arnold-marketplace`
 
-**Cursor plugin:** Settings → Plugins → Arnold → Uninstall
-
-**Agentic install (Codex, Antigravity, others):**
+**Agentic install (Cursor, Codex, Antigravity, others):**
 
 > Uninstall Arnold from this project
 
@@ -451,9 +438,9 @@ When `/arnold:check` reports drift, you know whether the rule was something you 
 
 **Claude Code plugin:** `/plugin uninstall arnold@arnold-marketplace`
 
-**Cursor plugin:** Settings → Plugins → Arnold → Uninstall
+**Agentic install (Cursor, Codex, Antigravity, Windsurf, Gemini CLI):** Ask your agent: *"Uninstall Arnold from this project"* (or *"Uninstall Arnold"* for user-global Codex).
 
-**Codex, Antigravity, Windsurf, Gemini CLI (manual):** `./scripts/install.sh --tool=<TOOL> --target=<project> --uninstall` (tools: `codex`, `antigravity`, `windsurf`, `gemini-cli`; add `--scope=user-global` for a global Codex plugin install)
+**Manual script:** `./scripts/install.sh --tool=<TOOL> --target=<project> --uninstall` (tools: `claude-code`, `cursor`, `codex`, `antigravity`, `windsurf`, `gemini-cli`; add `--scope=user-global` for a global Codex plugin install).
 
 **Legacy shell install:** `/path/to/arnold/install.sh --uninstall` (or via curl if you installed that way). Removes `.claude/commands/arnold/` and Arnold's rules block from `CLAUDE.md`.
 

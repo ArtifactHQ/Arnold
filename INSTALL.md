@@ -14,10 +14,9 @@ Where a project-rules file exists (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.wind
 ## When NOT to follow this procedure
 
 - **Claude Code with plugin marketplace available.** Use `/plugin marketplace add ArtifactHQ/arnold` followed by `/plugin install arnold@arnold-marketplace`.
-- **Cursor with plugin marketplace available.** Direct the user to install "Arnold" from the Cursor Marketplace UI.
 - **Codex, once the official Plugin Directory ships.** Until then, Codex has no public marketplace and the procedure below is the supported install path.
 
-Run this procedure when (a) the marketplace install is unavailable in the user's tool version, (b) the user is in a tool without a marketplace, or (c) the user explicitly asks for a manual install.
+For every other tool — Cursor, Antigravity, Windsurf, Gemini CLI, and the current-state Codex — follow this procedure. Arnold is not published to the Cursor Marketplace; Cursor users install via this agentic path (or via `scripts/install.sh`).
 
 ---
 
@@ -188,7 +187,7 @@ Operations:
 1. Copy each `skills/<n>/SKILL.md` (short directory names — the plugin namespaces them) to `<target>/.claude/commands/arnold/<n>.md`. Skip `skills/arnold-rules/` — its content is the rules file, not a command. The manual install uses the legacy `commands/` layout; the plugin layout is reserved for marketplace installs.
 2. Merge rules into `<target>/CLAUDE.md` using the marker convention.
 
-### 3e — Cursor (manual fallback only — prefer marketplace)
+### 3e — Cursor
 
 Expected tool-tree layout: the `cursor-plugin` tree has hyphenated skill names already applied (`arnold-init` not `arnold:init`).
 

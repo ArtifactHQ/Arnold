@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Install dist/cursor-plugin/ into a local Cursor session for testing.
-# Use this BEFORE submitting to cursor.com/marketplace/publish.
+# Install dist/cursor-plugin/ into a local Cursor session for smoke-testing
+# the Cursor build output end-to-end before cutting a release.
 #
 # Cursor supports local plugin testing via ~/.cursor/plugins/local/ per
 # Phase 0 S0.2 findings. Symlink the built artifact and Cursor will pick it up.

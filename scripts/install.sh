@@ -11,8 +11,8 @@
 #
 # Supported tools (INSTALL.md Step 3 sections in parens):
 #   claude-code   (3d, manual fallback — prefer the plugin marketplace)
-#   cursor        (3e, manual fallback — prefer the plugin marketplace)
-#   codex         (3a user-global, 3b project-scoped — default: project)
+#   cursor        (3e)
+#   codex         (3a user-global, 3b project-scoped — default: user-global)
 #   antigravity   (3c)
 #   windsurf      (3f)
 #   gemini-cli    (3f)
@@ -457,7 +457,7 @@ uninstall_gemini_cli() {
 describe_destination() {
     case "$TOOL" in
         claude-code) echo "${TARGET}/.claude/commands/arnold/ (manual fallback — prefer the plugin marketplace)" ;;
-        cursor)      echo "${TARGET}/.cursor/commands/ (manual fallback — prefer the plugin marketplace)" ;;
+        cursor)      echo "${TARGET}/.cursor/commands/" ;;
         codex)
             if [ "$SCOPE" = "user-global" ]; then
                 echo "${HOME}/.codex/plugins/arnold/ + ${TARGET}/AGENTS.md"

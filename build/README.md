@@ -1,6 +1,6 @@
 # Arnold build system
 
-Generates per-tool plugin / skill artifacts from one canonical source (`skills/`) so Arnold can ship natively to Claude Code, Cursor, and Codex (as marketplaces) and to Codex / Antigravity / Windsurf / Gemini CLI (via `scripts/install.sh` or the agentic [`INSTALL.md`](../INSTALL.md) procedure) without maintaining parallel source trees.
+Generates per-tool plugin / skill artifacts from one canonical source (`skills/`) so Arnold can ship natively to Claude Code (via the plugin marketplace) and to Cursor / Codex / Antigravity / Windsurf / Gemini CLI (via `scripts/install.sh` or the agentic [`INSTALL.md`](../INSTALL.md) procedure) without maintaining parallel source trees.
 
 ## Quick start
 
@@ -61,7 +61,7 @@ When CI is wired up, the basic shape is:
 on: tag v*
   - make clean && make build && make verify
   - publish dist/claude-plugin/ to Claude Code marketplace
-  - publish dist/cursor-plugin/ to Cursor marketplace
-  - publish dist/codex-skills/ to Codex (mechanism TBD)
-  - publish dist/antigravity-skills/ to Antigravity (mechanism TBD)
+  - attach per-target tarballs (cursor-plugin, codex-plugin, codex-skills,
+    antigravity-skills) to the GitHub Release so scripts/install.sh and the
+    agentic INSTALL.md path can resolve a versioned artifact
 ```
