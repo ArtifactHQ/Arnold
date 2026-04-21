@@ -228,6 +228,67 @@ def build_cursor() -> None:
     pin_mtime(rules_file, src_rules)
 
 
+def build_codex_plugin() -> None:
+    """OpenAI Codex user-global plugin. Manifest + short-named skills (plugin namespaces).
+
+    Layout per INSTALL.md Step 3a:
+        .codex-plugin/plugin.json       # manifest
+        skills/<name>/SKILL.md          # short dir names; arnold: prefix stripped from frontmatter
+        AGENTS.md                       # rules content
+    """
+    target = DIST / "codex-plugin"
+    if target.exists():
+        shutil.rmtree(target)
+    target.mkdir(parents=True)
+
+    (target / ".codex-plugin").mkdir()
+    plugin_manifest = {
+        "name": "arnold",
+        "version": "0.4.0",
+        "description": "Documentation-first development toolkit",
+        "author": {"name": "Artifact", "url": "https://artifact.new"},
+        "homepage": "https://artifact.new",
+        "repository": "https://github.com/ArtifactHQ/arnold",
+        "license": "MIT",
+        "keywords": ["documentation", "specs", "drift-detection", "arnold"],
+    }
+    (target / ".codex-plugin" / "plugin.json").write_text(
+        json.dumps(plugin_manifest, indent=2) + "\n"
+    )
+
+    (target / "AGENTS.md").write_text(SOURCE_CLAUDE_MD.read_text())
+    pin_mtime(target / "AGENTS.md", SOURCE_CLAUDE_MD)
+
+    skills_dest = target / "skills"
+    skills_dest.mkdir()
+
+    strip_keys = {"argument-hint", "allowed-tools", "user-invocable"}
+
+    for skill_dir in list_skill_dirs():
+        if skill_dir.name == "arnold-rules":
+            continue  # content already in AGENTS.md
+
+        src_skill = skill_dir / "SKILL.md"
+        entries, body = split_frontmatter(src_skill.read_text())
+
+        new_entries: list[tuple[str, str]] = []
+        for key, value in entries:
+            if key in strip_keys:
+                continue
+            if key == "name":
+                # arnold:init -> init (the `arnold` plugin namespaces automatically)
+                new_entries.append((key, value.replace("arnold:", "")))
+            else:
+                new_entries.append((key, value))
+
+        out_text = emit_frontmatter(new_entries, body)
+        dest_dir = skills_dest / skill_dir.name
+        dest_dir.mkdir()
+        dest_file = dest_dir / "SKILL.md"
+        dest_file.write_text(out_text)
+        pin_mtime(dest_file, src_skill)
+
+
 def build_codex() -> None:
     """OpenAI Codex skills. Project-scoped path: .agents/skills/ (plural)."""
     target = DIST / "codex-skills"
@@ -433,6 +494,48 @@ def validate_cursor_plugin() -> list[str]:
     return errors
 
 
+def validate_codex_plugin() -> list[str]:
+    """Validate dist/codex-plugin/ (INSTALL.md Step 3a)."""
+    errors: list[str] = []
+    root = DIST / "codex-plugin"
+    if not root.exists():
+        return [f"{root} does not exist — run `make codex-plugin` first"]
+
+    plugin_json = root / ".codex-plugin" / "plugin.json"
+    if not plugin_json.exists():
+        _fail(errors, f"missing {plugin_json.relative_to(REPO_ROOT)}")
+        return errors
+
+    data = json.loads(plugin_json.read_text())
+    if "name" not in data:
+        _fail(errors, "plugin.json missing required field: name")
+    elif not KEBAB_CASE_RE.match(data["name"]):
+        _fail(errors, f"plugin.json name {data['name']!r} is not kebab-case")
+
+    skills_dir = root / "skills"
+    if not skills_dir.exists():
+        _fail(errors, "skills/ directory missing from plugin root")
+    else:
+        # Skill dirs must be short-named (plugin namespaces under plugin.name automatically)
+        for d in sorted(skills_dir.iterdir()):
+            if d.is_dir() and d.name.startswith("arnold-"):
+                _fail(errors, f"skill directory {d.name!r} should be short-named (plugin namespaces)")
+        if not any(skills_dir.rglob("SKILL.md")):
+            _fail(errors, "skills/ contains no SKILL.md files")
+
+    if not (root / "AGENTS.md").exists():
+        _fail(errors, "AGENTS.md missing from tool-tree root")
+
+    # arnold: prefix must be stripped from frontmatter name in every SKILL.md
+    for skill_md in sorted(skills_dir.rglob("SKILL.md")) if skills_dir.exists() else []:
+        entries, _ = split_frontmatter(skill_md.read_text())
+        for k, v in entries:
+            if k == "name" and "arnold:" in v:
+                _fail(errors, f"{skill_md.relative_to(REPO_ROOT)} name still contains 'arnold:' prefix: {v.strip()}")
+
+    return errors
+
+
 def validate_codex_skills() -> list[str]:
     """Validate dist/codex-skills/ (Phase 0 S0.4: .agents/skills/ path)."""
     errors: list[str] = []
@@ -473,6 +576,7 @@ def validate_all() -> bool:
     checks = [
         ("claude-plugin", validate_claude_plugin),
         ("cursor-plugin", validate_cursor_plugin),
+        ("codex-plugin", validate_codex_plugin),
         ("codex-skills", validate_codex_skills),
         ("antigravity-skills", validate_antigravity_skills),
     ]
@@ -508,10 +612,11 @@ def dir_hash(path: Path) -> str:
 def verify_deterministic() -> bool:
     """Build everything twice and compare hashes (FR-004)."""
     print("Verifying determinism: building twice, comparing hashes...")
+    dist_dirs = ["claude-plugin", "cursor-plugin", "codex-plugin", "codex-skills", "antigravity-skills"]
     build_all()
-    first_hashes = {t: dir_hash(DIST / t) for t in ["claude-plugin", "cursor-plugin", "codex-skills", "antigravity-skills"]}
+    first_hashes = {t: dir_hash(DIST / t) for t in dist_dirs}
     build_all()
-    second_hashes = {t: dir_hash(DIST / t) for t in ["claude-plugin", "cursor-plugin", "codex-skills", "antigravity-skills"]}
+    second_hashes = {t: dir_hash(DIST / t) for t in dist_dirs}
     all_match = True
     for target, h1 in first_hashes.items():
         h2 = second_hashes[target]
@@ -528,6 +633,7 @@ def verify_deterministic() -> bool:
 TARGETS = {
     "claude": build_claude,
     "cursor": build_cursor,
+    "codex-plugin": build_codex_plugin,
     "codex": build_codex,
     "antigravity": build_antigravity,
 }
@@ -568,6 +674,7 @@ def _resolve_dir(target: str) -> str:
     return {
         "claude": "claude-plugin",
         "cursor": "cursor-plugin",
+        "codex-plugin": "codex-plugin",
         "codex": "codex-skills",
         "antigravity": "antigravity-skills",
     }[target]

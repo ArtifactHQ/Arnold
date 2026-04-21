@@ -124,6 +124,12 @@ Arnold gets smarter with each check. After your first `/arnold:check`, Arnold sa
 
 ---
 
+<!--
+  Drop-in replacement for the Install, Updating, and Uninstalling sections
+  in the current experiment/plugin-install branch of the README.
+  Everything else in the README stays as-is.
+-->
+
 ## Install
 
 Arnold installs into any AI coding agent. Pick the path that matches your tool.
@@ -148,11 +154,14 @@ Commands use hyphens in Cursor: `/arnold-init`, `/arnold-check`, etc. (Cursor do
 
 ### Codex, Antigravity, and other agents
 
-For any agent without a plugin marketplace (Codex, Antigravity, Windsurf, Gemini CLI, and others), just ask your agent:
+For any agent without a public plugin marketplace — currently including Codex, Antigravity, Windsurf, and Gemini CLI — just ask your agent:
 
 > Install Arnold from `ArtifactHQ/arnold`
 
 Your agent reads [`INSTALL.md`](INSTALL.md) at the repo root, detects which tool it's running in, and performs the install. No cloning, no shell commands, no build step.
+
+> [!NOTE]
+> Codex's official Plugin Directory is [coming soon](https://developers.openai.com/codex/plugins/build). Until it ships, the agentic install above is the supported distribution path for Codex. Once the Plugin Directory is live and Arnold is published to it, Codex graduates to a one-line marketplace install alongside Claude Code and Cursor.
 
 **Specify a version.** Defaults to the latest release. Pin explicitly if you need to:
 
@@ -170,7 +179,7 @@ Your agent reads [`INSTALL.md`](INSTALL.md) at the repo root, detects which tool
 >
 > Install Arnold from `~/Downloads/arnold-v0.5.0/`
 
-If the local path is a full repo clone, your agent will run `make build` first (requires Python 3 + `make`). If it's already built or it's an extracted release tarball, the install proceeds directly — no build step needed.
+If the local path is a full repo clone, your agent will run `make build` first (requires Python 3 + `make`). If it's already built or it's an extracted release tarball, the install proceeds directly.
 
 **Install from an internal artifact registry.** For enterprises that mirror third-party dependencies:
 
@@ -180,7 +189,42 @@ If the local path is a full repo clone, your agent will run `make build` first (
 
 > Install Arnold from `ArtifactHQ/arnold` into `/path/to/my-project`
 
-**What does the agent do?** It copies Arnold's skill files into your tool's conventional location (`.agents/skills/` for Codex, `.agent/skills/` for Antigravity, etc.) and merges Arnold's development rules into your project's rules file (`AGENTS.md`, `CLAUDE.md`, etc.) wrapped in marker comments for clean uninstall. Your `docs/` folder is never touched. Full procedure is in [`INSTALL.md`](INSTALL.md).
+#### Codex install scope
+
+Codex has two install shapes. Be explicit if the default isn't what you want.
+
+**User-global plugin (default).** Arnold is installed once under your home directory and becomes available in every Codex project you open:
+
+> Install Arnold from `ArtifactHQ/arnold`
+
+After the files are in place, Codex will prompt you to restart and enable Arnold in the plugin directory. That final activation step is a one-time UI click, not something the agent can automate today.
+
+**Project-scoped skills.** Arnold is committed into this one repo so your teammates who clone it get Arnold automatically, with no per-user install step:
+
+> Vendor Arnold into this project from `ArtifactHQ/arnold`
+
+Use this when Arnold is a team convention for a specific codebase rather than a personal tool. Project-scoped skills live under `.agents/skills/` and are discovered automatically — no restart or UI activation required.
+
+If you're not sure which you want, default to user-global. You can always switch later by uninstalling and reinstalling with the other scope.
+
+#### What the agent does
+
+The agent copies Arnold's skill files into your tool's conventional location, and for project-scoped installs, merges Arnold's development rules into your project's rules file (`AGENTS.md`, `CLAUDE.md`, etc.) wrapped in marker comments for clean uninstall. For user-global Codex installs, it additionally registers Arnold in your personal plugin marketplace at `~/.agents/plugins/marketplace.json`. Your `docs/` folder is never touched. Full procedure is in [`INSTALL.md`](INSTALL.md).
+
+<details>
+<summary><strong>Prefer running a script?</strong></summary>
+
+Clone the repo, `make build`, and invoke `scripts/install.sh` directly. It implements the same procedure as [`INSTALL.md`](INSTALL.md) with flags instead of agent detection — faster when you know exactly what you want:
+
+```bash
+git clone https://github.com/ArtifactHQ/arnold && cd arnold
+make build
+scripts/install.sh --tool=codex --target=/path/to/your-project
+```
+
+Supported tools: `claude-code`, `cursor`, `codex` (with `--scope=project` or `--scope=user-global`), `antigravity`, `windsurf`, `gemini-cli`. Add `--uninstall` to reverse. See `scripts/install.sh --help` for the full flag surface.
+
+</details>
 
 <details>
 <summary><strong>Legacy shell installer (deprecated v0.5.0, removed in v1.0)</strong></summary>
@@ -211,7 +255,7 @@ Or pin to a specific release:
 
 > Update Arnold to `v0.6.0`
 
-Your agent re-runs the install procedure against the new version. The marker-wrapped rules block is replaced in place; skill directories are overwritten. Your `docs/` folder stays untouched.
+Your agent re-runs the install procedure against the new version. For user-global Codex installs, restart Codex after the update completes. The marker-wrapped rules block is replaced in place; skill directories are overwritten. Your `docs/` folder stays untouched.
 
 ---
 
@@ -225,7 +269,11 @@ Your agent re-runs the install procedure against the new version. The marker-wra
 
 > Uninstall Arnold from this project
 
-Your agent removes the `arnold-*` skill directories and strips the Arnold rules block from your project rules file. Empty parent directories it created are cleaned up; directories containing your own content are preserved.
+For user-global Codex installs, use:
+
+> Uninstall Arnold
+
+Your agent removes the skill directories and strips the Arnold rules block from your project rules file. For user-global Codex installs, it additionally removes `~/.codex/plugins/arnold/` and the marketplace entry. Empty parent directories the agent created are cleaned up; directories containing your own content are preserved.
 
 **Legacy shell installer:** `bash /path/to/arnold/install.sh --uninstall` (or via `curl | bash -s -- --uninstall`).
 
@@ -405,7 +453,7 @@ When `/arnold:check` reports drift, you know whether the rule was something you 
 
 **Cursor plugin:** Settings → Plugins → Arnold → Uninstall
 
-**Codex / Antigravity:** `./scripts/install-skills.sh --tool=<codex|antigravity> --target=<project> --uninstall`
+**Codex, Antigravity, Windsurf, Gemini CLI (manual):** `./scripts/install.sh --tool=<TOOL> --target=<project> --uninstall` (tools: `codex`, `antigravity`, `windsurf`, `gemini-cli`; add `--scope=user-global` for a global Codex plugin install)
 
 **Legacy shell install:** `/path/to/arnold/install.sh --uninstall` (or via curl if you installed that way). Removes `.claude/commands/arnold/` and Arnold's rules block from `CLAUDE.md`.
 

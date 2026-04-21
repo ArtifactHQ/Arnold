@@ -49,13 +49,16 @@ print_banner() {
 # Native installs are preferred as of v0.5.0; this script is removed in v1.0.
 print_deprecation_banner() {
     echo -e "${YELLOW}⚠  This shell installer is deprecated as of Arnold v0.5.0.${NC}"
-    echo -e "${YELLOW}   Native installs are available for Claude Code, Cursor, Codex, and Antigravity.${NC}"
+    echo -e "${YELLOW}   Native installs are available for Claude Code, Cursor, Codex, Antigravity, Windsurf, and Gemini CLI.${NC}"
     echo -e "${YELLOW}   See: https://github.com/${ARNOLD_REPO}#install${NC}"
     echo -e "${YELLOW}   This script will be removed in v1.0.${NC}"
     echo ""
     echo -e "${CYAN}   For Claude Code — prefer:${NC}"
     echo "     /plugin marketplace add ${ARNOLD_REPO}"
     echo "     /plugin install arnold@arnold-marketplace"
+    echo ""
+    echo -e "${CYAN}   For other tools — ask your agent (reads INSTALL.md), or from a clone:${NC}"
+    echo "     scripts/install.sh --tool=<claude-code|cursor|codex|antigravity|windsurf|gemini-cli> --target=."
     echo ""
     echo "   Continuing with shell install in 3 seconds... (Ctrl-C to cancel)"
     echo ""
@@ -150,6 +153,21 @@ remove_arnold_rules() {
 
 # ── Parse Arguments ───────────────────────────
 
+print_help() {
+    cat <<EOF
+Arnold legacy shell installer (deprecated — prefer the plugin marketplace or
+scripts/install.sh; see https://github.com/${ARNOLD_REPO}#install).
+
+Usage:
+  curl -fsSL https://raw.githubusercontent.com/${ARNOLD_REPO}/${ARNOLD_BRANCH}/install.sh | bash
+  ./install.sh                    Install Arnold into the current project (.claude/commands/arnold/)
+  ./install.sh --uninstall, -u    Remove Arnold from the current project
+  ./install.sh --verify           Verify an existing install's command files
+  ./install.sh --version, -v      Print the Arnold version shipped by this script
+  ./install.sh --help, -h         Show this help and exit
+EOF
+}
+
 UNINSTALL=false
 for arg in "$@"; do
     case "$arg" in
@@ -162,6 +180,10 @@ for arg in "$@"; do
             ;;
         --verify)
             run_verify
+            exit 0
+            ;;
+        --help|-h)
+            print_help
             exit 0
             ;;
     esac
