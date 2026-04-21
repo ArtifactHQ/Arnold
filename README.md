@@ -126,7 +126,7 @@ Arnold gets smarter with each check. After your first `/arnold:check`, Arnold sa
 
 ## Install
 
-Arnold installs natively into four AI coding tools. Pick the one you use.
+Arnold installs into any AI coding agent. Pick the path that matches your tool.
 
 ### Claude Code
 
@@ -146,42 +146,90 @@ Arnold's 17 slash commands are now available: `/arnold:init`, `/arnold:check`, `
 
 Commands use hyphens in Cursor: `/arnold-init`, `/arnold-check`, etc. (Cursor doesn't allow colons in command names — same content, different invocation.)
 
-### Codex
+### Codex, Antigravity, and other agents
 
-Codex doesn't have a plugin marketplace yet. Arnold installs as project-scoped skills:
+For any agent without a plugin marketplace (Codex, Antigravity, Windsurf, Gemini CLI, and others), just ask your agent:
 
-```bash
-git clone https://github.com/ArtifactHQ/arnold ~/arnold
-cd ~/arnold && make build
-./scripts/install-skills.sh --tool=codex --target=/path/to/your-project
-```
+> Install Arnold from `ArtifactHQ/arnold`
 
-Installs 17 skills to `.agents/skills/` and merges Arnold's rules into `AGENTS.md`. Uninstall with `--uninstall`.
+Your agent reads [`INSTALL.md`](INSTALL.md) at the repo root, detects which tool it's running in, and performs the install. No cloning, no shell commands, no build step.
 
-### Antigravity
+**Specify a version.** Defaults to the latest release. Pin explicitly if you need to:
 
-Same shape as Codex, different path (singular `.agent/` — Antigravity's convention):
+> Install Arnold from `ArtifactHQ/arnold@v0.5.0`
 
-```bash
-./scripts/install-skills.sh --tool=antigravity --target=/path/to/your-project
-```
+**Install from a branch or fork.** Works the same way:
 
-### Other tools / legacy
+> Install Arnold from `ArtifactHQ/arnold@experiment/plugin-install`
+>
+> Install Arnold from `acme-corp/arnold-fork@main`
+
+**Install from a local path.** For air-gapped environments, vendored copies, or developing against a working clone:
+
+> Install Arnold from `./vendor/arnold/`
+>
+> Install Arnold from `~/Downloads/arnold-v0.5.0/`
+
+If the local path is a full repo clone, your agent will run `make build` first (requires Python 3 + `make`). If it's already built or it's an extracted release tarball, the install proceeds directly — no build step needed.
+
+**Install from an internal artifact registry.** For enterprises that mirror third-party dependencies:
+
+> Install Arnold from `https://artifacts.acme.internal/arnold-v0.5.0.tar.gz`
+
+**Target a specific project.** Your agent defaults to the current working directory. Override if needed:
+
+> Install Arnold from `ArtifactHQ/arnold` into `/path/to/my-project`
+
+**What does the agent do?** It copies Arnold's skill files into your tool's conventional location (`.agents/skills/` for Codex, `.agent/skills/` for Antigravity, etc.) and merges Arnold's development rules into your project's rules file (`AGENTS.md`, `CLAUDE.md`, etc.) wrapped in marker comments for clean uninstall. Your `docs/` folder is never touched. Full procedure is in [`INSTALL.md`](INSTALL.md).
 
 <details>
-<summary><strong>Legacy shell install (deprecated v0.5.0, removed in v1.0)</strong></summary>
+<summary><strong>Legacy shell installer (deprecated v0.5.0, removed in v1.0)</strong></summary>
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ArtifactHQ/arnold/main/install.sh | bash
 ```
 
-Installs to `.claude/commands/arnold/` + `CLAUDE.md`. Works for Claude Code and for tools not yet in the native-install list above. Prints a deprecation banner at runtime.
+Installs to `.claude/commands/arnold/` + `CLAUDE.md`. Kept as a fallback for CI pipelines and scripted deploys that predate the agentic install path. Prints a deprecation banner at runtime.
 
-For **Windsurf** or **Gemini CLI** (no native install yet): copy the `skills/` folder from this repo into your tool's expected location (e.g. `.windsurf/workflows/` for Windsurf, `.gemini/commands/` for Gemini CLI).
-
-For the legacy shell installer: `./install.sh --help` from a clone, or `--verify` / `--uninstall` as needed.
+For `--help`, `--verify`, or `--uninstall` flags, clone the repo and run `./install.sh --help`.
 
 </details>
+
+---
+
+## Updating
+
+**Claude Code plugin:** `/plugin update`
+
+**Cursor plugin:** Updates automatically via the marketplace.
+
+**Agentic install (Codex, Antigravity, others):**
+
+> Update Arnold to the latest version
+
+Or pin to a specific release:
+
+> Update Arnold to `v0.6.0`
+
+Your agent re-runs the install procedure against the new version. The marker-wrapped rules block is replaced in place; skill directories are overwritten. Your `docs/` folder stays untouched.
+
+---
+
+## Uninstalling
+
+**Claude Code plugin:** `/plugin uninstall arnold@arnold-marketplace`
+
+**Cursor plugin:** Settings → Plugins → Arnold → Uninstall
+
+**Agentic install (Codex, Antigravity, others):**
+
+> Uninstall Arnold from this project
+
+Your agent removes the `arnold-*` skill directories and strips the Arnold rules block from your project rules file. Empty parent directories it created are cleaned up; directories containing your own content are preserved.
+
+**Legacy shell installer:** `bash /path/to/arnold/install.sh --uninstall` (or via `curl | bash -s -- --uninstall`).
+
+Your `docs/` folder is never touched on uninstall — Arnold-generated documentation is your content and survives the uninstall.
 
 ---
 
