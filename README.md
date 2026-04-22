@@ -148,37 +148,37 @@ Arnold's 17 slash commands are now available: `/arnold:init`, `/arnold:check`, `
 
 For every other agent — Cursor, Codex, Antigravity, Windsurf, Gemini CLI — just ask your agent:
 
-> Install Arnold from `ArtifactHQ/arnold`
+> Install Arnold from `ArtifactHQ/arnold` — follow `INSTALL.md`
 
-Your agent reads [`INSTALL.md`](INSTALL.md) at the repo root, detects which tool it's running in, and performs the install. No cloning, no shell commands, no build step.
+The `— follow INSTALL.md` suffix tells the agent to read [`INSTALL.md`](INSTALL.md) at the repo root, detect which tool it's running in, and perform the install to spec. Without it, some agents will improvise. Use the suffix on every variant below.
 
 In Cursor specifically, commands use hyphens (`/arnold-init`, `/arnold-check`, etc.) because Cursor doesn't allow colons in command names — same content, different invocation.
 
 **Specify a version.** Defaults to the latest release. Pin explicitly if you need to:
 
-> Install Arnold from `ArtifactHQ/arnold@v0.5.0`
+> Install Arnold from `ArtifactHQ/arnold@v0.5.0` — follow `INSTALL.md`
 
 **Install from a branch or fork.** Works the same way:
 
-> Install Arnold from `ArtifactHQ/arnold@experiment/plugin-install`
+> Install Arnold from `ArtifactHQ/arnold@experiment/plugin-install` — follow `INSTALL.md`
 >
-> Install Arnold from `acme-corp/arnold-fork@main`
+> Install Arnold from `acme-corp/arnold-fork@main` — follow `INSTALL.md`
 
 **Install from a local path.** For air-gapped environments, vendored copies, or developing against a working clone:
 
-> Install Arnold from `./vendor/arnold/`
+> Install Arnold from `./vendor/arnold/` — follow `INSTALL.md`
 >
-> Install Arnold from `~/Downloads/arnold-v0.5.0/`
+> Install Arnold from `~/Downloads/arnold-v0.5.0/` — follow `INSTALL.md`
 
 If the local path is a full repo clone, your agent will run `make build` first (requires Python 3 + `make`). If it's already built or it's an extracted release tarball, the install proceeds directly.
 
 **Install from an internal artifact registry.** For enterprises that mirror third-party dependencies:
 
-> Install Arnold from `https://artifacts.acme.internal/arnold-v0.5.0.tar.gz`
+> Install Arnold from `https://artifacts.acme.internal/arnold-v0.5.0.tar.gz` — follow `INSTALL.md`
 
 **Target a specific project.** Your agent defaults to the current working directory. Override if needed:
 
-> Install Arnold from `ArtifactHQ/arnold` into `/path/to/my-project`
+> Install Arnold from `ArtifactHQ/arnold` into `/path/to/my-project` — follow `INSTALL.md`
 
 #### Codex install scope
 
@@ -186,13 +186,13 @@ Codex has two install shapes. Be explicit if the default isn't what you want.
 
 **User-global plugin (default).** Arnold is installed once under your home directory and becomes available in every Codex project you open:
 
-> Install Arnold from `ArtifactHQ/arnold`
+> Install Arnold from `ArtifactHQ/arnold` — follow `INSTALL.md`
 
 After the files are in place, Codex will prompt you to restart and enable Arnold in the plugin directory. That final activation step is a one-time UI click, not something the agent can automate today.
 
 **Project-scoped skills.** Arnold is committed into this one repo so your teammates who clone it get Arnold automatically, with no per-user install step:
 
-> Vendor Arnold into this project from `ArtifactHQ/arnold`
+> Vendor Arnold into this project from `ArtifactHQ/arnold` — follow `INSTALL.md`
 
 Use this when Arnold is a team convention for a specific codebase rather than a personal tool. Project-scoped skills live under `.agents/skills/` and are discovered automatically — no restart or UI activation required.
 
@@ -238,11 +238,11 @@ For `--help`, `--verify`, or `--uninstall` flags, clone the repo and run `./inst
 
 **Agentic install (Cursor, Codex, Antigravity, others):**
 
-> Update Arnold to the latest version
+> Update Arnold to the latest version — follow `INSTALL.md`
 
 Or pin to a specific release:
 
-> Update Arnold to `v0.6.0`
+> Update Arnold to `v0.6.0` — follow `INSTALL.md`
 
 Your agent re-runs the install procedure against the new version. For user-global Codex installs, restart Codex after the update completes. The marker-wrapped rules block is replaced in place; skill directories are overwritten. Your `docs/` folder stays untouched.
 
@@ -254,11 +254,11 @@ Your agent re-runs the install procedure against the new version. For user-globa
 
 **Agentic install (Cursor, Codex, Antigravity, others):**
 
-> Uninstall Arnold from this project
+> Uninstall Arnold from this project — follow `INSTALL.md`
 
 For user-global Codex installs, use:
 
-> Uninstall Arnold
+> Uninstall Arnold — follow `INSTALL.md`
 
 Your agent removes the skill directories and strips the Arnold rules block from your project rules file. For user-global Codex installs, it additionally removes `~/.codex/plugins/arnold/` and the marketplace entry. Empty parent directories the agent created are cleaned up; directories containing your own content are preserved.
 
@@ -438,7 +438,7 @@ When `/arnold:check` reports drift, you know whether the rule was something you 
 
 **Claude Code plugin:** `/plugin uninstall arnold@arnold-marketplace`
 
-**Agentic install (Cursor, Codex, Antigravity, Windsurf, Gemini CLI):** Ask your agent: *"Uninstall Arnold from this project"* (or *"Uninstall Arnold"* for user-global Codex).
+**Agentic install (Cursor, Codex, Antigravity, Windsurf, Gemini CLI):** Ask your agent: *"Uninstall Arnold from this project — follow `INSTALL.md`"* (or *"Uninstall Arnold — follow `INSTALL.md`"* for user-global Codex).
 
 **Manual script:** `./scripts/install.sh --tool=<TOOL> --target=<project> --uninstall` (tools: `claude-code`, `cursor`, `codex`, `antigravity`, `windsurf`, `gemini-cli`; add `--scope=user-global` for a global Codex plugin install).
 
