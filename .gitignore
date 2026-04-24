@@ -5,3 +5,6 @@
 .env
 *.bak
 docs/.arnold-snapshot.json
+
+# Build system output — generated per-tool plugin/skill artifacts (see build/README.md)
+dist/
